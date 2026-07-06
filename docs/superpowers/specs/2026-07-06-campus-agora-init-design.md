@@ -50,115 +50,19 @@
 ```text
 campus-agora/
   apps/
-    web/
-      src/
-        components/
-          icons/
-          layout/
-            AppShell.tsx
-            Sidebar.tsx
-            Topbar.tsx
-          ui/
-            Badge.tsx
-            Button.tsx
-            Card.tsx
-            Checkbox.tsx
-            Drawer.tsx
-            Dropdown.tsx
-            EmptyState.tsx
-            IconButton.tsx
-            Input.tsx
-            LoadingState.tsx
-            Modal.tsx
-            Select.tsx
-            Switch.tsx
-            Tabs.tsx
-            Textarea.tsx
-            Toast.tsx
-            Tooltip.tsx
-        hooks/
-        lib/
-        pages/
-          DesignSystemPage.tsx
-        styles/
-          globals.css
-          themes.css
-          tokens.css
-      index.html
-      package.json
-      vite.config.ts
-      tsconfig.json
-    desktop/
-      package.json
-      src-tauri/
-        Cargo.toml
-        tauri.conf.json
-        capabilities/
-          default.json
-        src/
+    web/                 # React/Vite 应用
+    desktop/             # Tauri WebView 壳
   packages/
-    api-client/
-      src/
-        client.ts
-        generated.ts
-        index.ts
-      package.json
-      tsconfig.json
+    api-client/          # TypeScript API client，前端唯一 HTTP 入口
   contracts/
-    openapi.json
+    openapi.json         # 前后端共享 API contract 快照
   crates/
-    api/
-      src/
-        app.rs
-        config.rs
-        error.rs
-        main.rs
-        observability.rs
-        state.rs
-        bin/
-          export-openapi.rs
-        dto/
-          error.rs
-          meta.rs
-          mod.rs
-        handlers/
-          health.rs
-          meta.rs
-          mod.rs
-        middleware/
-          auth.rs
-          mod.rs
-          request_id.rs
-        routes/
-          mod.rs
-        services/
-          meta_service.rs
-          mod.rs
-      Cargo.toml
-    domain/
-      src/
-        auth.rs
-        ids.rs
-        lib.rs
-        permissions.rs
-        posts.rs
-        revisions.rs
-        validation.rs
-      Cargo.toml
-    db/
-      src/
-        lib.rs
-        models/
-          mod.rs
-        pool.rs
-        repositories/
-          mod.rs
-      migrations/
-      Cargo.toml
+    domain/              # 纯领域模型、值对象、状态机、权限纯函数
+    application/         # use case/service、业务流程、repository traits
+    db/                  # SQLx、migration、DB row、repository 实现
+    api/                 # Axum HTTP、DTO、routes、middleware、OpenAPI 导出
   docs/
     ai-log/
-      done.md
-      todo.md
     api-contracts.md
     architecture.md
     auth-permissions.md
@@ -185,18 +89,39 @@ campus-agora/
 
 - `apps/web`：React/Vite Web UI，可在浏览器中运行，也可被 Tauri WebView 加载。
 - `apps/desktop`：Tauri 桌面壳，负责系统 WebView、窗口配置、Tauri 权限和必要的本地 bridge。
-- `packages/api-client`：浏览器和 Tauri WebView 可用的 TypeScript HTTP API client，由 OpenAPI contract 生成类型并封装请求。
+- `packages/api-client`：浏览器和 Tauri WebView 可用的 TypeScript HTTP API client，由 OpenAPI contract 生成类型并封装请求；页面和 feature hooks 不直接裸 `fetch`。
 - `contracts`：前后端共享 API contract，初始使用 OpenAPI JSON。
 - `crates/domain`：领域类型、状态枚举、输入校验和无需数据库的业务规则。
+- `crates/application`：业务用例、service、权限编排、事务意图和 repository trait；不依赖 Axum 或 SQLx 具体实现。
 - `crates/db`：数据库连接、migration、数据库行模型、repository 实现和 SQLx 类型。
-- `crates/api`：Axum HTTP 入口、路由、handler、DTO、service 编排、中间件、错误响应、配置、观测和依赖注入。
+- `crates/api`：Axum HTTP 入口、路由、handler、DTO、中间件、错误响应、配置、观测、依赖注入和 OpenAPI 导出。
 - `docs`：项目定位、架构说明、开发命令、AI LOG、里程碑和协作约定。
+
+依赖方向必须单向：
+
+```text
+apps/web -> packages/api-client -> contracts/openapi.json
+apps/desktop -> apps/web build output
+crates/api -> crates/application -> crates/domain
+crates/api -> crates/db
+crates/db -> crates/application traits + crates/domain
+```
+
+禁止反向依赖：
+
+- `crates/domain` 不依赖 `crates/application`、`crates/db`、`crates/api`、Axum、SQLx、Tauri 或 TypeScript。
+- `crates/application` 不依赖 Axum DTO、SQLx row 或 Tauri command。
+- `crates/db` 不依赖 Axum handler 或 API DTO。
+- `apps/web` 不穿透导入 `packages/api-client/src/generated.ts`，只用 `packages/api-client` 公开出口。
+
+M0 不创建 `packages/ui`、`packages/config` 或独立 `shared` 包。只有当出现第二个前端应用或真实跨应用复用需求时，再把 UI 或配置抽到 package；初始化阶段优先保持边界清晰而不是过度 monorepo 化。
 
 ## 后端边界
 
-后端 workspace 至少包含三个 crate：
+后端 workspace 至少包含四个 crate：
 
 - `campus_agora_domain`
+- `campus_agora_application`
 - `campus_agora_db`
 - `campus_agora_api`
 
@@ -208,8 +133,9 @@ campus-agora/
 
 ```text
 Routes / Handlers
-  Services
-  Repositories
+  Application Services / Use Cases
+  Repository Traits
+  Repository Implementations
   Database / External Services
 ```
 
@@ -217,18 +143,59 @@ Routes / Handlers
 
 - `routes`：只负责挂载路径、HTTP method、中间件和版本前缀。
 - `handlers`：只负责解析 HTTP 输入、调用 service、把 service 结果转换为 DTO 响应，不写复杂业务规则，不直接拼 SQL。
-- `services`：负责业务流程编排、权限调用、状态流转、事务边界和跨 repository 的一致性。
-- `repositories`：负责数据库读写和查询条件，不能处理 API DTO、HTTP 状态码或 UI 语义。
-- `domain`：负责核心实体、枚举、值对象、校验、权限纯函数和状态机，不依赖 Axum、SQLx、Tauri 或前端类型。
+- `application services`：负责业务流程编排、权限调用、状态流转、事务意图和跨 repository 的一致性。
+- `repository traits`：位于 application 层，定义业务需要的数据访问能力，不暴露 SQLx 或数据库行模型。
+- `repository implementations`：位于 db 层，负责数据库读写、SQLx 类型、查询条件和事务实现，不能处理 API DTO、HTTP 状态码或 UI 语义。
+- `domain`：负责核心实体、枚举、值对象、校验、权限纯函数和状态机，不依赖 application、Axum、SQLx、Tauri 或前端类型。
 - `infra` 或具体 adapter：后续接 Redis、对象存储、邮件、AI 服务和外部 API 时放入适配层，不让外部 SDK 污染 domain。
 
-M0 使用三个 crate 表达这些边界：
+M0 使用四个 crate 表达这些边界：
 
 - `crates/domain`：领域模型、权限 policy、状态流转和校验函数。
-- `crates/db`：SQLx pool、migration、DB row model 和 repository 实现。
-- `crates/api`：Axum app、DTO、handler、service、middleware、配置、错误映射、OpenAPI 导出和观测。
+- `crates/application`：service/use case、repository trait、应用错误、事务接口和业务流程测试。
+- `crates/db`：SQLx pool、migration、DB row model 和 repository trait 的 PostgreSQL 实现。
+- `crates/api`：Axum app、DTO、handler、route、middleware、配置、错误映射、OpenAPI 导出和观测。
 
-后续如果 service 层明显膨胀，再单独拆出 `crates/service` 或 `crates/application`。M0 不提前拆第四个 crate，避免初始化阶段过度抽象。
+后端 crate 内部结构按职责保持小而清楚：
+
+```text
+crates/domain/src/
+  auth.rs
+  ids.rs
+  permissions.rs
+  posts.rs
+  revisions.rs
+  validation.rs
+
+crates/application/src/
+  errors.rs
+  ports/
+    repositories.rs
+  services/
+    meta_service.rs
+  use_cases/
+    mod.rs
+
+crates/db/
+  src/
+    models/
+    pool.rs
+    repositories/
+  migrations/
+
+crates/api/src/
+  app.rs
+  config.rs
+  dto/
+  error.rs
+  handlers/
+  middleware/
+  observability.rs
+  routes/
+  state.rs
+```
+
+`crates/application` 是业务流程边界，不是“第二个后端框架”。它让 CLI、background worker 或未来 admin API 可以复用同一批 use case，而不把业务绑死在 Axum handler 里。
 
 ### DTO、Domain、DB Model
 
@@ -237,20 +204,22 @@ M0 使用三个 crate 表达这些边界：
 - DTO：位于 `crates/api/src/dto`，只服务 API 请求、响应和 OpenAPI schema。
 - Domain Model：位于 `crates/domain/src`，表达业务含义、状态和规则。
 - DB Model / Row：位于 `crates/db/src/models`，只表达数据库查询结果和持久化结构。
+- Application Types：位于 `crates/application/src`，表达 use case input/output、repository trait 和应用错误，不直接等同于 API DTO 或 DB row。
 
 转换规则：
 
 - API response 只能由 DTO 返回，不能直接 serialize DB row。
-- DTO 和 DB row 之间通过 service/repository 边界显式转换，避免密码 hash、token、内部权限字段、审计字段或校园身份原始信息误返回给前端。
+- DTO、application output、domain model 和 DB row 之间通过明确的转换函数或 `From/TryFrom` 实现转换，避免密码 hash、token、内部权限字段、审计字段或校园身份原始信息误返回给前端。
 - JSON 字段命名遵守前后端契约，DTO 使用 `serde(rename_all = "camelCase")`；domain 和 DB 内部命名遵守 Rust 风格。
 - DB row 可以包含数据库实现细节；domain model 不能被数据库字段形状绑死。
 - API DTO 的 breaking change 必须走 OpenAPI contract 变更流程。
 
 ### 错误、配置与观测
 
-`crates/api` 必须提供统一错误模型：
+错误模型分两层：
 
-- Rust 侧使用 `AppError` 或等价类型集中表达 `Unauthorized`、`Forbidden`、`NotFound`、`Validation`、`Conflict`、`Database`、`ExternalService`、`Internal` 等错误。
+- `crates/application` 使用 `ApplicationError` 或等价类型表达 `Unauthorized`、`Forbidden`、`NotFound`、`Validation`、`Conflict`、`ExternalService` 等业务和应用错误。
+- `crates/api` 使用 `AppError` 或等价类型把 application/db/config 错误映射为 HTTP 响应。
 - HTTP 响应统一映射为 `ErrorResponse`，字段为 `code`、`message`、`requestId`、`details`。
 - `code` 是前端和日志依赖的稳定错误码，使用小写 `snake_case`，例如 `unauthorized`、`forbidden`、`post_not_found`、`invalid_moderation_transition`。
 - `message` 是面向用户或开发者的可读信息，不能作为前端分支判断依据。
@@ -323,7 +292,8 @@ API 初始化阶段提供：
 - `contracts/openapi.json`：提交到仓库的 API contract 快照。
 - `crates/api`：使用 Rust DTO 和路由注解导出 OpenAPI；后端是 contract 的生成来源。
 - `packages/api-client/src/generated.ts`：由 `contracts/openapi.json` 生成的 TypeScript 类型。
-- `packages/api-client/src/client.ts`：基于生成类型封装浏览器和 Tauri WebView 端请求函数，页面组件不直接拼接裸 `fetch`。
+- `packages/api-client/src/request.ts`：基于生成类型封装浏览器和 Tauri WebView 端请求函数、错误归一化、认证策略和 requestId 透传。
+- `packages/api-client/src/*.ts`：按资源封装业务友好的 API client 方法，例如 `meta.ts`、后续 `posts.ts`、`auth.ts`。
 - `apps/web`：只从 `@campus-agora/api-client` 调用 HTTP API，不直接依赖 generated types。
 - `docs/api-contracts.md`：说明接口变更流程、生成命令和 breaking change 规则。
 
@@ -333,7 +303,44 @@ API 初始化阶段提供：
 - 前端使用 `openapi-typescript` 生成类型。
 - 前端请求封装使用轻量 fetch wrapper 或 `openapi-fetch`，保持请求和响应类型来自同一份 contract。
 
-共享协议约定：
+### 路径、参数与响应规范
+
+REST API 路径统一使用：
+
+- 业务 API 前缀为 `/api/v1`。
+- 资源路径使用复数名词和 kebab-case，例如 `/api/v1/knowledge-posts`、`/api/v1/discussion-posts`、`/api/v1/moderation-events`。
+- 动作优先用 HTTP method 表达：`GET` 读取、`POST` 创建、`PATCH` 局部更新、`DELETE` 删除或归档。
+- 不在路径中使用 `/getXxx`、`/createXxx`、`/delete_xxx`、`/listAll` 这类动词式命名。
+- `/healthz`、`/readyz` 和 OpenAPI 导出不放在 `/api/v1` 下。
+
+参数位置固定：
+
+- Path 参数只放资源 ID，例如 `/api/v1/knowledge-posts/{postId}`。
+- Query 参数放分页、筛选、排序和搜索，例如 `page`、`pageSize`、`sort`、`q`、`tag`、`status`。
+- Request body 放复杂输入，例如创建草稿、更新资料、提交审核。
+- Header 放认证、语言、request id 和幂等键，例如 `Authorization`、`Accept-Language`、`X-Request-Id`、`Idempotency-Key`。
+
+列表接口统一使用 page pagination：
+
+```json
+{
+  "items": [],
+  "page": 1,
+  "pageSize": 20,
+  "totalItems": 135,
+  "totalPages": 7
+}
+```
+
+筛选和排序规则：
+
+- `page` 从 1 开始。
+- `pageSize` 默认 20，最大值由后端配置限制。
+- `sort` 使用 `field:direction`，例如 `createdAt:desc`。
+- 多条件筛选使用重复 query 参数或明确命名参数，不把 JSON 字符串塞进 query。
+- 大数据量或无限滚动场景后续可以新增 cursor pagination，但不能和 page pagination 混在同一个 endpoint 响应结构里。
+
+### 共享协议约定
 
 - JSON 字段名使用 `camelCase`。
 - 枚举值使用小写 `snake_case`，例如 `pending_review`。
@@ -343,17 +350,53 @@ API 初始化阶段提供：
 - 错误码使用小写 `snake_case`，并在 `docs/api-contracts.md` 中维护语义，例如 `unauthorized`、`forbidden`、`validation_failed`、`post_not_found`、`invalid_moderation_transition`。
 - 列表分页统一为 `PaginatedResponse<T>`：`items`、`page`、`pageSize`、`totalItems`、`totalPages`。
 - 写操作成功后返回资源当前状态，不只返回布尔值。
-- 认证失败使用 `401`，权限不足使用 `403`，资源不存在使用 `404`，审核或状态流转冲突使用 `409`。
+- 参数格式错误使用 `400`，未认证使用 `401`，权限不足使用 `403`，资源不存在或不可见使用 `404`，状态或唯一性冲突使用 `409`，业务校验失败使用 `422`，请求过快使用 `429`，未预期服务端错误使用 `500`。
 - 每个响应都应能通过 `X-Request-Id` 响应头和 body 中的 `requestId` 关联后端日志，方便排查前后端对接问题。
 - `/healthz` 和 `/readyz` 不放在 `/api/v1` 下；业务 API 必须使用 `/api/v1` 前缀。
+
+### 认证与会话对接
+
+M0 不接真实校园认证，但 API contract 必须提前表达认证边界：
+
+- 公共读取接口明确标注 `security: []` 或等价 OpenAPI 语义。
+- 需要登录的接口必须在 OpenAPI 中标注认证要求。
+- Web 浏览器默认优先支持 cookie/session 策略，后续需要 CSRF 防护。
+- Tauri WebView 可以使用 bearer token 策略，但长期 token 不能明文落在 WebView localStorage；token 存储、刷新、吊销和退出清理必须写入 `docs/auth-permissions.md`。
+- `401` 表示未登录或登录态失效；前端 API client 负责归一化为 `AuthRequired` 类错误，应用层决定跳转登录或弹出登录入口。
+- `403` 表示已登录但无权限；前端不能自动重试或静默降级为未登录。
+
+### API Client 分层
+
+`packages/api-client` 采用三层：
+
+- `generated.ts`：由 OpenAPI 生成，只能由生成命令改动。
+- `request.ts`：统一处理 baseUrl、headers、JSON、认证策略、requestId、超时/取消、错误归一化和 HTTP 状态码。
+- resource client：按资源导出业务方法，例如 `getMeta()`、`getHealth()`、后续 `listKnowledgePosts()`、`createKnowledgeDraft()`。
+
+`apps/web` 使用方式：
+
+- `apps/web/src/lib/api.ts` 创建 `createCampusAgoraApiClient()` 实例，读取 `VITE_API_BASE_URL`。
+- `apps/web/src/features/*/hooks` 使用 API client 和请求状态管理。
+- `pages` 只组合 feature hooks 和 UI 组件，不直接调用裸 `fetch`。
+- `apps/web` 不能导入 `packages/api-client/src/generated.ts`；如需类型，由 `@campus-agora/api-client` 公开出口导出稳定类型。
 
 接口变更流程：
 
 1. 后端先更新 DTO、路由和 API 测试。
 2. 重新导出 `contracts/openapi.json`。
 3. 重新生成 `packages/api-client/src/generated.ts`。
-4. 更新 `packages/api-client/src/client.ts` 和 `apps/web` 组件调用。
+4. 更新 `packages/api-client/src/request.ts`、resource client 和 `apps/web` feature hooks。
 5. CI 检查 contract、生成类型、后端测试和前端 typecheck 是否一致。
+
+### Mock 与联调流程
+
+前后端可以并行开发，但必须以 contract 为边界：
+
+- 后端未完成时，前端可以使用 MSW 或等价 mock server，但 mock handler 必须基于 `packages/api-client` 公开类型，不手写另一套类型。
+- mock 数据放在 `apps/web/src/features/*/__mocks__` 或集中 `apps/web/src/mocks`，不能混进生产 API client。
+- CI 至少运行 API client 单元测试，覆盖成功响应、错误响应、401、403、404、409、422 和 requestId。
+- 联调时先确认 `contracts/openapi.json` 已更新，再排查前端调用；不要用临时字段绕过 contract。
+- `docs/api-contracts.md` 必须记录本地后端、mock 模式和 Tauri WebView 连接本地 API 的命令。
 
 初始 CI 要包含 API contract 检查：
 
@@ -361,7 +404,39 @@ API 初始化阶段提供：
 - `bun run api:types` 根据 contract 生成前端类型。
 - `git diff --exit-code contracts/openapi.json packages/api-client/src/generated.ts` 确认生成产物已提交。
 
+### 版本、废弃与实时消息
+
 破坏性接口变更必须在 PR 描述中说明影响范围。对已被前端使用的字段，优先新增字段或新增版本化 endpoint；只有初始化阶段未发布接口可以直接重命名或删除。
+
+以下变更都视为 breaking change：
+
+- 删除字段。
+- 改字段名。
+- 改字段类型。
+- 改错误 `code`。
+- 改分页结构。
+- 改认证要求。
+- 改 HTTP status 语义。
+
+长期维护规则：
+
+- 新增字段通常兼容，但前端不能依赖未进入 contract 的字段。
+- 废弃字段先在 OpenAPI description 中标记 deprecated，并在 `docs/api-contracts.md` 记录迁移窗口。
+- 大范围破坏性变更新增 `/api/v2`，不在 v1 内静默改变语义。
+
+M0 不实现 WebSocket。后续若引入通知、任务进度、聊天或 AI 归档进度，消息必须使用统一 envelope：
+
+```json
+{
+  "type": "task.progress",
+  "payload": {},
+  "requestId": "req_abc123",
+  "correlationId": "job_123",
+  "timestamp": "2026-07-06T02:30:00Z"
+}
+```
+
+WebSocket 消息类型也必须进入 contract 文档，不能发送无类型散 JSON。
 
 ## Tauri WebView 与 TypeScript API Client
 
@@ -379,21 +454,22 @@ Tauri WebView 边界：
 TypeScript API client 职责：
 
 - 从 `contracts/openapi.json` 生成 TypeScript 类型。
-- 暴露 `createCampusAgoraApiClient(options)`，接收 `baseUrl`、可选 `fetch` 实现、认证 token/cookie 策略和请求追踪配置。
+- 暴露 `createCampusAgoraApiClient(options)`，接收 `baseUrl`、可选 `fetch` 实现、认证 token/cookie 策略、requestId 策略和请求追踪配置。
 - 统一处理 `ErrorResponse`、HTTP 状态码、JSON 解析、请求取消和 `requestId`。
-- 导出业务友好的方法，例如 `getMeta()`、`getHealth()`，而不是让页面层直接拼 path。
+- 导出业务友好的 resource 方法，例如 `getMeta()`、`getHealth()`、`getReadiness()`，而不是让页面层直接拼 path。
+- 把 `401`、`403`、`404`、`409`、`422`、`429` 和网络失败归一化成稳定错误类型。
 - 保持 browser/WebView-safe，不依赖 Node-only API 或 Tauri-only API。
 
 边界：
 
 - `packages/api-client` 不持有 React 状态，不依赖 React。
 - `packages/api-client` 不调用 Tauri command；需要本地系统能力时由 `apps/web` 通过受控 bridge 调用 `apps/desktop/src-tauri` 暴露的 command。
-- `apps/web` 可以在组件、hooks 或 data loaders 中调用 API client，但不能绕过它直接调用 HTTP endpoint。
+- `apps/web` 可以在 feature hooks 或 data loaders 中调用 API client，但不能绕过它直接调用 HTTP endpoint。
 - 未来如果增加 admin web、mobile web 或文档演示页，默认复用同一个 API client。
 
 测试：
 
-- API client 单元测试要覆盖成功响应、`ErrorResponse`、网络失败、401、403、404、409 和 requestId 透传。
+- API client 单元测试要覆盖成功响应、`ErrorResponse`、网络失败、401、403、404、409、422、429、认证策略和 requestId 透传。
 - Tauri shell 初始测试至少运行 `cargo check`，并检查权限配置文件存在且不授予未使用能力。
 - API contract 变更必须先更新 generated types，再调整 API client 方法。
 
@@ -461,7 +537,7 @@ TypeScript API client 职责：
 权限实现原则：
 
 - 权限判断集中在后端 policy 模块，避免散落在 handler 中。
-- domain 层提供纯函数权限测试，API 层负责从 session 和资源加载上下文。
+- domain 层提供纯函数权限测试，application 层负责把 session、资源和权限上下文编排成 use case，API 层只负责从请求中提取身份并调用 use case。
 - 每个新增写操作 endpoint 必须有权限测试，至少覆盖允许、拒绝和资源不存在三类情况。
 - `docs/auth-permissions.md` 记录角色、资源权限、匿名语义、审计要求和真实校园认证接入条件。
 
@@ -478,6 +554,7 @@ TypeScript API client 职责：
 - TypeScript 严格模式。
 - React 组件和测试样例。
 - 由 OpenAPI 生成类型约束的 API client package。
+- TanStack Query 或等价 server-state 管理边界；M0 至少为 `/api/v1/meta` 建立可测试 hook。
 - 基础样式和响应式布局。
 
 ## 前端视觉系统与组件系统
@@ -488,6 +565,10 @@ TypeScript API client 职责：
 
 ```text
 apps/web/src/
+  app/
+    App.tsx
+    providers.tsx
+    router.tsx
   styles/
     tokens.css
     themes.css
@@ -516,23 +597,51 @@ apps/web/src/
       Topbar.tsx
       AppShell.tsx
     icons/
+  features/
+    meta/
+      hooks/
+      model/
+      ui/
+    design-system/
+      DesignSystemPage.tsx
   pages/
-    DesignSystemPage.tsx
+    HomePage.tsx
   hooks/
   lib/
+    api.ts
+    env.ts
+    format.ts
 ```
 
 ### 目录职责
 
+- `app`：应用根、router、providers 和全局错误边界，不放业务页面实现。
 - `styles/tokens.css`：集中定义颜色、间距、字号、圆角、阴影、边框、z-index、动效时长等设计 token。
 - `styles/themes.css`：定义 light/dark 或后续主题变量，只覆盖 token 值，不写组件选择器。
 - `styles/globals.css`：放 reset、基础排版、body/root 样式和全局可访问性样式。
 - `components/ui`：提供基础可组合组件，页面不得重复实现按钮、输入框、弹窗、卡片、状态提示等基础 UI。
 - `components/layout`：提供 `AppShell`、`Sidebar`、`Topbar` 等应用框架组件。
 - `components/icons`：封装项目使用的 icon 出口，统一 Lucide 配置。
-- `pages`：只负责页面组合和数据连接，不承载基础 UI 样式实现。
+- `features`：按业务能力组织 hooks、局部 UI、model 和测试，例如 `meta`、后续 `auth`、`knowledge`、`discussion`、`moderation`。
+- `pages`：只负责路由级页面组合，不承载基础 UI 样式实现，不直接裸 `fetch`。
 - `hooks`：放可复用 React hooks。
-- `lib`：放非 React 业务辅助函数、格式化函数和配置读取。
+- `lib`：放 API client 实例、环境变量读取、格式化函数和非 React 业务辅助函数。
+
+前端依赖方向：
+
+```text
+app -> pages -> features -> packages/api-client
+pages -> components/layout + components/ui
+features -> components/ui
+components/ui -> styles + components/icons
+```
+
+禁止：
+
+- `components/ui` 依赖 feature、page、API client 或路由。
+- `pages` 直接导入 `packages/api-client/src/generated.ts`。
+- `pages` 直接裸 `fetch`。
+- feature 间互相穿透内部目录；跨 feature 复用先提升到 `lib`、`hooks` 或明确的公开出口。
 
 ### Design Tokens
 
@@ -636,13 +745,14 @@ UI 文案默认使用中文，避免在同一工作流中混用 `Save`、`OK`、
 
 - `components/ui` 组件必须是受控、可组合、可测试的基础组件，不绑定具体业务 API。
 - `components/layout` 可以依赖路由和当前用户展示状态，但不直接发起后端写操作。
-- `pages` 可以调用 hooks 和 API client，但不能直接导入 `packages/api-client/src/generated.ts`。
-- `pages` 不能直接调用裸 `fetch`；HTTP 请求通过 `@campus-agora/api-client` 或封装好的 hooks 进入。
+- `features` 负责业务 hooks、server-state 查询、局部 UI 和 feature 测试；跨 feature 共享逻辑先进入 `lib` 或 `hooks`。
+- `pages` 可以调用 feature hooks 和组合组件，但不能直接导入 `packages/api-client/src/generated.ts`。
+- `pages` 不能直接调用裸 `fetch`；HTTP 请求通过 feature hooks 和 `@campus-agora/api-client` 进入。
 - 新增页面前优先复用已有 `ui` 和 `layout` 组件；确实需要新 UI primitive 时先加入 `components/ui`。
 - 页面级样式只允许写组合布局、页面特有 grid/flex 和局部响应式约束；颜色、字号、间距、圆角、阴影必须来自 token。
 - 新增 token 必须先说明语义和使用场景，不能因为单个页面“看起来差一点”临时加散值。
 - 初始 CI 要对前端运行 typecheck、ESLint、Stylelint、unit tests 和 build，并通过规则或 review 检查页面中没有手写重复基础控件。
-- `docs/development.md` 要记录组件新增规则、icon 使用方式、token 修改流程、Style Guide 页面维护方式和 UI 文案约定。
+- `docs/development.md` 要记录 app/features/components 组织、API client 使用、mock 模式、组件新增规则、icon 使用方式、token 修改流程、Style Guide 页面维护方式和 UI 文案约定。
 
 ## 数据库策略
 
@@ -658,7 +768,7 @@ UI 文案默认使用中文，避免在同一工作流中混用 `Save`、`OK`、
 - 历史 migration 一旦进入主分支，不直接修改；新增 schema 变化必须追加 migration。
 - 新增字段要明确 nullable、默认值、回填和兼容策略；删除字段要分阶段完成，先停止读写，再迁移数据，最后删除。
 - 索引必须跟随实际查询模式设计，尤其是 `owner_id`、`organization_id`、`post_kind`、`moderation_status`、`created_at`、`updated_at`、标签和全文检索字段。
-- 需要一致性的写操作必须在 repository 或 service 层显式使用事务，例如发布资料版本时同时写 `posts`、`post_revisions` 和审计事件。
+- 需要一致性的写操作必须由 application use case 声明事务边界，并由 db repository 实现事务，例如发布资料版本时同时写 `posts`、`post_revisions` 和审计事件。
 - repository 查询不能只按资源 ID 查询私有资源；必须同时带上可见性、组织范围、作者、维护者或审核范围条件，避免越权访问。
 - DB row 类型不能直接作为 API response 返回。
 
@@ -704,7 +814,7 @@ CI 在 GitHub Actions 中拆为前端、后端、桌面、contract 和 container
 - 前端 job：安装 Bun，使用 `bun install --frozen-lockfile` 安装依赖，运行 api:types、typecheck、lint、lint:styles、test、build。
 - 后端 job：安装固定 Rust toolchain，启动 PostgreSQL 16 服务，运行 fmt、check、clippy、test、migration smoke test、SQLx prepare check，并导出 OpenAPI contract。
 - Desktop job：对 `apps/desktop/src-tauri` 运行 `cargo check`，并检查 Tauri 权限配置。
-- Contract job：确认 `contracts/openapi.json` 与 `packages/api-client/src/generated.ts` 没有未提交的生成差异。
+- Contract job：确认 `contracts/openapi.json` 与 `packages/api-client/src/generated.ts` 没有未提交的生成差异，并运行 API client 与 mock handler 的类型检查。
 - Container job：如果 CI runner 支持 Docker，运行 `docker build -f Dockerfile.api .`，验证 API Server 可构建为部署镜像。
 
 工具链固定：
@@ -714,6 +824,7 @@ CI 在 GitHub Actions 中拆为前端、后端、桌面、contract 和 container
 - GitHub Actions 使用同一 Bun 版本和 Rust toolchain。
 - 本地开发文档明确 PostgreSQL 16 为默认数据库版本。
 - Rust crate 在各自 `Cargo.toml` 统一使用 2021 edition，后续升级 edition 必须一次性更新 workspace。
+- 根 `Cargo.toml` 声明后端 workspace members 为 `crates/*`；`apps/desktop/src-tauri` 作为 Tauri 壳独立运行 `cargo check`，除非后续确认需要纳入同一 Cargo workspace。
 
 Bun workspace 要求：
 
@@ -733,11 +844,12 @@ Bun workspace 要求：
 - `docs/ai-log/todo.md`：记录 agent 或协作者接下来要做的任务、来源、优先级、依赖和验收条件。
 - `docs/ai-log/done.md`：记录已经完成的工作、提交、验证命令、关键决策和后续影响。
 - `docs/lfs.md`：说明 Git LFS 的启用、检查和禁止滥用规则。
-- `docs/api-contracts.md`：说明前后端接口 contract 的维护方式。
+- `docs/api-contracts.md`：说明前后端接口 contract、路径、参数、分页、错误码、认证、mock 联调、版本和废弃策略。
 - `docs/auth-permissions.md`：说明认证 provider、角色、权限策略、匿名语义和审计要求。
-- `docs/backend.md`：说明 Rust API Server 分层、DTO/domain/db model 边界、错误格式、配置、观测、安全和测试规范。
+- `docs/backend.md`：说明 Rust API Server 分层、domain/application/db/api crate 边界、DTO/domain/application/db model 边界、错误格式、配置、观测、安全和测试规范。
+- `docs/architecture.md`：说明 monorepo 边界、依赖方向、前端 app/features/components 组织和 Rust crate 职责。
 - `docs/desktop.md`：说明 Tauri WebView、command bridge、权限配置和桌面端开发命令。
-- `docs/development.md`：说明前端组件系统、视觉 token、图标规范、Style Guide 页面、UI 文案约定、开发命令和质量门禁。
+- `docs/development.md`：说明前端 app/features/components 组织、API client 使用、mock 模式、组件系统、视觉 token、图标规范、Style Guide 页面、UI 文案约定、开发命令和质量门禁。
 - `docs/deployment.md`：说明 API Server Docker 构建、migration、健康检查、staging/production 发布顺序和回滚原则。
 - `docs/milestones.md`：说明项目推进阶段、交付物和退出条件。
 
@@ -778,7 +890,7 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 
 - Rust domain 单元测试验证帖子草稿校验和状态枚举。
 - Rust domain 单元测试验证权限策略，例如作者编辑、维护者更新、审核者改状态、普通用户被拒绝。
-- Rust service 测试验证业务流程编排，例如资料草稿创建、发布前校验、版本更新和审核状态流转。
+- Rust application/use case 测试验证业务流程编排，例如资料草稿创建、发布前校验、版本更新和审核状态流转。
 - Rust repository 测试在 PostgreSQL 上验证关键查询、事务、唯一约束、外键约束和可见性条件。
 - Rust API integration 测试验证真实 HTTP 接口，包括 `/healthz`、`/readyz`、`/api/v1/meta`、统一错误格式和 `X-Request-Id`。
 - Rust auth/permission 测试验证未登录返回 `401`、越权访问返回 `403` 或不可见资源返回 `404`、状态冲突返回 `409`。
@@ -787,7 +899,8 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 - 前端组件测试验证 `AppShell`、`Topbar`、`Sidebar` 和至少两个 `components/ui` primitive 能渲染核心状态。
 - 前端 Style Guide 页面测试验证 `/design-system` 能渲染颜色、字体、按钮、输入框、卡片、空状态、加载状态和错误状态展示区。
 - 前端 lint 测试或 Stylelint 配置验证页面样式不能使用裸颜色、散乱 px 值和重复基础控件样式。
-- `packages/api-client` 测试验证成功响应、失败响应、错误归一化和 requestId 透传。
+- `packages/api-client` 测试验证成功响应、失败响应、401、403、404、409、422、429、网络失败、错误归一化、认证策略和 requestId 透传。
+- 前端 mock 测试或类型检查验证 mock handler 与 `@campus-agora/api-client` 公开类型一致。
 - `apps/desktop/src-tauri` 至少通过 `cargo check`，并验证权限配置文件存在。
 - 前端类型生成检查验证 `packages/api-client` 没有偏离 `contracts/openapi.json`。
 
@@ -800,7 +913,7 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 1. 新功能先补领域模型或 API 契约测试。
 2. 后端变更必须跑 fmt、check、clippy、test；涉及数据库时必须跑 migration smoke test；涉及部署镜像时必须跑 `docker build -f Dockerfile.api .`。
 3. 前端变更必须跑 typecheck、lint、lint:styles、test、build。
-4. API 变更必须更新 OpenAPI contract、生成前端类型，并说明兼容性影响。
+4. API 变更必须更新 OpenAPI contract、生成前端类型、resource client、mock handler，并说明兼容性影响。
 5. 权限相关变更必须更新 `docs/auth-permissions.md`，并补充后端 policy 测试。
 6. 数据库结构变更必须新增 migration，不直接改历史 migration。
 7. 后端配置、CORS、secret、日志字段、部署流程或健康检查变化必须更新 `docs/backend.md` 或 `docs/deployment.md`。
@@ -846,7 +959,7 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 
 初始里程碑：
 
-- `M0 Repository Foundation`：完成 monorepo、Bun 前端、前端视觉系统、基础组件系统、`/design-system` Style Guide 页面、Tauri WebView 壳、TypeScript API client、Rust API Server 分层、OpenAPI contract、统一错误模型、集中配置、tracing/requestId、`/healthz`、`/readyz`、Dockerfile.api、部署文档、CI、ESLint、Stylelint、测试、`.gitignore`、`.gitattributes`、AI LOG、LFS 文档、后端规范文档、权限文档和协作规范。退出条件是新成员能按 README 跑通前端、桌面壳、后端、测试、样式检查、API contract 生成命令和 API Server 镜像构建检查。
+- `M0 Repository Foundation`：完成 monorepo 边界、Bun 前端、`app/features/components` 前端结构、前端视觉系统、基础组件系统、`/design-system` Style Guide 页面、Tauri WebView 壳、TypeScript API client、`domain/application/db/api` Rust crate 分层、OpenAPI contract、API 对接规范、mock 联调边界、统一错误模型、集中配置、tracing/requestId、`/healthz`、`/readyz`、Dockerfile.api、部署文档、CI、ESLint、Stylelint、测试、`.gitignore`、`.gitattributes`、AI LOG、LFS 文档、架构文档、后端规范文档、权限文档和协作规范。退出条件是新成员能按 README 跑通前端、桌面壳、后端、测试、样式检查、API contract 生成命令、API client 类型检查、mock 类型检查和 API Server 镜像构建检查。
 - `M1 Identity, Permissions And Shell`：完成认证 provider 抽象、模拟校园认证、用户模型、系统角色、资源角色、应用导航、登录态和基础权限边界。退出条件是前端能基于后端 API 完成登录态展示，后端有认证和权限策略测试。
 - `M2 Knowledge Archive Core`：完成资料帖发布、编辑、标签、版本历史、纠错入口和基础列表。退出条件是一篇资料能从创建到更新再到版本追踪完整闭环。
 - `M3 Discussion To Archive Loop`：完成讨论帖、评论、精华回复和从讨论沉淀到资料的工作流。退出条件是高质量评论能被引用或整理进资料帖。
