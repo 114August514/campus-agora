@@ -23,6 +23,7 @@ apps/desktop/src-tauri/gen/
 # Local caches and logs
 .bun/
 .venv/
+tools/docs/.venv/
 *.log
 *.tmp
 tmp/

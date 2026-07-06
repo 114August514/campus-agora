@@ -1,7 +1,7 @@
 site_name: Campus Agora
 site_description: Campus Agora 工程与协作文档
-docs_dir: docs
-site_dir: site
+docs_dir: ../../docs
+site_dir: ../../site
 strict: true
 exclude_docs: |
   superpowers/specs/**

@@ -6,7 +6,7 @@ rules, release order, and rollback principles future environments should follow.
 ## API Image
 
 ```bash
-docker build -f Dockerfile.api .
+bun run docker:api
 ```
 
 The image runs `campus-agora-api` and listens on `SERVER_HOST:SERVER_PORT`.

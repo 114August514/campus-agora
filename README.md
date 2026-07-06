@@ -43,7 +43,7 @@ Service and release checks:
 ```bash
 cargo sqlx migrate run --source crates/db/migrations
 bun run docs:build
-docker build -f Dockerfile.api .
+bun run docker:api
 ```
 
 Shared automation lives in `scripts/`. The CI workflow calls the same scripts so

@@ -20,7 +20,7 @@ bun run ci:container
 ```
 
 The service checks require local PostgreSQL and Docker. MkDocs dependencies are
-managed by uv through `pyproject.toml` and `uv.lock`.
+managed by uv through `tools/docs/pyproject.toml` and `tools/docs/uv.lock`.
 
 ## Script Boundary
 

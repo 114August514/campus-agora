@@ -12,7 +12,7 @@
 | 前端 UI、设计系统、组件结构 | [前端参考](frontend-reference.md) | [质量门禁](../engineering/quality.md), Web 源码 |
 | 后端架构、配置、持久化、认证边界 | [后端参考](backend-reference.md) | [后端架构](../architecture/backend.md), [安全](../operations/security.md) |
 | API 契约和前后端对接 | [API 契约参考](api-contract-reference.md) | [API 契约](../architecture/api-contracts.md), `contracts/openapi.json` |
-| Monorepo 布局、包边界、CI 质量门禁 | [Monorepo 参考](monorepo-reference.md) | 根目录 `package.json`, `Cargo.toml`, `scripts/`, `.github/workflows/ci.yml` |
+| Monorepo 布局、包边界、CI 质量门禁 | [Monorepo 参考](monorepo-reference.md) | 根目录 `package.json`, `Cargo.toml`, `scripts/`, `tools/`, `docker/`, `.github/workflows/ci.yml` |
 | 运维、安全、部署、备份、滥用防护 | [运维风险参考](operations-risk-reference.md), [产品治理参考](product-governance-reference.md) | `docs/operations/*`, [隐私](../product/privacy.md) |
 | 高级工程风险和未来扩展细节 | [高级工程参考](advanced-engineering-reference.md) | 当前里程碑文档和相关架构文档 |
 
