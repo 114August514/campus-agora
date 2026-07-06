@@ -69,6 +69,9 @@ campus-agora/
       migrations/
       Cargo.toml
   docs/
+    ai-log/
+      done.md
+      todo.md
     api-contracts.md
     architecture.md
     auth-permissions.md
@@ -92,7 +95,7 @@ campus-agora/
 - `crates/domain`：领域类型、状态枚举、输入校验和无需数据库的业务规则。
 - `crates/db`：数据库连接、migration、repository 边界和 SQLx 类型。
 - `crates/api`：HTTP 入口、路由、中间件、错误响应和依赖注入。
-- `docs`：项目定位、架构说明、开发命令、里程碑和协作约定。
+- `docs`：项目定位、架构说明、开发命令、AI LOG、里程碑和协作约定。
 
 ## 后端边界
 
@@ -257,6 +260,8 @@ CI 在 GitHub Actions 中拆为前端和后端两个 job：
 - `.gitattributes`：声明 Git LFS 跟踪范围，只跟踪确实不适合进入普通 Git 历史的大型二进制资源。
 - `CONTRIBUTING.md`：说明分支、提交、测试和 PR 前检查。
 - `AGENTS.md`：说明后续 agent 或协作者在本仓库里的工作规范。
+- `docs/ai-log/todo.md`：记录 agent 或协作者接下来要做的任务、来源、优先级、依赖和验收条件。
+- `docs/ai-log/done.md`：记录已经完成的工作、提交、验证命令、关键决策和后续影响。
 - `docs/lfs.md`：说明 Git LFS 的启用、检查和禁止滥用规则。
 - `docs/api-contracts.md`：说明前后端接口 contract 的维护方式。
 - `docs/auth-permissions.md`：说明认证 provider、角色、权限策略、匿名语义和审计要求。
@@ -309,15 +314,49 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 建议覆盖：
 4. API 变更必须更新 OpenAPI contract、生成前端类型，并说明兼容性影响。
 5. 权限相关变更必须更新 `docs/auth-permissions.md`，并补充后端 policy 测试。
 6. 数据库结构变更必须新增 migration，不直接改历史 migration。
-7. 涉及内容治理、隐私、匿名和 AI 输出的变更必须在 PR 描述中说明风险边界。
+7. 由 agent 推进的非平凡任务必须更新 AI LOG：开始或发现任务时写入 `docs/ai-log/todo.md`，完成后写入 `docs/ai-log/done.md`。
+8. 涉及内容治理、隐私、匿名和 AI 输出的变更必须在 PR 描述中说明风险边界。
+
+## AI LOG 策略
+
+初始化仓库时要提供 `docs/ai-log/todo.md` 和 `docs/ai-log/done.md`。它们不是替代 issue、milestone 或 commit history，而是给 AI agent 和人类协作者提供低摩擦的工作上下文。
+
+`docs/ai-log/todo.md` 记录“要做什么”：
+
+- 任务标题。
+- 来源，例如用户请求、spec、CI 失败、代码审查或实现中发现的问题。
+- 所属 milestone。
+- 优先级。
+- 阻塞条件。
+- 验收条件。
+- 当前状态，例如 `open`、`blocked`、`in progress`。
+
+`docs/ai-log/done.md` 记录“做了什么”：
+
+- 完成日期。
+- 任务标题。
+- 关联 milestone。
+- 主要变更。
+- 关键文件。
+- 验证命令和结果。
+- 相关提交 hash。
+- 后续注意事项。
+
+维护规则：
+
+- AI LOG 只记录对项目推进有意义的任务，不记录每一次终端命令。
+- 任务开始前，如果它不是当前对话里一眼可见的简单修改，应先在 `todo.md` 留一条可追踪记录。
+- 任务完成后，把事实写进 `done.md`；已完成项可以从 `todo.md` 移除，或标记为完成并指向 `done.md`。
+- 不能在 AI LOG 中写入密钥、账号、真实学生身份信息、内部认证回调地址或未脱敏日志。
+- 记录必须短、可审查、可被后续 agent 继续执行；避免长篇复述对话。
 
 ## Milestone 策略
 
-初始化仓库时要提供 `docs/milestones.md`，作为本地可审查的推进计划。后续如果启用 GitHub Issues，再把这些阶段同步为 GitHub Milestones；本地文档仍保留为项目事实来源，避免仓库脱离项目管理平台后丢失路线图。
+初始化仓库时要提供 `docs/milestones.md`，作为本地可审查的推进计划。后续如果启用 GitHub Issues，再把这些阶段同步为 GitHub Milestones；本地文档仍保留为项目事实来源，避免仓库脱离项目管理平台后丢失路线图。Milestone 管阶段目标，AI LOG 管任务流和执行事实。
 
 初始里程碑：
 
-- `M0 Repository Foundation`：完成 monorepo、Bun 前端、Rust workspace、OpenAPI contract、CI、lint、测试、`.gitignore`、`.gitattributes`、LFS 文档、权限文档和协作规范。退出条件是新成员能按 README 跑通前端、后端、测试和生成命令。
+- `M0 Repository Foundation`：完成 monorepo、Bun 前端、Rust workspace、OpenAPI contract、CI、lint、测试、`.gitignore`、`.gitattributes`、AI LOG、LFS 文档、权限文档和协作规范。退出条件是新成员能按 README 跑通前端、后端、测试和生成命令。
 - `M1 Identity, Permissions And Shell`：完成认证 provider 抽象、模拟校园认证、用户模型、系统角色、资源角色、应用导航、登录态和基础权限边界。退出条件是前端能基于后端 API 完成登录态展示，后端有认证和权限策略测试。
 - `M2 Knowledge Archive Core`：完成资料帖发布、编辑、标签、版本历史、纠错入口和基础列表。退出条件是一篇资料能从创建到更新再到版本追踪完整闭环。
 - `M3 Discussion To Archive Loop`：完成讨论帖、评论、精华回复和从讨论沉淀到资料的工作流。退出条件是高质量评论能被引用或整理进资料帖。
