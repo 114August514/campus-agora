@@ -56,8 +56,16 @@ campus-agora/
       package.json
       vite.config.ts
       tsconfig.json
+    desktop/
+      package.json
+      src-tauri/
+        Cargo.toml
+        tauri.conf.json
+        capabilities/
+          default.json
+        src/
   packages/
-    web-client/
+    api-client/
       src/
         client.ts
         generated.ts
@@ -84,6 +92,7 @@ campus-agora/
     api-contracts.md
     architecture.md
     auth-permissions.md
+    desktop.md
     development.md
     milestones.md
   .github/
@@ -100,8 +109,9 @@ campus-agora/
 
 各部分职责：
 
-- `apps/web`：浏览器端应用壳、页面路由、API 客户端和前端测试。
-- `packages/web-client`：浏览器可用的 TypeScript API client，由 OpenAPI contract 生成类型并封装请求。
+- `apps/web`：React/Vite Web UI，可在浏览器中运行，也可被 Tauri WebView 加载。
+- `apps/desktop`：Tauri 桌面壳，负责系统 WebView、窗口配置、Tauri 权限和必要的本地 bridge。
+- `packages/api-client`：浏览器和 Tauri WebView 可用的 TypeScript HTTP API client，由 OpenAPI contract 生成类型并封装请求。
 - `contracts`：前后端共享 API contract，初始使用 OpenAPI JSON。
 - `crates/domain`：领域类型、状态枚举、输入校验和无需数据库的业务规则。
 - `crates/db`：数据库连接、migration、repository 边界和 SQLx 类型。
@@ -142,9 +152,9 @@ API 初始化阶段提供：
 
 - `contracts/openapi.json`：提交到仓库的 API contract 快照。
 - `crates/api`：使用 Rust DTO 和路由注解导出 OpenAPI；后端是 contract 的生成来源。
-- `packages/web-client/src/generated.ts`：由 `contracts/openapi.json` 生成的 TypeScript 类型。
-- `packages/web-client/src/client.ts`：基于生成类型封装浏览器端请求函数，页面组件不直接拼接裸 `fetch`。
-- `apps/web`：只从 `@campus-agora/web-client` 调用 API，不直接依赖 generated types。
+- `packages/api-client/src/generated.ts`：由 `contracts/openapi.json` 生成的 TypeScript 类型。
+- `packages/api-client/src/client.ts`：基于生成类型封装浏览器和 Tauri WebView 端请求函数，页面组件不直接拼接裸 `fetch`。
+- `apps/web`：只从 `@campus-agora/api-client` 调用 HTTP API，不直接依赖 generated types。
 - `docs/api-contracts.md`：说明接口变更流程、生成命令和 breaking change 规则。
 
 推荐工具链：
@@ -169,40 +179,51 @@ API 初始化阶段提供：
 
 1. 后端先更新 DTO、路由和 API 测试。
 2. 重新导出 `contracts/openapi.json`。
-3. 重新生成 `packages/web-client/src/generated.ts`。
-4. 更新 `packages/web-client/src/client.ts` 和 `apps/web` 组件调用。
+3. 重新生成 `packages/api-client/src/generated.ts`。
+4. 更新 `packages/api-client/src/client.ts` 和 `apps/web` 组件调用。
 5. CI 检查 contract、生成类型、后端测试和前端 typecheck 是否一致。
 
 初始 CI 要包含 API contract 检查：
 
 - `cargo run -p campus_agora_api --bin export-openapi -- contracts/openapi.json` 生成 contract。
 - `bun run api:types` 根据 contract 生成前端类型。
-- `git diff --exit-code contracts/openapi.json packages/web-client/src/generated.ts` 确认生成产物已提交。
+- `git diff --exit-code contracts/openapi.json packages/api-client/src/generated.ts` 确认生成产物已提交。
 
 破坏性接口变更必须在 PR 描述中说明影响范围。对已被前端使用的字段，优先新增字段或新增版本化 endpoint；只有初始化阶段未发布接口可以直接重命名或删除。
 
-## TypeScript Web Client
+## Tauri WebView 与 TypeScript API Client
 
-初始化阶段要提供独立的 `packages/web-client`，作为浏览器端访问后端 API 的唯一正式入口。
+初始化阶段要提供 Tauri WebView 桌面壳和独立的 `packages/api-client`。Tauri WebView 负责承载 `apps/web` 的前端界面；`packages/api-client` 负责访问 Axum HTTP API。二者不能混成一个概念。
 
-职责：
+Tauri WebView 边界：
+
+- `apps/desktop` 使用 Tauri 加载 `apps/web` 的开发服务器或构建产物。
+- `apps/desktop/src-tauri` 只处理窗口、权限、本地系统能力和少量必须在本机执行的 command。
+- Tauri command 不承载资料帖、讨论帖、审核等领域业务；领域业务默认通过 Axum HTTP API 暴露。
+- WebView 中不能保存长期密钥；认证状态以 cookie 或短期 token 策略为准，并在 `docs/auth-permissions.md` 中记录。
+- Tauri 权限采用最小授权，`capabilities/default.json` 只开启初始化阶段实际需要的能力。
+- 如果后续需要文件选择、系统通知或剪贴板等能力，先在 `docs/desktop.md` 记录用途、权限和风险，再增加 Tauri command。
+
+TypeScript API client 职责：
 
 - 从 `contracts/openapi.json` 生成 TypeScript 类型。
-- 暴露 `createCampusAgoraClient(options)`，接收 `baseUrl`、可选 `fetch` 实现、认证 token/cookie 策略和请求追踪配置。
+- 暴露 `createCampusAgoraApiClient(options)`，接收 `baseUrl`、可选 `fetch` 实现、认证 token/cookie 策略和请求追踪配置。
 - 统一处理 `ErrorResponse`、HTTP 状态码、JSON 解析、请求取消和 `requestId`。
 - 导出业务友好的方法，例如 `getMeta()`、`getHealth()`，而不是让页面层直接拼 path。
-- 保持 browser-safe，不依赖 Node-only API。
+- 保持 browser/WebView-safe，不依赖 Node-only API 或 Tauri-only API。
 
 边界：
 
-- `packages/web-client` 不持有 React 状态，不依赖 React。
-- `apps/web` 可以在组件、hooks 或 data loaders 中调用 web client，但不能绕过它直接调用 API endpoint。
-- 未来如果增加 admin web、mobile web 或文档演示页，默认复用同一个 web client。
+- `packages/api-client` 不持有 React 状态，不依赖 React。
+- `packages/api-client` 不调用 Tauri command；需要本地系统能力时由 `apps/web` 通过受控 bridge 调用 `apps/desktop/src-tauri` 暴露的 command。
+- `apps/web` 可以在组件、hooks 或 data loaders 中调用 API client，但不能绕过它直接调用 HTTP endpoint。
+- 未来如果增加 admin web、mobile web 或文档演示页，默认复用同一个 API client。
 
 测试：
 
-- web client 单元测试要覆盖成功响应、`ErrorResponse`、网络失败、401、403、404、409 和 requestId 透传。
-- API contract 变更必须先更新 generated types，再调整 web client 方法。
+- API client 单元测试要覆盖成功响应、`ErrorResponse`、网络失败、401、403、404、409 和 requestId 透传。
+- Tauri shell 初始测试至少运行 `cargo check`，并检查权限配置文件存在且不授予未使用能力。
+- API contract 变更必须先更新 generated types，再调整 API client 方法。
 
 ## 认证与权限边界
 
@@ -278,13 +299,13 @@ API 初始化阶段提供：
 
 - 顶部导航包含资料库、讨论、归档助手、审核入口等一级入口占位。
 - 主区域展示资料沉淀优先的搜索入口、最近更新资料和待整理讨论占位。
-- 通过 `@campus-agora/web-client` 请求 `/api/v1/meta`，并展示后端状态或错误状态。
+- 通过 `@campus-agora/api-client` 请求 `/api/v1/meta`，并展示后端状态或错误状态。
 
 前端不会在初始化阶段实现完整业务交互，但要建立：
 
 - TypeScript 严格模式。
 - React 组件和测试样例。
-- 由 OpenAPI 生成类型约束的 web client package。
+- 由 OpenAPI 生成类型约束的 API client package。
 - 基础样式和响应式布局。
 
 ## 数据库策略
@@ -334,7 +355,8 @@ CI 在 GitHub Actions 中拆为前端和后端两个 job：
 
 - 前端 job：安装 Bun，使用 `bun install --frozen-lockfile` 安装依赖，运行 api:types、typecheck、lint、test、build。
 - 后端 job：安装固定 Rust toolchain，启动 PostgreSQL 16 服务，运行 fmt、clippy、test、migration smoke test、SQLx prepare check，并导出 OpenAPI contract。
-- Contract job：确认 `contracts/openapi.json` 与 `packages/web-client/src/generated.ts` 没有未提交的生成差异。
+- Desktop job：对 `apps/desktop/src-tauri` 运行 `cargo check`，并检查 Tauri 权限配置。
+- Contract job：确认 `contracts/openapi.json` 与 `packages/api-client/src/generated.ts` 没有未提交的生成差异。
 
 工具链固定：
 
@@ -348,9 +370,9 @@ Bun workspace 要求：
 
 - 根 `package.json` 声明 `workspaces: ["apps/*", "packages/*"]`。
 - 根脚本提供统一入口：`dev`、`build`、`test`、`lint`、`typecheck`、`api:types`、`api:check`。
-- 根脚本通过 `bun --filter` 或显式 `--cwd` 调用 `apps/web` 与 `packages/web-client`，避免协作者需要记住子目录命令。
-- `apps/web` 通过 workspace dependency 引用 `@campus-agora/web-client`，不通过相对路径穿透包边界。
-- `apps/web/package.json` 只保留应用局部脚本和依赖；`packages/web-client/package.json` 只保留客户端局部脚本和依赖；跨项目质量门禁从根目录执行。
+- 根脚本通过 `bun --filter` 或显式 `--cwd` 调用 `apps/web`、`apps/desktop` 与 `packages/api-client`，避免协作者需要记住子目录命令。
+- `apps/web` 通过 workspace dependency 引用 `@campus-agora/api-client`，不通过相对路径穿透包边界。
+- `apps/web/package.json` 只保留应用局部脚本和依赖；`apps/desktop/package.json` 只保留 Tauri 壳脚本；`packages/api-client/package.json` 只保留客户端局部脚本和依赖；跨项目质量门禁从根目录执行。
 
 本地协作文件：
 
@@ -364,6 +386,7 @@ Bun workspace 要求：
 - `docs/lfs.md`：说明 Git LFS 的启用、检查和禁止滥用规则。
 - `docs/api-contracts.md`：说明前后端接口 contract 的维护方式。
 - `docs/auth-permissions.md`：说明认证 provider、角色、权限策略、匿名语义和审计要求。
+- `docs/desktop.md`：说明 Tauri WebView、command bridge、权限配置和桌面端开发命令。
 - `docs/milestones.md`：说明项目推进阶段、交付物和退出条件。
 
 ## Git Ignore 与 LFS 策略
@@ -406,8 +429,9 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 - Rust API 测试验证健康检查和 meta 接口。
 - Rust contract 测试验证 OpenAPI 导出包含初始化接口和响应 schema。
 - 前端组件测试验证应用壳能渲染核心入口。
-- `packages/web-client` 测试验证成功响应、失败响应、错误归一化和 requestId 透传。
-- 前端类型生成检查验证 `packages/web-client` 没有偏离 `contracts/openapi.json`。
+- `packages/api-client` 测试验证成功响应、失败响应、错误归一化和 requestId 透传。
+- `apps/desktop/src-tauri` 至少通过 `cargo check`，并验证权限配置文件存在。
+- 前端类型生成检查验证 `packages/api-client` 没有偏离 `contracts/openapi.json`。
 
 不在初始化阶段引入端到端浏览器测试。等真实发布、搜索和审核流程出现后再加入 Playwright。
 
@@ -463,7 +487,7 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 
 初始里程碑：
 
-- `M0 Repository Foundation`：完成 monorepo、Bun 前端、TypeScript web client、Rust workspace、OpenAPI contract、CI、lint、测试、`.gitignore`、`.gitattributes`、AI LOG、LFS 文档、权限文档和协作规范。退出条件是新成员能按 README 跑通前端、后端、测试和生成命令。
+- `M0 Repository Foundation`：完成 monorepo、Bun 前端、Tauri WebView 壳、TypeScript API client、Rust workspace、OpenAPI contract、CI、lint、测试、`.gitignore`、`.gitattributes`、AI LOG、LFS 文档、权限文档和协作规范。退出条件是新成员能按 README 跑通前端、桌面壳、后端、测试和生成命令。
 - `M1 Identity, Permissions And Shell`：完成认证 provider 抽象、模拟校园认证、用户模型、系统角色、资源角色、应用导航、登录态和基础权限边界。退出条件是前端能基于后端 API 完成登录态展示，后端有认证和权限策略测试。
 - `M2 Knowledge Archive Core`：完成资料帖发布、编辑、标签、版本历史、纠错入口和基础列表。退出条件是一篇资料能从创建到更新再到版本追踪完整闭环。
 - `M3 Discussion To Archive Loop`：完成讨论帖、评论、精华回复和从讨论沉淀到资料的工作流。退出条件是高质量评论能被引用或整理进资料帖。
