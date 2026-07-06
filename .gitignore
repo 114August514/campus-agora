@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Frontend outputs
+apps/web/dist/
+packages/*/dist/
+apps/web/coverage/
+coverage/
+
+# Rust outputs
+target/
+
+# Tauri outputs
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Local caches and logs
+.bun/
+*.log
+*.tmp
+tmp/
+temp/
+
+# Local database artifacts
+*.dump
+*.sql.gz
+
+# Editors and OS files
+.DS_Store
+.idea/
+.vscode/
+
+# Local worktrees
+.worktrees/
+worktrees/
