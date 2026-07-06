@@ -109,12 +109,50 @@ campus-agora/
   crates/
     api/
       src/
+        app.rs
+        config.rs
+        error.rs
+        main.rs
+        observability.rs
+        state.rs
+        bin/
+          export-openapi.rs
+        dto/
+          error.rs
+          meta.rs
+          mod.rs
+        handlers/
+          health.rs
+          meta.rs
+          mod.rs
+        middleware/
+          auth.rs
+          mod.rs
+          request_id.rs
+        routes/
+          mod.rs
+        services/
+          meta_service.rs
+          mod.rs
       Cargo.toml
     domain/
       src/
+        auth.rs
+        ids.rs
+        lib.rs
+        permissions.rs
+        posts.rs
+        revisions.rs
+        validation.rs
       Cargo.toml
     db/
       src/
+        lib.rs
+        models/
+          mod.rs
+        pool.rs
+        repositories/
+          mod.rs
       migrations/
       Cargo.toml
   docs/
@@ -124,15 +162,19 @@ campus-agora/
     api-contracts.md
     architecture.md
     auth-permissions.md
+    backend.md
     desktop.md
     development.md
+    deployment.md
     milestones.md
   .github/
     workflows/
       ci.yml
+  .dockerignore
   AGENTS.md
   CONTRIBUTING.md
   Cargo.toml
+  Dockerfile.api
   bun.lock
   package.json
   rust-toolchain.toml
@@ -146,8 +188,8 @@ campus-agora/
 - `packages/api-client`：浏览器和 Tauri WebView 可用的 TypeScript HTTP API client，由 OpenAPI contract 生成类型并封装请求。
 - `contracts`：前后端共享 API contract，初始使用 OpenAPI JSON。
 - `crates/domain`：领域类型、状态枚举、输入校验和无需数据库的业务规则。
-- `crates/db`：数据库连接、migration、repository 边界和 SQLx 类型。
-- `crates/api`：HTTP 入口、路由、中间件、错误响应和依赖注入。
+- `crates/db`：数据库连接、migration、数据库行模型、repository 实现和 SQLx 类型。
+- `crates/api`：Axum HTTP 入口、路由、handler、DTO、service 编排、中间件、错误响应、配置、观测和依赖注入。
 - `docs`：项目定位、架构说明、开发命令、AI LOG、里程碑和协作约定。
 
 ## 后端边界
@@ -157,6 +199,101 @@ campus-agora/
 - `campus_agora_domain`
 - `campus_agora_db`
 - `campus_agora_api`
+
+后端按 Rust 服务器 API Server 维护，不把业务逻辑放在 Tauri 本地 command，也不把 Axum handler 写成脚本式入口。Tauri 只承载 WebView 和必要本机能力；资料、讨论、审核、权限和归档等业务默认通过 Rust API Server 暴露。
+
+### 后端分层规范
+
+后端采用清晰的服务器分层：
+
+```text
+Routes / Handlers
+  Services
+  Repositories
+  Database / External Services
+```
+
+各层职责：
+
+- `routes`：只负责挂载路径、HTTP method、中间件和版本前缀。
+- `handlers`：只负责解析 HTTP 输入、调用 service、把 service 结果转换为 DTO 响应，不写复杂业务规则，不直接拼 SQL。
+- `services`：负责业务流程编排、权限调用、状态流转、事务边界和跨 repository 的一致性。
+- `repositories`：负责数据库读写和查询条件，不能处理 API DTO、HTTP 状态码或 UI 语义。
+- `domain`：负责核心实体、枚举、值对象、校验、权限纯函数和状态机，不依赖 Axum、SQLx、Tauri 或前端类型。
+- `infra` 或具体 adapter：后续接 Redis、对象存储、邮件、AI 服务和外部 API 时放入适配层，不让外部 SDK 污染 domain。
+
+M0 使用三个 crate 表达这些边界：
+
+- `crates/domain`：领域模型、权限 policy、状态流转和校验函数。
+- `crates/db`：SQLx pool、migration、DB row model 和 repository 实现。
+- `crates/api`：Axum app、DTO、handler、service、middleware、配置、错误映射、OpenAPI 导出和观测。
+
+后续如果 service 层明显膨胀，再单独拆出 `crates/service` 或 `crates/application`。M0 不提前拆第四个 crate，避免初始化阶段过度抽象。
+
+### DTO、Domain、DB Model
+
+后端禁止一个 Rust struct 到处复用。初始化阶段要明确三类类型：
+
+- DTO：位于 `crates/api/src/dto`，只服务 API 请求、响应和 OpenAPI schema。
+- Domain Model：位于 `crates/domain/src`，表达业务含义、状态和规则。
+- DB Model / Row：位于 `crates/db/src/models`，只表达数据库查询结果和持久化结构。
+
+转换规则：
+
+- API response 只能由 DTO 返回，不能直接 serialize DB row。
+- DTO 和 DB row 之间通过 service/repository 边界显式转换，避免密码 hash、token、内部权限字段、审计字段或校园身份原始信息误返回给前端。
+- JSON 字段命名遵守前后端契约，DTO 使用 `serde(rename_all = "camelCase")`；domain 和 DB 内部命名遵守 Rust 风格。
+- DB row 可以包含数据库实现细节；domain model 不能被数据库字段形状绑死。
+- API DTO 的 breaking change 必须走 OpenAPI contract 变更流程。
+
+### 错误、配置与观测
+
+`crates/api` 必须提供统一错误模型：
+
+- Rust 侧使用 `AppError` 或等价类型集中表达 `Unauthorized`、`Forbidden`、`NotFound`、`Validation`、`Conflict`、`Database`、`ExternalService`、`Internal` 等错误。
+- HTTP 响应统一映射为 `ErrorResponse`，字段为 `code`、`message`、`requestId`、`details`。
+- `code` 是前端和日志依赖的稳定错误码，使用小写 `snake_case`，例如 `unauthorized`、`forbidden`、`post_not_found`、`invalid_moderation_transition`。
+- `message` 是面向用户或开发者的可读信息，不能作为前端分支判断依据。
+- 内部错误、数据库错误和外部服务错误默认脱敏，不能把 SQL、secret、token、cookie、校园身份原始信息或完整敏感请求体返回给前端。
+
+配置必须集中读取：
+
+- `crates/api/src/config.rs` 定义 `AppConfig`，集中读取环境变量和 `.env`。
+- 业务代码不得到处调用 `std::env::var`。
+- 初始化阶段至少支持 `SERVER_HOST`、`SERVER_PORT`、`DATABASE_URL`、`CORS_ALLOWED_ORIGINS`、`RUST_LOG`、`REQUEST_BODY_LIMIT_BYTES`。
+- 后续接入 Redis、session、对象存储、邮件、AI 服务或校园 SSO 时，只扩展 config 和 adapter，不在 handler 中硬编码。
+- 仓库提供 `.env.example`，不提交真实 `.env`、secret、token 或学校侧回调密钥。
+
+观测必须从 M0 开始：
+
+- 使用 `tracing` 和 `tower-http` 记录结构化请求日志。
+- 每个请求都有 `requestId`，优先透传 `X-Request-Id`，不存在时由后端生成。
+- 日志至少包含 `requestId`、method、path、status、latency、error code；已登录后可记录脱敏 user id。
+- 不记录密码、token、cookie、完整校园身份号、完整敏感请求体或私密文件内容。
+- `/healthz` 表示进程存活，不依赖数据库。
+- `/readyz` 表示服务可接流量，至少检查 PostgreSQL 连接；后续接 Redis 等依赖时纳入 ready check。
+
+### 安全与部署边界
+
+API Server 必须按长期运行服务维护：
+
+- CORS 使用 allowlist，生产环境禁止 `Access-Control-Allow-Origin: *` 搭配 cookie/session。
+- 使用 cookie session 时必须设计 CSRF 防护；使用 bearer token 时必须记录吊销和续期策略。
+- 请求体大小必须有限制，避免无界 payload。
+- SQL 查询通过 SQLx 参数绑定，不手写字符串拼接用户输入。
+- 权限校验集中在 policy/service，不能只靠前端隐藏按钮。
+- repository 查询必须包含用户可见性或权限范围条件，避免只按资源 ID 查询造成越权。
+- 未来文件上传必须限制大小、类型、扫描策略和对象存储权限。
+- 后续如支持密码登录，密码只能用 Argon2id 等密码 hash，不保存明文或可逆加密密码。
+
+M0 不部署生产环境，但要提供可部署基础：
+
+- `Dockerfile.api` 构建 Rust API Server。
+- `.dockerignore` 排除 target、node_modules、dist、coverage、`.env` 和临时文件。
+- `docs/deployment.md` 记录本地构建、migration、健康检查、staging/production 发布顺序和回滚原则。
+- CI 至少验证 API Server 可以编译；如 Docker 可用，运行 `docker build -f Dockerfile.api .`。
+
+后台任务不放入 M0 业务实现，但边界要提前明确：AI 归档、上传处理、通知、Webhook 重试、清理任务等长耗时工作不能长期阻塞 HTTP 请求。早期可以用受控 Tokio background task；复杂后再引入 Redis queue 或独立 worker。
 
 初始化阶段先建立这些核心概念：
 
@@ -171,7 +308,8 @@ campus-agora/
 
 API 初始化阶段提供：
 
-- `GET /healthz`：健康检查。
+- `GET /healthz`：liveness 健康检查，只证明进程存活。
+- `GET /readyz`：readiness 健康检查，至少证明 PostgreSQL 可连接。
 - `GET /api/v1/meta`：返回应用名称、版本和核心能力开关。
 
 这些接口用于建立端到端构建和测试闭环，后续再逐步补充资料帖、讨论帖、评论、审核和 AI 归档接口。
@@ -201,11 +339,13 @@ API 初始化阶段提供：
 - 枚举值使用小写 `snake_case`，例如 `pending_review`。
 - 时间字段使用 UTC ISO 8601 字符串，例如 `2026-07-06T02:30:00Z`。
 - ID 字段使用 UUID 字符串。
-- 错误响应统一为 `ErrorResponse`：`code`、`message`、`requestId`、`details`。
+- 错误响应统一为 `ErrorResponse`：`code`、`message`、`requestId`、`details`；前端只能依赖稳定 `code` 分支，不依赖 `message`。
+- 错误码使用小写 `snake_case`，并在 `docs/api-contracts.md` 中维护语义，例如 `unauthorized`、`forbidden`、`validation_failed`、`post_not_found`、`invalid_moderation_transition`。
 - 列表分页统一为 `PaginatedResponse<T>`：`items`、`page`、`pageSize`、`totalItems`、`totalPages`。
 - 写操作成功后返回资源当前状态，不只返回布尔值。
 - 认证失败使用 `401`，权限不足使用 `403`，资源不存在使用 `404`，审核或状态流转冲突使用 `409`。
-- 每个响应都应能通过日志或响应头关联 `requestId`，方便排查前后端对接问题。
+- 每个响应都应能通过 `X-Request-Id` 响应头和 body 中的 `requestId` 关联后端日志，方便排查前后端对接问题。
+- `/healthz` 和 `/readyz` 不放在 `/api/v1` 下；业务 API 必须使用 `/api/v1` 前缀。
 
 接口变更流程：
 
@@ -516,6 +656,11 @@ UI 文案默认使用中文，避免在同一工作流中混用 `Save`、`OK`、
 - `.gitignore` 不能忽略 `.sqlx/`；SQLx 离线元数据属于可审查 contract。
 - 如果某个 crate 暂时只使用运行时 SQL 或 migration 文件，仍要在 CI 运行 `sqlx migrate run`。
 - 历史 migration 一旦进入主分支，不直接修改；新增 schema 变化必须追加 migration。
+- 新增字段要明确 nullable、默认值、回填和兼容策略；删除字段要分阶段完成，先停止读写，再迁移数据，最后删除。
+- 索引必须跟随实际查询模式设计，尤其是 `owner_id`、`organization_id`、`post_kind`、`moderation_status`、`created_at`、`updated_at`、标签和全文检索字段。
+- 需要一致性的写操作必须在 repository 或 service 层显式使用事务，例如发布资料版本时同时写 `posts`、`post_revisions` 和审计事件。
+- repository 查询不能只按资源 ID 查询私有资源；必须同时带上可见性、组织范围、作者、维护者或审核范围条件，避免越权访问。
+- DB row 类型不能直接作为 API response 返回。
 
 初始 migration 可以创建可演进的基础表：
 
@@ -543,17 +688,24 @@ UI 文案默认使用中文，避免在同一工作流中混用 `Save`、`OK`、
 - `bun run typecheck`
 - `bun run lint:styles`
 - `cargo fmt --all --check`
+- `cargo check --workspace --all-targets`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo test --workspace`
 - `cargo sqlx migrate run --source crates/db/migrations`
 - `cargo sqlx prepare --workspace --check`
+- `cargo run -p campus_agora_api --bin export-openapi -- contracts/openapi.json`
 
-CI 在 GitHub Actions 中拆为前端、后端、桌面和 contract job：
+部署镜像检查命令：
+
+- `docker build -f Dockerfile.api .`
+
+CI 在 GitHub Actions 中拆为前端、后端、桌面、contract 和 container job：
 
 - 前端 job：安装 Bun，使用 `bun install --frozen-lockfile` 安装依赖，运行 api:types、typecheck、lint、lint:styles、test、build。
-- 后端 job：安装固定 Rust toolchain，启动 PostgreSQL 16 服务，运行 fmt、clippy、test、migration smoke test、SQLx prepare check，并导出 OpenAPI contract。
+- 后端 job：安装固定 Rust toolchain，启动 PostgreSQL 16 服务，运行 fmt、check、clippy、test、migration smoke test、SQLx prepare check，并导出 OpenAPI contract。
 - Desktop job：对 `apps/desktop/src-tauri` 运行 `cargo check`，并检查 Tauri 权限配置。
 - Contract job：确认 `contracts/openapi.json` 与 `packages/api-client/src/generated.ts` 没有未提交的生成差异。
+- Container job：如果 CI runner 支持 Docker，运行 `docker build -f Dockerfile.api .`，验证 API Server 可构建为部署镜像。
 
 工具链固定：
 
@@ -583,8 +735,10 @@ Bun workspace 要求：
 - `docs/lfs.md`：说明 Git LFS 的启用、检查和禁止滥用规则。
 - `docs/api-contracts.md`：说明前后端接口 contract 的维护方式。
 - `docs/auth-permissions.md`：说明认证 provider、角色、权限策略、匿名语义和审计要求。
+- `docs/backend.md`：说明 Rust API Server 分层、DTO/domain/db model 边界、错误格式、配置、观测、安全和测试规范。
 - `docs/desktop.md`：说明 Tauri WebView、command bridge、权限配置和桌面端开发命令。
 - `docs/development.md`：说明前端组件系统、视觉 token、图标规范、Style Guide 页面、UI 文案约定、开发命令和质量门禁。
+- `docs/deployment.md`：说明 API Server Docker 构建、migration、健康检查、staging/production 发布顺序和回滚原则。
 - `docs/milestones.md`：说明项目推进阶段、交付物和退出条件。
 
 ## Git Ignore 与 LFS 策略
@@ -624,8 +778,12 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 
 - Rust domain 单元测试验证帖子草稿校验和状态枚举。
 - Rust domain 单元测试验证权限策略，例如作者编辑、维护者更新、审核者改状态、普通用户被拒绝。
-- Rust API 测试验证健康检查和 meta 接口。
+- Rust service 测试验证业务流程编排，例如资料草稿创建、发布前校验、版本更新和审核状态流转。
+- Rust repository 测试在 PostgreSQL 上验证关键查询、事务、唯一约束、外键约束和可见性条件。
+- Rust API integration 测试验证真实 HTTP 接口，包括 `/healthz`、`/readyz`、`/api/v1/meta`、统一错误格式和 `X-Request-Id`。
+- Rust auth/permission 测试验证未登录返回 `401`、越权访问返回 `403` 或不可见资源返回 `404`、状态冲突返回 `409`。
 - Rust contract 测试验证 OpenAPI 导出包含初始化接口和响应 schema。
+- Rust config 测试验证缺失必需环境变量会得到明确错误，测试环境不会读取生产 secret。
 - 前端组件测试验证 `AppShell`、`Topbar`、`Sidebar` 和至少两个 `components/ui` primitive 能渲染核心状态。
 - 前端 Style Guide 页面测试验证 `/design-system` 能渲染颜色、字体、按钮、输入框、卡片、空状态、加载状态和错误状态展示区。
 - 前端 lint 测试或 Stylelint 配置验证页面样式不能使用裸颜色、散乱 px 值和重复基础控件样式。
@@ -640,13 +798,14 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 协作默认流程：
 
 1. 新功能先补领域模型或 API 契约测试。
-2. 后端变更必须跑 fmt、clippy、test。
+2. 后端变更必须跑 fmt、check、clippy、test；涉及数据库时必须跑 migration smoke test；涉及部署镜像时必须跑 `docker build -f Dockerfile.api .`。
 3. 前端变更必须跑 typecheck、lint、lint:styles、test、build。
 4. API 变更必须更新 OpenAPI contract、生成前端类型，并说明兼容性影响。
 5. 权限相关变更必须更新 `docs/auth-permissions.md`，并补充后端 policy 测试。
 6. 数据库结构变更必须新增 migration，不直接改历史 migration。
-7. 由 agent 推进的非平凡任务必须更新 AI LOG：开始或发现任务时写入 `docs/ai-log/todo.md`，完成后写入 `docs/ai-log/done.md`。
-8. 涉及内容治理、隐私、匿名和 AI 输出的变更必须在 PR 描述中说明风险边界。
+7. 后端配置、CORS、secret、日志字段、部署流程或健康检查变化必须更新 `docs/backend.md` 或 `docs/deployment.md`。
+8. 由 agent 推进的非平凡任务必须更新 AI LOG：开始或发现任务时写入 `docs/ai-log/todo.md`，完成后写入 `docs/ai-log/done.md`。
+9. 涉及内容治理、隐私、匿名和 AI 输出的变更必须在 PR 描述中说明风险边界。
 
 ## AI LOG 策略
 
@@ -687,7 +846,7 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 
 初始里程碑：
 
-- `M0 Repository Foundation`：完成 monorepo、Bun 前端、前端视觉系统、基础组件系统、`/design-system` Style Guide 页面、Tauri WebView 壳、TypeScript API client、Rust workspace、OpenAPI contract、CI、ESLint、Stylelint、测试、`.gitignore`、`.gitattributes`、AI LOG、LFS 文档、权限文档和协作规范。退出条件是新成员能按 README 跑通前端、桌面壳、后端、测试、样式检查和生成命令。
+- `M0 Repository Foundation`：完成 monorepo、Bun 前端、前端视觉系统、基础组件系统、`/design-system` Style Guide 页面、Tauri WebView 壳、TypeScript API client、Rust API Server 分层、OpenAPI contract、统一错误模型、集中配置、tracing/requestId、`/healthz`、`/readyz`、Dockerfile.api、部署文档、CI、ESLint、Stylelint、测试、`.gitignore`、`.gitattributes`、AI LOG、LFS 文档、后端规范文档、权限文档和协作规范。退出条件是新成员能按 README 跑通前端、桌面壳、后端、测试、样式检查、API contract 生成命令和 API Server 镜像构建检查。
 - `M1 Identity, Permissions And Shell`：完成认证 provider 抽象、模拟校园认证、用户模型、系统角色、资源角色、应用导航、登录态和基础权限边界。退出条件是前端能基于后端 API 完成登录态展示，后端有认证和权限策略测试。
 - `M2 Knowledge Archive Core`：完成资料帖发布、编辑、标签、版本历史、纠错入口和基础列表。退出条件是一篇资料能从创建到更新再到版本追踪完整闭环。
 - `M3 Discussion To Archive Loop`：完成讨论帖、评论、精华回复和从讨论沉淀到资料的工作流。退出条件是高质量评论能被引用或整理进资料帖。
