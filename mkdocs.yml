@@ -1,5 +1,5 @@
 site_name: Campus Agora
-site_description: Campus Agora engineering and collaboration documentation
+site_description: Campus Agora 工程与协作文档
 docs_dir: docs
 site_dir: site
 strict: true
@@ -8,25 +8,37 @@ exclude_docs: |
   superpowers/plans/**
 
 nav:
-  - Home: index.md
-  - Product:
-      - Overview: product/overview.md
-      - Privacy: product/privacy.md
-      - Milestones: product/milestones.md
-  - Architecture:
-      - Overview: architecture/overview.md
-      - API Contracts: architecture/api-contracts.md
-      - Auth And Permissions: architecture/auth-permissions.md
-      - Backend: architecture/backend.md
-      - Desktop: architecture/desktop.md
-  - Engineering:
-      - Development: engineering/development.md
-      - Quality Gates: engineering/quality.md
+  - 首页: index.md
+  - 产品:
+      - 概览: product/overview.md
+      - 隐私: product/privacy.md
+      - 里程碑: product/milestones.md
+  - 架构:
+      - 概览: architecture/overview.md
+      - API 契约: architecture/api-contracts.md
+      - 认证与权限: architecture/auth-permissions.md
+      - 后端: architecture/backend.md
+      - 桌面端: architecture/desktop.md
+  - 工程:
+      - 开发: engineering/development.md
+      - 质量门禁: engineering/quality.md
       - Git LFS: engineering/lfs.md
-  - Operations:
-      - Overview: operations/overview.md
-      - Deployment: operations/deployment.md
-      - Security: operations/security.md
+  - 约束:
+      - 阅读地图: constraints/index.md
+      - 产品定位: constraints/product-positioning-reference.md
+      - 内容边界: constraints/content-boundary-reference.md
+      - 资料社区: constraints/archive-community-reference.md
+      - 前端: constraints/frontend-reference.md
+      - 后端: constraints/backend-reference.md
+      - API 契约: constraints/api-contract-reference.md
+      - Monorepo: constraints/monorepo-reference.md
+      - 运维风险: constraints/operations-risk-reference.md
+      - 产品治理: constraints/product-governance-reference.md
+      - 高级工程: constraints/advanced-engineering-reference.md
+  - 运维:
+      - 概览: operations/overview.md
+      - 部署: operations/deployment.md
+      - 安全: operations/security.md
   - AI Log:
       - Todo: ai-log/todo.md
       - Done: ai-log/done.md

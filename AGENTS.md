@@ -18,6 +18,11 @@ Current implementation scope:
 
 - Read the relevant local context before editing: this file, the active spec,
   related docs, package scripts, and nearby source files.
+- Before changing a product, frontend, backend, API, operations, desktop, or
+  monorepo boundary, read `docs/constraints/index.md` and the area-specific
+  constraint reference listed there.
+- If a constraint reference becomes an accepted project rule, promote it into
+  the matching formal doc or milestone in the same change.
 - Keep changes scoped to the active task and milestone. Do not expand runtime
   behavior, dependencies, or documentation structure unless the task requires it.
 - Prefer existing workspace conventions over new abstractions.
@@ -61,6 +66,11 @@ unredacted logs into AI LOG files.
 
 ## Local Reference Files
 
-Do not commit local reference files such as `ref*.md`, `temp*.md`, `api.md`,
-`backend.md`, `frontend.md`, or `monorepo.md` unless the user explicitly
-requests it.
+Durable reference notes belong under `docs/constraints/`, not in the repository
+root. Do not create new root-level scratch files such as `ref*.md`, `temp*.md`,
+`api.md`, `backend.md`, `frontend.md`, or `monorepo.md` unless the user
+explicitly requests a short-lived local note.
+
+When a root-level reference note is useful for collaboration, rename it into
+`docs/constraints/`, add it to `docs/constraints/index.md`, and update MkDocs
+navigation if it should be published.

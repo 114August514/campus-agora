@@ -17,6 +17,30 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-06 - 清理约束参考文档语气
+
+- Result: 将约束参考、里程碑和 MkDocs 入口调整为中文项目参考语气，移除回答式措辞。
+- Changed: `docs/constraints/*`, `docs/product/milestones.md`, `docs/index.md`, `mkdocs.yml`。
+- Verification: `env UV_CACHE_DIR=/tmp/campus-agora-uv-cache bun run ci:docs`、`git diff --check` 和措辞扫描。
+- Decisions: 保留参考文档与正式文档的分层；约束参考继续作为细节清单，已接受要求仍需提升到正式文档或里程碑。
+- Follow-up: 后续补充 `docs/constraints/` 时继续使用项目参考语气，避免复制聊天回答格式。
+
+### 2026-07-06 - Promote reference notes into docs constraints
+
+- Result: Moved root-level local reference notes into publishable
+  `docs/constraints/` files and expanded milestone tracking.
+- Changed: Added constraint reference docs and reading map, updated MkDocs nav,
+  expanded `docs/product/milestones.md`, updated `AGENTS.md` collaboration
+  rules, and linked constraints from the docs index.
+- Verification: `env UV_CACHE_DIR=/tmp/campus-agora-uv-cache bun run
+  ci:docs`, `git diff --check`, and old project-name scan over AGENTS.md,
+  docs, and MkDocs config.
+- Decisions: Kept constraint references separate from formal architecture and
+  product docs. Accepted rules should be promoted into formal docs and
+  milestones when implemented.
+- Follow-up: Keep future durable reference notes under `docs/constraints/`
+  instead of the repository root.
+
 ### 2026-07-06 - Resolve M0 review findings after PR #2 merge
 
 - Result: Addressed the post-rebase M0/M0.1/M0.2 review findings on PR #3.
