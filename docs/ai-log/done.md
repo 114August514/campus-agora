@@ -17,6 +17,14 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-06 - 明确工具目录和文档时效规则
+
+- Result: 新增 `tools/README.md`，并在 `AGENTS.md` 中明确长期文档的更新时间规则。
+- Changed: `tools/README.md`, `AGENTS.md`, `docs/ai-log/done.md`。
+- Verification: `env UV_CACHE_DIR=/tmp/campus-agora-uv-cache bun run ci:docs`, `git diff --check` 和工作区状态检查。
+- Decisions: 使用 `README.md` 作为工具目录说明文件；长期文档在实质更新时维护 `Last updated: YYYY-MM-DD`。
+- Follow-up: 后续移动工具配置或更新决策性文档时，同步更新时间并核对代码、脚本和 CI。
+
 ### 2026-07-06 - 收纳根目录工具配置
 
 - Result: 将文档构建配置和 API 镜像 Dockerfile 从根目录移入工具目录，减少根目录配置文件数量。

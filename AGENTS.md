@@ -1,5 +1,7 @@
 # Agent Notes
 
+Last updated: 2026-07-06
+
 This file is the project-level instruction sheet for AI agents and human
 collaborators. Follow it before making changes.
 
@@ -63,6 +65,25 @@ For non-trivial agent work:
 Do not log every terminal command. Do not write secrets, tokens, credentials,
 real student identity data, private callback URLs, database dumps, or raw
 unredacted logs into AI LOG files.
+
+## Documentation Freshness
+
+Docs can become stale and affect implementation judgment. Treat code, scripts,
+contracts, lockfiles, and current CI as the freshest source for executable
+behavior.
+
+For durable docs that guide decisions, add or update a `Last updated:
+YYYY-MM-DD` line near the top when creating the file or making a material
+change. This applies to formal docs under `docs/`, reference docs under
+`docs/constraints/`, tool docs such as `tools/README.md`, and this file.
+
+Do not change the date for typo-only edits. If an existing doc has no freshness
+line and the task depends on it, verify the claim against local source files
+before relying on it, then add the freshness line if the doc is updated.
+
+When a documented command, path, config location, API contract, milestone, or
+security boundary changes, update the relevant doc in the same PR and record the
+verification command in AI LOG when the work is non-trivial.
 
 ## Local Reference Files
 
