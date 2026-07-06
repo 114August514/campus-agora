@@ -11,6 +11,7 @@
 本次初始化要建立一个可协作、可测试、可持续扩展的工程框架：
 
 - 前端使用 TypeScript 生态，保证 UI 迭代速度和类型约束。
+- 前端依赖、脚本和锁文件使用 Bun 管理，减少 Node 工具链分歧。
 - 后端使用 Rust 生态，保证领域模型、状态流转、权限和数据边界更严格。
 - CI 同时覆盖前端和后端的格式、lint、测试与构建。
 - 文档明确项目定位、开发命令、质量门禁和协作方式。
@@ -74,8 +75,8 @@ campus-agora/
   AGENTS.md
   CONTRIBUTING.md
   Cargo.toml
+  bun.lock
   package.json
-  pnpm-workspace.yaml
   README.md
 ```
 
@@ -143,24 +144,49 @@ API 初始化阶段提供：
 
 根目录提供统一命令：
 
-- `pnpm lint`
-- `pnpm test`
-- `pnpm build`
+- `bun run lint`
+- `bun run test`
+- `bun run build`
 - `cargo fmt --all --check`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo test --workspace`
 
 CI 在 GitHub Actions 中拆为前端和后端两个 job：
 
-- 前端 job：安装 pnpm 依赖，运行 typecheck、lint、test、build。
+- 前端 job：安装 Bun，使用 `bun install --frozen-lockfile` 安装依赖，运行 typecheck、lint、test、build。
 - 后端 job：安装 Rust stable，运行 fmt、clippy、test。
 
 本地协作文件：
 
 - `.editorconfig`：统一换行、缩进和末尾换行。
-- `.gitignore`：忽略构建产物、依赖目录、环境文件和 SQLx 本地缓存。
+- `.gitignore`：忽略构建产物、依赖目录、环境文件、覆盖率输出、临时目录和 SQLx 本地缓存。
+- `.gitattributes`：声明 Git LFS 跟踪范围，只跟踪确实不适合进入普通 Git 历史的大型二进制资源。
 - `CONTRIBUTING.md`：说明分支、提交、测试和 PR 前检查。
 - `AGENTS.md`：说明后续 agent 或协作者在本仓库里的工作规范。
+- `docs/lfs.md`：说明 Git LFS 的启用、检查和禁止滥用规则。
+
+## Git Ignore 与 LFS 策略
+
+初始化阶段要同时提供可执行的 `.gitignore` 和 `.gitattributes`，而不是只写说明文档。
+
+`.gitignore` 应覆盖：
+
+- Rust 构建产物：`target/`。
+- 前端依赖和构建产物：`node_modules/`、`apps/web/dist/`。
+- Bun 本地缓存或调试输出。
+- 测试覆盖率：`coverage/`、`apps/web/coverage/`。
+- 环境变量：`.env`、`.env.*`，但保留 `.env.example`。
+- SQLx 本地缓存：`.sqlx/`。
+- 编辑器、系统文件和临时目录。
+
+Git LFS 只用于大型二进制资产，初始 `.gitattributes` 建议覆盖：
+
+- 设计源文件：`*.psd`、`*.ai`、`*.fig`。
+- 大型图片：`*.png`、`*.jpg`、`*.jpeg`、`*.webp`、`*.avif`。
+- 音视频和字体：`*.mp4`、`*.mov`、`*.webm`、`*.ttf`、`*.otf`、`*.woff`、`*.woff2`。
+- 压缩包和模型文件：`*.zip`、`*.tar.gz`、`*.onnx`、`*.safetensors`。
+
+禁止默认把源码、Markdown、SQL migration、JSON、SVG、lockfile 和小型配置文件放进 LFS。SVG 默认作为可审查文本资源进入普通 Git，除非后续明确存在大型生成 SVG 资产。
 
 ## 测试策略
 
