@@ -17,6 +17,22 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-06 - Implement M0.2 governance docs and boundaries
+
+- Result: Added formal M0.2 documentation for product scope, privacy,
+  milestones, architecture, backend, auth/permissions, desktop, LFS, quality,
+  operations, security, and deployment boundaries.
+- Changed: `docs/product/*`, `docs/architecture/{overview,backend,auth-permissions,desktop}.md`,
+  `docs/engineering/lfs.md`, expanded development/quality/deployment docs,
+  updated `docs/index.md`, `mkdocs.yml`, README, AI LOG, and the M0.2 plan.
+- Verification: `bun run ci:docs`, `test ! -d site/superpowers/specs`,
+  `test ! -d site/superpowers/plans`, `git diff --check`, and placeholder
+  scan over formal docs.
+- Decisions: Kept M0.2 documentation-only; no runtime behavior, dependencies,
+  APIs, database schema, or CI topology changed.
+- Follow-up: After M0.1 merges, publish M0.2 as a follow-up PR or rebase this
+  stacked branch onto `main`.
+
 ### 2026-07-06 - Rename automation folder to scripts
 
 - Result: Renamed the repository automation directory to `scripts/`.

@@ -9,13 +9,24 @@ exclude_docs: |
 
 nav:
   - Home: index.md
+  - Product:
+      - Overview: product/overview.md
+      - Privacy: product/privacy.md
+      - Milestones: product/milestones.md
   - Architecture:
+      - Overview: architecture/overview.md
       - API Contracts: architecture/api-contracts.md
+      - Auth And Permissions: architecture/auth-permissions.md
+      - Backend: architecture/backend.md
+      - Desktop: architecture/desktop.md
   - Engineering:
       - Development: engineering/development.md
       - Quality Gates: engineering/quality.md
+      - Git LFS: engineering/lfs.md
   - Operations:
+      - Overview: operations/overview.md
       - Deployment: operations/deployment.md
+      - Security: operations/security.md
   - AI Log:
       - Todo: ai-log/todo.md
       - Done: ai-log/done.md
