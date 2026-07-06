@@ -56,6 +56,14 @@ campus-agora/
       package.json
       vite.config.ts
       tsconfig.json
+  packages/
+    web-client/
+      src/
+        client.ts
+        generated.ts
+        index.ts
+      package.json
+      tsconfig.json
   contracts/
     openapi.json
   crates/
@@ -93,6 +101,7 @@ campus-agora/
 各部分职责：
 
 - `apps/web`：浏览器端应用壳、页面路由、API 客户端和前端测试。
+- `packages/web-client`：浏览器可用的 TypeScript API client，由 OpenAPI contract 生成类型并封装请求。
 - `contracts`：前后端共享 API contract，初始使用 OpenAPI JSON。
 - `crates/domain`：领域类型、状态枚举、输入校验和无需数据库的业务规则。
 - `crates/db`：数据库连接、migration、repository 边界和 SQLx 类型。
@@ -133,8 +142,9 @@ API 初始化阶段提供：
 
 - `contracts/openapi.json`：提交到仓库的 API contract 快照。
 - `crates/api`：使用 Rust DTO 和路由注解导出 OpenAPI；后端是 contract 的生成来源。
-- `apps/web/src/api/generated.ts`：由 `contracts/openapi.json` 生成的 TypeScript 类型。
-- `apps/web/src/api/client.ts`：基于生成类型封装前端请求函数，页面组件不直接拼接裸 `fetch`。
+- `packages/web-client/src/generated.ts`：由 `contracts/openapi.json` 生成的 TypeScript 类型。
+- `packages/web-client/src/client.ts`：基于生成类型封装浏览器端请求函数，页面组件不直接拼接裸 `fetch`。
+- `apps/web`：只从 `@campus-agora/web-client` 调用 API，不直接依赖 generated types。
 - `docs/api-contracts.md`：说明接口变更流程、生成命令和 breaking change 规则。
 
 推荐工具链：
@@ -159,17 +169,40 @@ API 初始化阶段提供：
 
 1. 后端先更新 DTO、路由和 API 测试。
 2. 重新导出 `contracts/openapi.json`。
-3. 重新生成 `apps/web/src/api/generated.ts`。
-4. 更新前端 API client 和组件调用。
+3. 重新生成 `packages/web-client/src/generated.ts`。
+4. 更新 `packages/web-client/src/client.ts` 和 `apps/web` 组件调用。
 5. CI 检查 contract、生成类型、后端测试和前端 typecheck 是否一致。
 
 初始 CI 要包含 API contract 检查：
 
 - `cargo run -p campus_agora_api --bin export-openapi -- contracts/openapi.json` 生成 contract。
 - `bun run api:types` 根据 contract 生成前端类型。
-- `git diff --exit-code contracts/openapi.json apps/web/src/api/generated.ts` 确认生成产物已提交。
+- `git diff --exit-code contracts/openapi.json packages/web-client/src/generated.ts` 确认生成产物已提交。
 
 破坏性接口变更必须在 PR 描述中说明影响范围。对已被前端使用的字段，优先新增字段或新增版本化 endpoint；只有初始化阶段未发布接口可以直接重命名或删除。
+
+## TypeScript Web Client
+
+初始化阶段要提供独立的 `packages/web-client`，作为浏览器端访问后端 API 的唯一正式入口。
+
+职责：
+
+- 从 `contracts/openapi.json` 生成 TypeScript 类型。
+- 暴露 `createCampusAgoraClient(options)`，接收 `baseUrl`、可选 `fetch` 实现、认证 token/cookie 策略和请求追踪配置。
+- 统一处理 `ErrorResponse`、HTTP 状态码、JSON 解析、请求取消和 `requestId`。
+- 导出业务友好的方法，例如 `getMeta()`、`getHealth()`，而不是让页面层直接拼 path。
+- 保持 browser-safe，不依赖 Node-only API。
+
+边界：
+
+- `packages/web-client` 不持有 React 状态，不依赖 React。
+- `apps/web` 可以在组件、hooks 或 data loaders 中调用 web client，但不能绕过它直接调用 API endpoint。
+- 未来如果增加 admin web、mobile web 或文档演示页，默认复用同一个 web client。
+
+测试：
+
+- web client 单元测试要覆盖成功响应、`ErrorResponse`、网络失败、401、403、404、409 和 requestId 透传。
+- API contract 变更必须先更新 generated types，再调整 web client 方法。
 
 ## 认证与权限边界
 
@@ -245,13 +278,13 @@ API 初始化阶段提供：
 
 - 顶部导航包含资料库、讨论、归档助手、审核入口等一级入口占位。
 - 主区域展示资料沉淀优先的搜索入口、最近更新资料和待整理讨论占位。
-- 通过 API 客户端请求 `/api/v1/meta`，并展示后端状态或错误状态。
+- 通过 `@campus-agora/web-client` 请求 `/api/v1/meta`，并展示后端状态或错误状态。
 
 前端不会在初始化阶段实现完整业务交互，但要建立：
 
 - TypeScript 严格模式。
 - React 组件和测试样例。
-- 由 OpenAPI 生成类型约束的 API 客户端封装。
+- 由 OpenAPI 生成类型约束的 web client package。
 - 基础样式和响应式布局。
 
 ## 数据库策略
@@ -301,7 +334,7 @@ CI 在 GitHub Actions 中拆为前端和后端两个 job：
 
 - 前端 job：安装 Bun，使用 `bun install --frozen-lockfile` 安装依赖，运行 api:types、typecheck、lint、test、build。
 - 后端 job：安装固定 Rust toolchain，启动 PostgreSQL 16 服务，运行 fmt、clippy、test、migration smoke test、SQLx prepare check，并导出 OpenAPI contract。
-- Contract job：确认 `contracts/openapi.json` 与 `apps/web/src/api/generated.ts` 没有未提交的生成差异。
+- Contract job：确认 `contracts/openapi.json` 与 `packages/web-client/src/generated.ts` 没有未提交的生成差异。
 
 工具链固定：
 
@@ -313,10 +346,11 @@ CI 在 GitHub Actions 中拆为前端和后端两个 job：
 
 Bun workspace 要求：
 
-- 根 `package.json` 声明 `workspaces: ["apps/*"]`。
+- 根 `package.json` 声明 `workspaces: ["apps/*", "packages/*"]`。
 - 根脚本提供统一入口：`dev`、`build`、`test`、`lint`、`typecheck`、`api:types`、`api:check`。
-- 根脚本通过 `bun --filter` 或显式 `--cwd apps/web` 调用前端子项目，避免协作者需要记住子目录命令。
-- `apps/web/package.json` 只保留前端局部脚本和依赖，跨项目质量门禁从根目录执行。
+- 根脚本通过 `bun --filter` 或显式 `--cwd` 调用 `apps/web` 与 `packages/web-client`，避免协作者需要记住子目录命令。
+- `apps/web` 通过 workspace dependency 引用 `@campus-agora/web-client`，不通过相对路径穿透包边界。
+- `apps/web/package.json` 只保留应用局部脚本和依赖；`packages/web-client/package.json` 只保留客户端局部脚本和依赖；跨项目质量门禁从根目录执行。
 
 本地协作文件：
 
@@ -372,8 +406,8 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 - Rust API 测试验证健康检查和 meta 接口。
 - Rust contract 测试验证 OpenAPI 导出包含初始化接口和响应 schema。
 - 前端组件测试验证应用壳能渲染核心入口。
-- 前端 API 客户端测试验证成功和失败响应处理。
-- 前端类型生成检查验证 API client 没有偏离 `contracts/openapi.json`。
+- `packages/web-client` 测试验证成功响应、失败响应、错误归一化和 requestId 透传。
+- 前端类型生成检查验证 `packages/web-client` 没有偏离 `contracts/openapi.json`。
 
 不在初始化阶段引入端到端浏览器测试。等真实发布、搜索和审核流程出现后再加入 Playwright。
 
@@ -429,7 +463,7 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 
 初始里程碑：
 
-- `M0 Repository Foundation`：完成 monorepo、Bun 前端、Rust workspace、OpenAPI contract、CI、lint、测试、`.gitignore`、`.gitattributes`、AI LOG、LFS 文档、权限文档和协作规范。退出条件是新成员能按 README 跑通前端、后端、测试和生成命令。
+- `M0 Repository Foundation`：完成 monorepo、Bun 前端、TypeScript web client、Rust workspace、OpenAPI contract、CI、lint、测试、`.gitignore`、`.gitattributes`、AI LOG、LFS 文档、权限文档和协作规范。退出条件是新成员能按 README 跑通前端、后端、测试和生成命令。
 - `M1 Identity, Permissions And Shell`：完成认证 provider 抽象、模拟校园认证、用户模型、系统角色、资源角色、应用导航、登录态和基础权限边界。退出条件是前端能基于后端 API 完成登录态展示，后端有认证和权限策略测试。
 - `M2 Knowledge Archive Core`：完成资料帖发布、编辑、标签、版本历史、纠错入口和基础列表。退出条件是一篇资料能从创建到更新再到版本追踪完整闭环。
 - `M3 Discussion To Archive Loop`：完成讨论帖、评论、精华回复和从讨论沉淀到资料的工作流。退出条件是高质量评论能被引用或整理进资料帖。
