@@ -1,6 +1,6 @@
 # Campus Agora
 
-Campus Agora is a campus discussion and knowledge archive platform. This repository is currently in the M0.1 Contract And Quality Gates stage.
+Campus Agora is a campus discussion and knowledge archive platform. This repository is currently in the M0.2 Governance Docs And Boundaries stage.
 
 ## Requirements
 
@@ -43,7 +43,7 @@ Service and release checks:
 ```bash
 cargo sqlx migrate run --source crates/db/migrations
 bun run docs:build
-docker build -f Dockerfile.api .
+bun run docker:api
 ```
 
 Shared automation lives in `scripts/`. The CI workflow calls the same scripts so

@@ -1,0 +1,44 @@
+site_name: Campus Agora
+site_description: Campus Agora 工程与协作文档
+docs_dir: ../../docs
+site_dir: ../../site
+strict: true
+exclude_docs: |
+  superpowers/specs/**
+  superpowers/plans/**
+
+nav:
+  - 首页: index.md
+  - 产品:
+      - 概览: product/overview.md
+      - 隐私: product/privacy.md
+      - 里程碑: product/milestones.md
+  - 架构:
+      - 概览: architecture/overview.md
+      - API 契约: architecture/api-contracts.md
+      - 认证与权限: architecture/auth-permissions.md
+      - 后端: architecture/backend.md
+      - 桌面端: architecture/desktop.md
+  - 工程:
+      - 开发: engineering/development.md
+      - 质量门禁: engineering/quality.md
+      - Git LFS: engineering/lfs.md
+  - 约束:
+      - 阅读地图: constraints/index.md
+      - 产品定位: constraints/product-positioning-reference.md
+      - 内容边界: constraints/content-boundary-reference.md
+      - 资料社区: constraints/archive-community-reference.md
+      - 前端: constraints/frontend-reference.md
+      - 后端: constraints/backend-reference.md
+      - API 契约: constraints/api-contract-reference.md
+      - Monorepo: constraints/monorepo-reference.md
+      - 运维风险: constraints/operations-risk-reference.md
+      - 产品治理: constraints/product-governance-reference.md
+      - 高级工程: constraints/advanced-engineering-reference.md
+  - 运维:
+      - 概览: operations/overview.md
+      - 部署: operations/deployment.md
+      - 安全: operations/security.md
+  - AI Log:
+      - Todo: ai-log/todo.md
+      - Done: ai-log/done.md

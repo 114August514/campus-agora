@@ -1,11 +1,15 @@
 {
   "components": {
     "schemas": {
-      "ApiErrorBody": {
+      "ApiErrorResponse": {
         "properties": {
           "code": {
             "description": "Stable snake_case application error code.",
             "type": "string"
+          },
+          "details": {
+            "description": "Optional structured error details.",
+            "type": "object"
           },
           "message": {
             "type": "string"
@@ -16,18 +20,8 @@
         },
         "required": [
           "code",
-          "message"
-        ],
-        "type": "object"
-      },
-      "ApiErrorResponse": {
-        "properties": {
-          "error": {
-            "$ref": "#/components/schemas/ApiErrorBody"
-          }
-        },
-        "required": [
-          "error"
+          "message",
+          "requestId"
         ],
         "type": "object"
       },

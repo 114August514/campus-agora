@@ -17,6 +17,83 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-06 - 明确工具目录和文档时效规则
+
+- Result: 新增 `tools/README.md`，并在 `AGENTS.md` 中明确长期文档的更新时间规则。
+- Changed: `tools/README.md`, `AGENTS.md`, `docs/ai-log/done.md`。
+- Verification: `env UV_CACHE_DIR=/tmp/campus-agora-uv-cache bun run ci:docs`, `git diff --check` 和工作区状态检查。
+- Decisions: 使用 `README.md` 作为工具目录说明文件；长期文档在实质更新时维护 `Last updated: YYYY-MM-DD`。
+- Follow-up: 后续移动工具配置或更新决策性文档时，同步更新时间并核对代码、脚本和 CI。
+
+### 2026-07-06 - 收纳根目录工具配置
+
+- Result: 将文档构建配置和 API 镜像 Dockerfile 从根目录移入工具目录，减少根目录配置文件数量。
+- Changed: `tools/docs/*`, `docker/api/Dockerfile`, root scripts, README, engineering and deployment docs, active spec。
+- Verification: `env UV_CACHE_DIR=/tmp/campus-agora-uv-cache bun run ci:docs`, `docker build --check -f docker/api/Dockerfile .`, `bash -n scripts/ci/docs.sh scripts/ci/container.sh`, `git diff --check` 和旧路径扫描。
+- Decisions: 保留 `package.json`、`Cargo.toml`、lockfiles、Git 与编辑器配置在仓库根目录，保证工具默认发现路径稳定。
+- Follow-up: 若继续收纳配置，优先只移动可显式传参的工具配置；不要破坏 Bun、Cargo、Git、编辑器默认发现路径。
+
+### 2026-07-06 - 清理约束参考文档语气
+
+- Result: 将约束参考、里程碑和 MkDocs 入口调整为中文项目参考语气，移除回答式措辞。
+- Changed: `docs/constraints/*`, `docs/product/milestones.md`, `docs/index.md`, `mkdocs.yml`。
+- Verification: `env UV_CACHE_DIR=/tmp/campus-agora-uv-cache bun run ci:docs`、`git diff --check` 和措辞扫描。
+- Decisions: 保留参考文档与正式文档的分层；约束参考继续作为细节清单，已接受要求仍需提升到正式文档或里程碑。
+- Follow-up: 后续补充 `docs/constraints/` 时继续使用项目参考语气，避免复制聊天回答格式。
+
+### 2026-07-06 - Promote reference notes into docs constraints
+
+- Result: Moved root-level local reference notes into publishable
+  `docs/constraints/` files and expanded milestone tracking.
+- Changed: Added constraint reference docs and reading map, updated MkDocs nav,
+  expanded `docs/product/milestones.md`, updated `AGENTS.md` collaboration
+  rules, and linked constraints from the docs index.
+- Verification: `env UV_CACHE_DIR=/tmp/campus-agora-uv-cache bun run
+  ci:docs`, `git diff --check`, and old project-name scan over AGENTS.md,
+  docs, and MkDocs config.
+- Decisions: Kept constraint references separate from formal architecture and
+  product docs. Accepted rules should be promoted into formal docs and
+  milestones when implemented.
+- Follow-up: Keep future durable reference notes under `docs/constraints/`
+  instead of the repository root.
+
+### 2026-07-06 - Resolve M0 review findings after PR #2 merge
+
+- Result: Addressed the post-rebase M0/M0.1/M0.2 review findings on PR #3.
+- Changed: Flattened API `ErrorResponse`, regenerated OpenAPI and TypeScript
+  contract types, updated API client error normalization, added CORS allowlist
+  and request body limit middleware, expanded API tests, and corrected
+  governance docs for roles and retention.
+- Verification: `bun run api:types`, `cargo test -p campus_agora_api --test
+  health`, `cargo test -p campus_agora_api --test openapi`,
+  `bun --cwd packages/api-client test`, `cargo test -p campus_agora_api`,
+  `cargo check --workspace --all-targets`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, `cargo test --workspace`, `bun run
+  ci:frontend`, `env UV_CACHE_DIR=/tmp/campus-agora-uv-cache bun run
+  ci:docs`, and `git diff --check`.
+- Decisions: Kept the generated contract as the source of TypeScript response
+  types, while the API client still accepts the old nested error shape for
+  compatibility. Runtime CORS and body limit controls were implemented because
+  the canonical spec already listed them in initialization scope.
+- Follow-up: PR CI should still cover Docker/socket-backed checks that this
+  sandbox cannot run directly.
+
+### 2026-07-06 - Implement M0.2 governance docs and boundaries
+
+- Result: Added formal M0.2 documentation for product scope, privacy,
+  milestones, architecture, backend, auth/permissions, desktop, LFS, quality,
+  operations, security, and deployment boundaries.
+- Changed: `docs/product/*`, `docs/architecture/{overview,backend,auth-permissions,desktop}.md`,
+  `docs/engineering/lfs.md`, expanded development/quality/deployment docs,
+  updated `docs/index.md`, `mkdocs.yml`, README, AI LOG, and the M0.2 plan.
+- Verification: `bun run ci:docs`, `test ! -d site/superpowers/specs`,
+  `test ! -d site/superpowers/plans`, `git diff --check`, and placeholder
+  scan over formal docs.
+- Decisions: Kept M0.2 documentation-only; no runtime behavior, dependencies,
+  APIs, database schema, or CI topology changed.
+- Follow-up: After M0.1 merges, publish M0.2 as a follow-up PR or rebase this
+  stacked branch onto `main`.
+
 ### 2026-07-06 - Rename automation folder to scripts
 
 - Result: Renamed the repository automation directory to `scripts/`.

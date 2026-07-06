@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
+cd "$repo_root/tools/docs"
 uv run --locked mkdocs build --strict
-test ! -d site/superpowers/specs
-test ! -d site/superpowers/plans
+test ! -d "$repo_root/site/superpowers/specs"
+test ! -d "$repo_root/site/superpowers/plans"
