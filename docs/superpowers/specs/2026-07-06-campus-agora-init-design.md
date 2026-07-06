@@ -55,6 +55,8 @@ campus-agora/
       package.json
       vite.config.ts
       tsconfig.json
+  contracts/
+    openapi.json
   crates/
     api/
       src/
@@ -67,6 +69,7 @@ campus-agora/
       migrations/
       Cargo.toml
   docs/
+    api-contracts.md
     architecture.md
     development.md
   .github/
@@ -83,6 +86,7 @@ campus-agora/
 各部分职责：
 
 - `apps/web`：浏览器端应用壳、页面路由、API 客户端和前端测试。
+- `contracts`：前后端共享 API contract，初始使用 OpenAPI JSON。
 - `crates/domain`：领域类型、状态枚举、输入校验和无需数据库的业务规则。
 - `crates/db`：数据库连接、migration、repository 边界和 SQLx 类型。
 - `crates/api`：HTTP 入口、路由、中间件、错误响应和依赖注入。
@@ -111,6 +115,40 @@ API 初始化阶段提供：
 
 这些接口用于建立端到端构建和测试闭环，后续再逐步补充资料帖、讨论帖、评论、审核和 AI 归档接口。
 
+## 前后端接口边界
+
+前后端接口必须作为一等工程资产维护，不能依赖手写重复类型或口头约定。
+
+初始化阶段采用 OpenAPI 3.1 作为 contract 格式：
+
+- `contracts/openapi.json`：提交到仓库的 API contract 快照。
+- `crates/api`：使用 Rust DTO 和路由注解导出 OpenAPI；后端是 contract 的生成来源。
+- `apps/web/src/api/generated.ts`：由 `contracts/openapi.json` 生成的 TypeScript 类型。
+- `apps/web/src/api/client.ts`：基于生成类型封装前端请求函数，页面组件不直接拼接裸 `fetch`。
+- `docs/api-contracts.md`：说明接口变更流程、生成命令和 breaking change 规则。
+
+推荐工具链：
+
+- Rust 后端使用 `utoipa` 描述 schema、response 和 route。
+- 前端使用 `openapi-typescript` 生成类型。
+- 前端请求封装使用轻量 fetch wrapper 或 `openapi-fetch`，保持请求和响应类型来自同一份 contract。
+
+接口变更流程：
+
+1. 后端先更新 DTO、路由和 API 测试。
+2. 重新导出 `contracts/openapi.json`。
+3. 重新生成 `apps/web/src/api/generated.ts`。
+4. 更新前端 API client 和组件调用。
+5. CI 检查 contract、生成类型、后端测试和前端 typecheck 是否一致。
+
+初始 CI 要包含 API contract 检查：
+
+- `cargo run -p campus_agora_api --bin export-openapi -- contracts/openapi.json` 生成 contract。
+- `bun run api:types` 根据 contract 生成前端类型。
+- `git diff --exit-code contracts/openapi.json apps/web/src/api/generated.ts` 确认生成产物已提交。
+
+破坏性接口变更必须在 PR 描述中说明影响范围。对已被前端使用的字段，优先新增字段或新增版本化 endpoint；只有初始化阶段未发布接口可以直接重命名或删除。
+
 ## 前端边界
 
 前端初始化为一个真实应用壳，而不是营销页。首屏表达项目的产品工作台方向：
@@ -123,7 +161,7 @@ API 初始化阶段提供：
 
 - TypeScript 严格模式。
 - React 组件和测试样例。
-- API 客户端封装。
+- 由 OpenAPI 生成类型约束的 API 客户端封装。
 - 基础样式和响应式布局。
 
 ## 数据库策略
@@ -147,14 +185,17 @@ API 初始化阶段提供：
 - `bun run lint`
 - `bun run test`
 - `bun run build`
+- `bun run api:types`
+- `bun run api:check`
 - `cargo fmt --all --check`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo test --workspace`
 
 CI 在 GitHub Actions 中拆为前端和后端两个 job：
 
-- 前端 job：安装 Bun，使用 `bun install --frozen-lockfile` 安装依赖，运行 typecheck、lint、test、build。
-- 后端 job：安装 Rust stable，运行 fmt、clippy、test。
+- 前端 job：安装 Bun，使用 `bun install --frozen-lockfile` 安装依赖，运行 api:types、typecheck、lint、test、build。
+- 后端 job：安装 Rust stable，运行 fmt、clippy、test，并导出 OpenAPI contract。
+- Contract job：确认 `contracts/openapi.json` 与 `apps/web/src/api/generated.ts` 没有未提交的生成差异。
 
 本地协作文件：
 
@@ -164,6 +205,7 @@ CI 在 GitHub Actions 中拆为前端和后端两个 job：
 - `CONTRIBUTING.md`：说明分支、提交、测试和 PR 前检查。
 - `AGENTS.md`：说明后续 agent 或协作者在本仓库里的工作规范。
 - `docs/lfs.md`：说明 Git LFS 的启用、检查和禁止滥用规则。
+- `docs/api-contracts.md`：说明前后端接口 contract 的维护方式。
 
 ## Git Ignore 与 LFS 策略
 
@@ -194,8 +236,10 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 建议覆盖：
 
 - Rust domain 单元测试验证帖子草稿校验和状态枚举。
 - Rust API 测试验证健康检查和 meta 接口。
+- Rust contract 测试验证 OpenAPI 导出包含初始化接口和响应 schema。
 - 前端组件测试验证应用壳能渲染核心入口。
 - 前端 API 客户端测试验证成功和失败响应处理。
+- 前端类型生成检查验证 API client 没有偏离 `contracts/openapi.json`。
 
 不在初始化阶段引入端到端浏览器测试。等真实发布、搜索和审核流程出现后再加入 Playwright。
 
@@ -206,8 +250,9 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 建议覆盖：
 1. 新功能先补领域模型或 API 契约测试。
 2. 后端变更必须跑 fmt、clippy、test。
 3. 前端变更必须跑 typecheck、lint、test、build。
-4. 数据库结构变更必须新增 migration，不直接改历史 migration。
-5. 涉及内容治理、隐私、匿名和 AI 输出的变更必须在 PR 描述中说明风险边界。
+4. API 变更必须更新 OpenAPI contract、生成前端类型，并说明兼容性影响。
+5. 数据库结构变更必须新增 migration，不直接改历史 migration。
+6. 涉及内容治理、隐私、匿名和 AI 输出的变更必须在 PR 描述中说明风险边界。
 
 ## 后续扩展顺序
 
