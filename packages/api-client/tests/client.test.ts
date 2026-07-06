@@ -3,12 +3,12 @@ import {
   CampusAgoraApiError,
   createCampusAgoraApiClient,
   createCampusAgoraMockFetch,
-  requestJson
+  requestJson,
 } from "../src";
 
 function jsonResponse(
   body: unknown,
-  init: ResponseInit & { requestId?: string } = {}
+  init: ResponseInit & { requestId?: string } = {},
 ): Response {
   const headers = new Headers(init.headers);
   headers.set("content-type", "application/json");
@@ -19,7 +19,7 @@ function jsonResponse(
 
   return new Response(JSON.stringify(body), {
     ...init,
-    headers
+    headers,
   });
 }
 
@@ -33,14 +33,14 @@ describe("requestJson", () => {
         fetchImpl: async (url, init) => {
           calls.push({
             url: String(url),
-            headers: new Headers(init?.headers)
+            headers: new Headers(init?.headers),
           });
 
           return jsonResponse({ ok: true }, { status: 200 });
         },
-        requestId: () => "req-1"
+        requestId: () => "req-1",
       },
-      "/api/v1/example"
+      "/api/v1/example",
     );
 
     expect(result).toEqual({ ok: true });
@@ -55,9 +55,9 @@ describe("requestJson", () => {
     [404, "not_found"],
     [409, "conflict"],
     [422, "validation_failed"],
-    [429, "rate_limited"]
+    [429, "rate_limited"],
   ])("normalizes %i JSON error responses", async (status, code) => {
-    expect.assertions(5);
+    expect.assertions(6);
 
     try {
       await requestJson(
@@ -66,16 +66,17 @@ describe("requestJson", () => {
           fetchImpl: async () =>
             jsonResponse(
               {
-                error: {
-                  code,
-                  message: "Request failed",
-                  requestId: "req-from-body"
-                }
+                code,
+                message: "Request failed",
+                requestId: "req-from-body",
+                details: {
+                  field: "title",
+                },
               },
-              { status, requestId: "req-from-header" }
-            )
+              { status, requestId: "req-from-header" },
+            ),
         },
-        "/api/v1/example"
+        "/api/v1/example",
       );
     } catch (error) {
       expect(error).toBeInstanceOf(CampusAgoraApiError);
@@ -83,7 +84,57 @@ describe("requestJson", () => {
       expect((error as CampusAgoraApiError).code).toBe(code);
       expect((error as CampusAgoraApiError).message).toBe("Request failed");
       expect((error as CampusAgoraApiError).requestId).toBe("req-from-header");
+      expect((error as CampusAgoraApiError).details).toEqual({ field: "title" });
     }
+  });
+
+  test("uses body request id when the response header is missing", async () => {
+    await expect(
+      requestJson(
+        {
+          baseUrl: "http://api.test",
+          fetchImpl: async () =>
+            jsonResponse(
+              {
+                code: "not_found",
+                message: "Route not found",
+                requestId: "req-from-body",
+              },
+              { status: 404 },
+            ),
+        },
+        "/api/v1/example",
+      ),
+    ).rejects.toMatchObject({
+      code: "not_found",
+      requestId: "req-from-body",
+    });
+  });
+
+  test("keeps compatibility with legacy nested error responses", async () => {
+    await expect(
+      requestJson(
+        {
+          baseUrl: "http://api.test",
+          fetchImpl: async () =>
+            jsonResponse(
+              {
+                error: {
+                  code: "conflict",
+                  message: "Legacy conflict",
+                  requestId: "req-from-body",
+                },
+              },
+              { status: 409 },
+            ),
+        },
+        "/api/v1/example",
+      ),
+    ).rejects.toMatchObject({
+      code: "conflict",
+      message: "Legacy conflict",
+      requestId: "req-from-body",
+    });
   });
 
   test("normalizes network failures", async () => {
@@ -93,13 +144,13 @@ describe("requestJson", () => {
           baseUrl: "http://api.test",
           fetchImpl: async () => {
             throw new TypeError("failed to fetch");
-          }
+          },
         },
-        "/api/v1/example"
-      )
+        "/api/v1/example",
+      ),
     ).rejects.toMatchObject({
       code: "network_error",
-      status: 0
+      status: 0,
     });
   });
 });
@@ -108,15 +159,15 @@ describe("createCampusAgoraMockFetch", () => {
   test("serves typed health, readiness, and meta responses", async () => {
     const client = createCampusAgoraApiClient({
       baseUrl: "http://api.test",
-      fetchImpl: createCampusAgoraMockFetch()
+      fetchImpl: createCampusAgoraMockFetch(),
     });
 
     await expect(client.getHealth()).resolves.toBe("ok");
     await expect(client.getReady()).resolves.toEqual({
       status: "ready",
       checks: {
-        postgres: "ok"
-      }
+        postgres: "ok",
+      },
     });
     await expect(client.getMeta()).resolves.toMatchObject({
       appName: "Campus Agora",
@@ -124,8 +175,8 @@ describe("createCampusAgoraMockFetch", () => {
         authMockEnabled: true,
         desktopEnabled: true,
         aiArchiveEnabled: false,
-        attachmentsEnabled: false
-      }
+        attachmentsEnabled: false,
+      },
     });
   });
 });

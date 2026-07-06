@@ -8,6 +8,7 @@ export class CampusAgoraApiError extends Error {
   readonly code: string;
   readonly status: number;
   readonly requestId?: string;
+  readonly details?: unknown;
 
   constructor(
     message: string,
@@ -15,51 +16,55 @@ export class CampusAgoraApiError extends Error {
       code: string;
       status: number;
       requestId?: string;
-    }
+      details?: unknown;
+    },
   ) {
     super(message);
     this.name = "CampusAgoraApiError";
     this.code = options.code;
     this.status = options.status;
     this.requestId = options.requestId;
+    this.details = options.details;
   }
 }
 
 export async function requestJson<T>(
   options: RequestOptions,
-  path: string
+  path: string,
 ): Promise<T> {
   let response: Response;
 
   try {
     response = await options.fetchImpl(`${options.baseUrl}${path}`, {
-      headers: requestHeaders(options)
+      headers: requestHeaders(options),
     });
   } catch (error) {
     throw new CampusAgoraApiError(
       error instanceof Error ? error.message : "Network request failed",
       {
         code: "network_error",
-        status: 0
-      }
+        status: 0,
+      },
     );
   }
 
   if (!response.ok) {
-    const requestId = response.headers.get("x-request-id") ?? undefined;
+    const headerRequestId = response.headers.get("x-request-id") ?? undefined;
     const fallback = {
       code: statusCodeToErrorCode(response.status),
       message: `Campus Agora API request failed with ${response.status}`,
-      requestId
+      requestId: headerRequestId,
     };
 
     const body = await responseJson(response);
     const apiError = parseApiError(body);
+    const requestId = headerRequestId ?? apiError?.requestId;
 
     throw new CampusAgoraApiError(apiError?.message ?? fallback.message, {
       code: apiError?.code ?? fallback.code,
       status: response.status,
-      requestId
+      requestId,
+      details: apiError?.details,
     });
   }
 
@@ -68,7 +73,7 @@ export async function requestJson<T>(
 
 export function requestHeaders(options: RequestOptions): Headers {
   const headers = new Headers({
-    Accept: "application/json"
+    Accept: "application/json",
   });
 
   const requestId = options.requestId?.();
@@ -84,14 +89,24 @@ function parseApiError(body: unknown):
   | {
       code: string;
       message: string;
+      requestId?: string;
+      details?: unknown;
     }
   | undefined {
   if (!isRecord(body)) {
     return undefined;
   }
 
-  const error = body.error;
+  if (typeof body.code === "string" && typeof body.message === "string") {
+    return {
+      code: body.code,
+      message: body.message,
+      requestId: typeof body.requestId === "string" ? body.requestId : undefined,
+      details: body.details,
+    };
+  }
 
+  const error = body.error;
   if (!isRecord(error)) {
     return undefined;
   }
@@ -102,7 +117,9 @@ function parseApiError(body: unknown):
 
   return {
     code: error.code,
-    message: error.message
+    message: error.message,
+    requestId: typeof error.requestId === "string" ? error.requestId : undefined,
+    details: error.details,
   };
 }
 

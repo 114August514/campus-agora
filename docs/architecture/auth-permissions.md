@@ -24,17 +24,18 @@ change how an authenticated session is established.
 
 ## Roles
 
-System roles:
+System/user roles:
 
 - `Guest`: unauthenticated reader.
 - `Student`: authenticated campus user.
+- `OrganizationMember`: authenticated campus user acting within a verified
+  organization membership context.
 - `Moderator`: content safety reviewer.
 - `Admin`: operational administrator.
 
 Resource roles:
 
 - `Author`: creator or owner of a resource.
-- `OrganizationMember`: member acting in an organization context.
 - `Maintainer`: trusted editor for archive quality.
 
 Roles are not ordered. Avoid language like "role and above." Use an
@@ -42,15 +43,16 @@ action/resource matrix.
 
 ## Permission Matrix
 
-| Action | Guest | Student | Author | Maintainer | Moderator | Admin |
-| --- | --- | --- | --- | --- | --- | --- |
-| Read public content | Allow | Allow | Allow | Allow | Allow | Allow |
-| Create own draft | Deny | Allow | Allow | Allow | Allow | Allow |
-| Edit own draft | Deny | Deny | Allow | Allow if assigned | Allow | Allow |
-| Publish archive entry | Deny | Deny | Conditional | Allow | Allow | Allow |
-| Change moderation state | Deny | Deny | Deny | Deny | Allow | Allow |
-| Change roles | Deny | Deny | Deny | Deny | Deny | Allow |
-| Export data | Deny | Own data only | Own data only | Deny | Deny | Allow |
+| Action | Guest | Student | OrganizationMember | Author | Maintainer | Moderator | Admin |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Read public content | Allow | Allow | Allow | Allow | Allow | Allow | Allow |
+| Create own draft | Deny | Allow | Allow | Allow | Allow | Allow | Allow |
+| Edit own draft | Deny | Deny | Deny | Allow | Allow if assigned | Allow | Allow |
+| Maintain organization content | Deny | Deny | Allow if member | Deny | Allow if assigned | Allow | Allow |
+| Publish archive entry | Deny | Deny | Conditional | Conditional | Allow | Allow | Allow |
+| Change moderation state | Deny | Deny | Deny | Deny | Deny | Allow | Allow |
+| Change roles | Deny | Deny | Deny | Deny | Deny | Deny | Allow |
+| Export data | Deny | Own data only | Own data only | Own data only | Deny | Deny | Allow |
 
 Each future endpoint must define the action it checks and the resource context
 needed for the decision.

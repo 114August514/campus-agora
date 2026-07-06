@@ -19,4 +19,15 @@ fn openapi_document_contains_m0_1_endpoints_and_schemas() {
     assert!(json["components"]["schemas"]["MetaResponse"].is_object());
     assert!(json["components"]["schemas"]["CapabilityFlags"].is_object());
     assert!(json["components"]["schemas"]["ApiErrorResponse"].is_object());
+    assert!(json["components"]["schemas"]["ApiErrorBody"].is_null());
+    assert_eq!(
+        json["components"]["schemas"]["ApiErrorResponse"]["required"],
+        serde_json::json!(["code", "message", "requestId"])
+    );
+    assert!(json["components"]["schemas"]["ApiErrorResponse"]["properties"]["code"].is_object());
+    assert!(json["components"]["schemas"]["ApiErrorResponse"]["properties"]["message"].is_object());
+    assert!(
+        json["components"]["schemas"]["ApiErrorResponse"]["properties"]["requestId"].is_object()
+    );
+    assert!(json["components"]["schemas"]["ApiErrorResponse"]["properties"]["details"].is_object());
 }

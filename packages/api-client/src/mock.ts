@@ -6,7 +6,7 @@ export interface CampusAgoraMockFetchOptions {
 }
 
 export function createCampusAgoraMockFetch(
-  options: CampusAgoraMockFetchOptions = {}
+  options: CampusAgoraMockFetchOptions = {},
 ): typeof fetch {
   const meta: MetaResponse = {
     appName: "Campus Agora",
@@ -15,15 +15,15 @@ export function createCampusAgoraMockFetch(
       authMockEnabled: true,
       desktopEnabled: true,
       aiArchiveEnabled: false,
-      attachmentsEnabled: false
+      attachmentsEnabled: false,
     },
-    ...options.meta
+    ...options.meta,
   };
   const readiness = options.readiness ?? {
     status: "ready",
     checks: {
-      postgres: "ok"
-    }
+      postgres: "ok",
+    },
   };
 
   return async (input) => {
@@ -45,14 +45,12 @@ export function createCampusAgoraMockFetch(
 
     return jsonResponse(
       {
-        error: {
-          code: "not_found",
-          message: "Route not found",
-          requestId
-        }
+        code: "not_found",
+        message: "Route not found",
+        requestId,
       },
       404,
-      requestId
+      requestId,
     );
   };
 }
@@ -62,8 +60,8 @@ function jsonResponse(body: unknown, status: number, requestId: string): Respons
     status,
     headers: {
       "content-type": "application/json",
-      "x-request-id": requestId
-    }
+      "x-request-id": requestId,
+    },
   });
 }
 
@@ -72,7 +70,7 @@ function textResponse(body: string, requestId: string): Response {
     status: 200,
     headers: {
       "content-type": "text/plain",
-      "x-request-id": requestId
-    }
+      "x-request-id": requestId,
+    },
   });
 }

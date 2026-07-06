@@ -17,6 +17,27 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-06 - Resolve M0 review findings after PR #2 merge
+
+- Result: Addressed the post-rebase M0/M0.1/M0.2 review findings on PR #3.
+- Changed: Flattened API `ErrorResponse`, regenerated OpenAPI and TypeScript
+  contract types, updated API client error normalization, added CORS allowlist
+  and request body limit middleware, expanded API tests, and corrected
+  governance docs for roles and retention.
+- Verification: `bun run api:types`, `cargo test -p campus_agora_api --test
+  health`, `cargo test -p campus_agora_api --test openapi`,
+  `bun --cwd packages/api-client test`, `cargo test -p campus_agora_api`,
+  `cargo check --workspace --all-targets`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, `cargo test --workspace`, `bun run
+  ci:frontend`, `env UV_CACHE_DIR=/tmp/campus-agora-uv-cache bun run
+  ci:docs`, and `git diff --check`.
+- Decisions: Kept the generated contract as the source of TypeScript response
+  types, while the API client still accepts the old nested error shape for
+  compatibility. Runtime CORS and body limit controls were implemented because
+  the canonical spec already listed them in initialization scope.
+- Follow-up: PR CI should still cover Docker/socket-backed checks that this
+  sandbox cannot run directly.
+
 ### 2026-07-06 - Implement M0.2 governance docs and boundaries
 
 - Result: Added formal M0.2 documentation for product scope, privacy,

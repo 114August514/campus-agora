@@ -1,18 +1,21 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use axum::body::Body;
+use axum::body::{to_bytes, Body};
 use axum::extract::State;
-use axum::http::{header::HeaderName, HeaderMap, HeaderValue, Request, StatusCode};
+use axum::http::{header, header::HeaderName, HeaderMap, HeaderValue, Method, Request, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::{routing::get, Json, Router};
 use serde::Serialize;
 use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 
 pub const API_BOUNDARY: &str = "campus-agora-api";
+const DEFAULT_REQUEST_BODY_LIMIT_BYTES: usize = 1024 * 1024;
+const DEFAULT_CORS_ALLOWED_ORIGINS: &[&str] = &["http://127.0.0.1:5173", "http://localhost:5173"];
 const REQUEST_ID_HEADER: &str = "x-request-id";
 static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -56,6 +59,59 @@ impl ApiState {
             },
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct ApiRuntimeConfig {
+    cors_allowed_origins: CorsAllowedOrigins,
+    request_body_limit_bytes: usize,
+}
+
+impl ApiRuntimeConfig {
+    pub fn from_env() -> Self {
+        Self {
+            cors_allowed_origins: cors_allowed_origins_from_env(),
+            request_body_limit_bytes: usize_env(
+                "REQUEST_BODY_LIMIT_BYTES",
+                DEFAULT_REQUEST_BODY_LIMIT_BYTES,
+            ),
+        }
+    }
+
+    pub fn for_tests() -> Self {
+        Self {
+            cors_allowed_origins: CorsAllowedOrigins::List(origin_values(
+                DEFAULT_CORS_ALLOWED_ORIGINS,
+            )),
+            request_body_limit_bytes: DEFAULT_REQUEST_BODY_LIMIT_BYTES,
+        }
+    }
+
+    pub fn with_cors_allowed_origins<I, S>(mut self, origins: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let origins = origins
+            .into_iter()
+            .map(|origin| origin_value(origin.as_ref()))
+            .collect();
+
+        self.cors_allowed_origins = CorsAllowedOrigins::List(origins);
+        self
+    }
+
+    pub fn with_request_body_limit_bytes(mut self, limit: usize) -> Self {
+        assert!(limit > 0, "request body limit must be a positive integer");
+        self.request_body_limit_bytes = limit;
+        self
+    }
+}
+
+#[derive(Clone, Debug)]
+enum CorsAllowedOrigins {
+    Any,
+    List(Vec<HeaderValue>),
 }
 
 #[derive(Clone, Debug)]
@@ -104,30 +160,36 @@ pub struct ReadinessChecks {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiErrorResponse {
-    pub error: ApiErrorBody,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ApiErrorBody {
     pub code: &'static str,
     pub message: &'static str,
-    pub request_id: Option<String>,
+    pub request_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<Value>,
 }
 
 pub fn build_router() -> Router {
-    build_router_with_state(ApiState::from_env())
+    build_router_with_state_and_config(ApiState::from_env(), ApiRuntimeConfig::from_env())
 }
 
 pub fn build_router_with_state(state: ApiState) -> Router {
+    build_router_with_state_and_config(state, ApiRuntimeConfig::for_tests())
+}
+
+pub fn build_router_with_state_and_config(state: ApiState, config: ApiRuntimeConfig) -> Router {
+    let request_body_limit_bytes = config.request_body_limit_bytes;
+
     Router::new()
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/api/v1/meta", get(meta))
         .fallback(not_found)
         .with_state(state)
-        .layer(middleware::from_fn(request_id_middleware))
+        .layer(cors_layer(&config))
         .layer(TraceLayer::new_for_http())
+        .layer(middleware::from_fn(move |request, next| {
+            request_body_limit_middleware(request, next, request_body_limit_bytes)
+        }))
+        .layer(middleware::from_fn(request_id_middleware))
 }
 
 pub fn openapi_document() -> Value {
@@ -219,9 +281,9 @@ pub fn openapi_document() -> Value {
         },
         "components": {
             "schemas": {
-                "ApiErrorBody": {
+                "ApiErrorResponse": {
                     "type": "object",
-                    "required": ["code", "message"],
+                    "required": ["code", "message", "requestId"],
                     "properties": {
                         "code": {
                             "type": "string",
@@ -232,15 +294,10 @@ pub fn openapi_document() -> Value {
                         },
                         "requestId": {
                             "type": "string"
-                        }
-                    }
-                },
-                "ApiErrorResponse": {
-                    "type": "object",
-                    "required": ["error"],
-                    "properties": {
-                        "error": {
-                            "$ref": "#/components/schemas/ApiErrorBody"
+                        },
+                        "details": {
+                            "type": "object",
+                            "description": "Optional structured error details."
                         }
                     }
                 },
@@ -329,20 +386,14 @@ async fn meta(State(state): State<ApiState>) -> Json<MetaResponse> {
 }
 
 async fn not_found(headers: HeaderMap) -> impl IntoResponse {
-    let request_id = headers
-        .get(REQUEST_ID_HEADER)
-        .and_then(|value| value.to_str().ok())
-        .map(str::to_owned);
+    let request_id = request_id_from_headers(&headers);
 
-    (
+    api_error_response(
         StatusCode::NOT_FOUND,
-        Json(ApiErrorResponse {
-            error: ApiErrorBody {
-                code: "not_found",
-                message: "Route not found",
-                request_id,
-            },
-        }),
+        "not_found",
+        "Route not found",
+        request_id,
+        None,
     )
 }
 
@@ -350,6 +401,7 @@ async fn request_id_middleware(mut request: Request<Body>, next: Next) -> Respon
     let request_id = request
         .headers()
         .get(REQUEST_ID_HEADER)
+        .filter(|value| value.to_str().is_ok())
         .cloned()
         .unwrap_or_else(next_request_id);
 
@@ -364,6 +416,50 @@ async fn request_id_middleware(mut request: Request<Body>, next: Next) -> Respon
         .insert(HeaderName::from_static(REQUEST_ID_HEADER), request_id);
 
     response
+}
+
+async fn request_body_limit_middleware(
+    request: Request<Body>,
+    next: Next,
+    limit: usize,
+) -> Response {
+    if request
+        .headers()
+        .get(header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok()?.parse::<usize>().ok())
+        .is_some_and(|content_length| content_length > limit)
+    {
+        return payload_too_large_response(&request, limit);
+    }
+
+    let request_id = request_id_from_headers(request.headers());
+    let (parts, body) = request.into_parts();
+    let body = match to_bytes(body, limit).await {
+        Ok(bytes) => Body::from(bytes),
+        Err(_) => {
+            return api_error_response(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "request_body_too_large",
+                "Request body is too large",
+                request_id,
+                Some(json!({ "limitBytes": limit })),
+            )
+            .into_response();
+        }
+    };
+
+    next.run(Request::from_parts(parts, body)).await
+}
+
+fn payload_too_large_response(request: &Request<Body>, limit: usize) -> Response {
+    api_error_response(
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "request_body_too_large",
+        "Request body is too large",
+        request_id_from_headers(request.headers()),
+        Some(json!({ "limitBytes": limit })),
+    )
+    .into_response()
 }
 
 impl ReadinessProbe {
@@ -405,8 +501,118 @@ fn bool_env(name: &str, default: bool) -> bool {
         .unwrap_or(default)
 }
 
+fn usize_env(name: &str, default: usize) -> usize {
+    match std::env::var(name) {
+        Ok(value) if value.trim().is_empty() => default,
+        Ok(value) => {
+            let parsed = value
+                .parse::<usize>()
+                .unwrap_or_else(|_| panic!("{name} must be a positive integer"));
+            assert!(parsed > 0, "{name} must be a positive integer");
+            parsed
+        }
+        Err(_) => default,
+    }
+}
+
+fn cors_allowed_origins_from_env() -> CorsAllowedOrigins {
+    let Ok(value) = std::env::var("CORS_ALLOWED_ORIGINS") else {
+        return CorsAllowedOrigins::List(origin_values(DEFAULT_CORS_ALLOWED_ORIGINS));
+    };
+
+    let origins = value
+        .split(',')
+        .map(str::trim)
+        .filter(|origin| !origin.is_empty())
+        .collect::<Vec<_>>();
+
+    if origins.is_empty() {
+        return CorsAllowedOrigins::List(origin_values(DEFAULT_CORS_ALLOWED_ORIGINS));
+    }
+
+    if origins.len() == 1 && origins[0] == "*" {
+        return CorsAllowedOrigins::Any;
+    }
+
+    CorsAllowedOrigins::List(origin_values(origins))
+}
+
+fn origin_values<I, S>(origins: I) -> Vec<HeaderValue>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    origins
+        .into_iter()
+        .map(|origin| origin_value(origin.as_ref()))
+        .collect()
+}
+
+fn origin_value(origin: &str) -> HeaderValue {
+    HeaderValue::from_str(origin)
+        .unwrap_or_else(|_| panic!("invalid CORS_ALLOWED_ORIGINS origin: {origin}"))
+}
+
+fn cors_layer(config: &ApiRuntimeConfig) -> CorsLayer {
+    let request_id_header = HeaderName::from_static(REQUEST_ID_HEADER);
+    let layer = CorsLayer::new()
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([
+            header::ACCEPT,
+            header::AUTHORIZATION,
+            header::CONTENT_TYPE,
+            request_id_header.clone(),
+        ])
+        .expose_headers([request_id_header]);
+
+    match &config.cors_allowed_origins {
+        CorsAllowedOrigins::Any => layer.allow_origin(AllowOrigin::any()),
+        CorsAllowedOrigins::List(origins) => layer.allow_origin(origins.clone()),
+    }
+}
+
+fn request_id_from_headers(headers: &HeaderMap) -> String {
+    headers
+        .get(REQUEST_ID_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned)
+        .unwrap_or_else(next_request_id_string)
+}
+
+fn api_error_response(
+    status: StatusCode,
+    code: &'static str,
+    message: &'static str,
+    request_id: String,
+    details: Option<Value>,
+) -> impl IntoResponse {
+    (
+        status,
+        Json(ApiErrorResponse {
+            code,
+            message,
+            request_id,
+            details,
+        }),
+    )
+}
+
 fn next_request_id() -> HeaderValue {
     let value = REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
     HeaderValue::from_str(&format!("campus-agora-{value}"))
         .expect("generated request id must be a valid header value")
+}
+
+fn next_request_id_string() -> String {
+    next_request_id()
+        .to_str()
+        .expect("generated request id must be visible ASCII")
+        .to_owned()
 }

@@ -33,11 +33,10 @@ API errors use:
 
 ```json
 {
-  "error": {
-    "code": "validation_failed",
-    "message": "The request is invalid.",
-    "requestId": "..."
-  }
+  "code": "validation_failed",
+  "message": "The request is invalid.",
+  "requestId": "...",
+  "details": {}
 }
 ```
 
@@ -57,8 +56,15 @@ Configuration comes from environment variables or deployment secrets. Required
 production settings must fail fast with clear errors. Tests must not read
 production secrets.
 
-M0.2 documents the boundary only. Runtime config hardening belongs in the
-milestone that introduces the related feature.
+Initialization supports:
+
+- `SERVER_HOST` and `SERVER_PORT` in the API binary.
+- `DATABASE_URL` for readiness checks and migrations.
+- `CORS_ALLOWED_ORIGINS` as a comma-separated allowlist. `*` is allowed only as
+  an explicit single value and must not be combined with cookie/session auth in
+  production.
+- `REQUEST_BODY_LIMIT_BYTES` as a positive integer request body limit.
+- `RUST_LOG` for tracing filter configuration.
 
 ## Observability
 

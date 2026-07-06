@@ -4,9 +4,9 @@ export type {
   CapabilityFlags,
   HealthResponse,
   MetaResponse,
-  ReadinessResponse
+  ReadinessResponse,
 } from "./meta";
 export { createCampusAgoraApiClient } from "./meta";
 export { createCampusAgoraMockFetch } from "./mock";
 export { CampusAgoraApiError, requestJson } from "./request";
-export type { ApiErrorBody, ApiErrorResponse, ReadinessChecks } from "./generated";
+export type { ApiErrorResponse, ReadinessChecks } from "./generated";

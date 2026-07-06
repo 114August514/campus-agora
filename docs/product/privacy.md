@@ -28,14 +28,15 @@ before real identity integration, attachments, or AI assistance are added.
 
 Default retention targets:
 
-- User-authored content: retained while visible or recoverable.
-- Soft-deleted content: retained until policy-driven purge is approved.
-- Audit events: retained longer than content because they explain risk actions.
-- Request logs: short operational retention, enough for debugging and abuse
-  response.
-- Backups: retained by environment policy and purged on schedule.
-- Attachments and AI outputs: retention must be defined before the feature is
-  implemented.
+| Data Category | Product Retention Boundary |
+| --- | --- |
+| Business content | Retained while visible, drafted, recoverable, or needed for account-visible history. |
+| Soft-deleted content | Retained until policy-driven purge is approved. |
+| Audit logs | Retained longer than operational request logs because they explain risk actions. Exact production duration must be set before real auth, moderation, or admin actions launch. |
+| Request logs | Short operational retention, enough for debugging and abuse response. |
+| Backups | Retained by environment policy and purged on schedule. |
+| Attachments | Retained no longer than the owning content unless legal, abuse-response, or safety review requires a hold. |
+| AI outputs | Retained according to the source draft, archive entry, or review task they support. |
 
 ## Deletion And Export
 
