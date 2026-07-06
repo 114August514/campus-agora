@@ -26,6 +26,7 @@
 - 不接入真实 AI 服务。
 - 不实现完整资料帖、讨论帖和后台审核 UI。
 - 不引入复杂推荐、热榜、WebSocket 通知或数据大屏。
+- 不实现生产级自动备份、监控告警、对象存储、文件扫描、限流集群和 Tauri 自动更新；初始化只定义边界、配置占位和文档要求。
 - 不把根目录三个临时说明文件改写为正式产品文档，除非后续另行整理。
 
 ## 选型
@@ -71,6 +72,8 @@ campus-agora/
     development.md
     deployment.md
     milestones.md
+    operations.md
+    security.md
   .github/
     workflows/
       ci.yml
@@ -263,6 +266,105 @@ M0 不部署生产环境，但要提供可部署基础：
 - CI 至少验证 API Server 可以编译；如 Docker 可用，运行 `docker build -f Dockerfile.api .`。
 
 后台任务不放入 M0 业务实现，但边界要提前明确：AI 归档、上传处理、通知、Webhook 重试、清理任务等长耗时工作不能长期阻塞 HTTP 请求。早期可以用受控 Tokio background task；复杂后再引入 Redis queue 或独立 worker。
+
+### 系统运行与上线边界
+
+初始化阶段不直接上线生产环境，但必须把“能上线、能排查、能恢复”的边界写进工程结构。项目整体按这些层次理解：
+
+```text
+Client Layer
+  Web Client
+  Tauri Client
+  TypeScript API Client
+API Layer
+  REST API
+  Auth Middleware
+  Rate Limit
+  Request ID
+  Error Response
+Backend Layer
+  API Handlers
+  Application Use Cases
+  Repositories
+  Domain Models
+  Background Jobs
+Data Layer
+  PostgreSQL
+  Redis, optional
+  Object Storage, optional
+  Search Index, optional
+Ops Layer
+  Logs
+  Metrics
+  Tracing
+  Backup
+  CI/CD
+  Alerts
+```
+
+环境隔离：
+
+- M0 提供 `.env.example`，列出 local/dev/staging/production 需要的配置项，但不提交真实 secret。
+- local、dev、staging、production 必须使用独立数据库、Redis、对象存储 bucket、API domain、OAuth callback、日志等级和 secret。
+- 不能让本地、测试和生产共享同一个 `DATABASE_URL`、session secret、校园认证回调密钥或对象存储凭据。
+- `docs/deployment.md` 记录环境变量来源和部署顺序；`docs/operations.md` 记录各环境的用途、数据隔离规则和故障处理入口。
+
+备份、恢复与数据修复：
+
+- M0 不实现自动备份任务，但 `docs/operations.md` 必须定义 PostgreSQL 备份策略占位：备份频率、保留周期、恢复演练、负责人和恢复验收方式。
+- 生产上线前必须有至少一次从备份恢复到隔离环境的演练记录。
+- migration 必须先在 staging 执行并验证，再进入 production。
+- 线上数据修复必须通过可审查脚本或 migration 完成，不能直接手工改生产库且不留记录。
+- `docs/deployment.md` 必须说明 migration 失败时的回滚或前滚策略。
+
+观测、监控与告警：
+
+- M0 只要求结构化日志、requestId 和健康检查；metrics、dashboard、alert 可以先作为文档化接入点。
+- 后端日志至少保留 method、path、status、latency、requestId、error code；后续登录后可记录脱敏 user id。
+- 数据库耗时、外部服务耗时、高成本 AI 任务耗时和后台任务状态必须在对应功能落地时加入 tracing span。
+- `docs/operations.md` 必须列出上线前需要接入的基础指标：5xx rate、p95 latency、数据库连接池、migration 状态、队列积压、磁盘/存储、登录失败率。
+- 生产上线前必须定义告警入口、告警级别和最小 runbook：服务不可用、数据库不可用、migration 失败、错误率升高、存储不可写、Tauri 更新失败。
+
+配置与密钥管理：
+
+- 配置通过环境变量注入，代码中不能硬编码 secret、域名、校园认证回调密钥或对象存储凭据。
+- `docs/security.md` 记录 secret 分类、轮换策略、泄露处理流程和本地开发替代值。
+- `.gitignore` 必须忽略 `.env` 和 `.env.*`，但保留 `.env.example`。
+- CI secret 只能来自 GitHub Actions secrets 或后续部署平台 secret，不写入 workflow 明文。
+
+速率限制与滥用防护：
+
+- M0 不需要实现 Redis rate limiter，但 API 层必须预留 middleware 边界。
+- 登录、模拟认证、搜索、上传、AI 归档、邮件/通知、API key 和高成本接口必须在对应 milestone 落地前定义限流策略。
+- 限流维度至少考虑 IP、用户、资源、API key 和 endpoint。
+- 触发限流统一返回 `429` 和稳定错误码，例如 `rate_limited`。
+
+文件上传、对象存储与下载安全：
+
+- M0 不实现附件上传，但资料沉淀平台后续很可能需要文件能力，因此必须预留对象存储 adapter 边界。
+- 文件上传必须先定义大小限制、类型限制、权限校验、对象 key 命名、临时签名 URL、删除策略和版本策略。
+- 用户上传文件不能默认公开可访问；下载必须重新走权限校验或短期签名 URL。
+- 文件扫描、恶意内容处理和版权/隐私风险在真实上传功能进入 milestone 前必须写入 `docs/security.md`。
+
+Tauri 桌面端安全：
+
+- Tauri v2 capabilities/permissions 必须按窗口和能力最小授权。
+- M0 禁止开放 shell command、任意文件系统访问和未说明用途的系统能力。
+- 如果后续需要文件选择、剪贴板、通知、打开外部链接、自动更新或本地缓存，必须先在 `docs/desktop.md` 记录用途、风险、权限和测试方式。
+- Tauri token、本地缓存和自动更新签名策略必须在真实登录或发布前明确。
+
+发布、版本和回滚：
+
+- Web 前端、Rust API Server、数据库 migration 和 Tauri 客户端版本必须分别记录发布顺序。
+- 生产发布流程默认是：build -> staging deploy -> migration -> health/readiness check -> production deploy -> smoke test。
+- Tauri 自动更新不属于 M0，但 `docs/desktop.md` 要预留版本号、签名和回滚说明位置。
+- `docs/deployment.md` 必须记录失败后如何回滚前端、后端、migration 和桌面版本。
+
+前端产品状态：
+
+- 每个核心页面必须考虑 loading、empty、error、unauthorized、forbidden、offline、retrying 和 partial failure。
+- Tauri 桌面端还要考虑服务器不可用、网络断开、token 过期、本地缓存过期和后台同步失败。
+- 基础状态组件由 `components/ui` 提供，页面不得各自手写一套加载、错误、权限不足和离线状态。
 
 初始化阶段先建立这些核心概念：
 
@@ -852,6 +954,8 @@ Bun workspace 要求：
 - `docs/development.md`：说明前端 app/features/components 组织、API client 使用、mock 模式、组件系统、视觉 token、图标规范、Style Guide 页面、UI 文案约定、开发命令和质量门禁。
 - `docs/deployment.md`：说明 API Server Docker 构建、migration、健康检查、staging/production 发布顺序和回滚原则。
 - `docs/milestones.md`：说明项目推进阶段、交付物和退出条件。
+- `docs/operations.md`：说明环境隔离、备份恢复、监控指标、告警入口、runbook 和线上数据修复流程。
+- `docs/security.md`：说明 secret 管理、限流滥用防护、文件上传/下载安全、Tauri 权限、数据保护和安全审计边界。
 
 ## Git Ignore 与 LFS 策略
 
@@ -896,13 +1000,17 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 - Rust auth/permission 测试验证未登录返回 `401`、越权访问返回 `403` 或不可见资源返回 `404`、状态冲突返回 `409`。
 - Rust contract 测试验证 OpenAPI 导出包含初始化接口和响应 schema。
 - Rust config 测试验证缺失必需环境变量会得到明确错误，测试环境不会读取生产 secret。
+- 配置样例检查验证 `.env.example` 包含 local/dev/staging/production 需要的关键变量名，且不包含真实 secret。
 - 前端组件测试验证 `AppShell`、`Topbar`、`Sidebar` 和至少两个 `components/ui` primitive 能渲染核心状态。
 - 前端 Style Guide 页面测试验证 `/design-system` 能渲染颜色、字体、按钮、输入框、卡片、空状态、加载状态和错误状态展示区。
+- 前端状态组件测试验证 loading、empty、error、unauthorized、forbidden 和 offline 状态至少有统一组件或展示样例。
 - 前端 lint 测试或 Stylelint 配置验证页面样式不能使用裸颜色、散乱 px 值和重复基础控件样式。
 - `packages/api-client` 测试验证成功响应、失败响应、401、403、404、409、422、429、网络失败、错误归一化、认证策略和 requestId 透传。
 - 前端 mock 测试或类型检查验证 mock handler 与 `@campus-agora/api-client` 公开类型一致。
 - `apps/desktop/src-tauri` 至少通过 `cargo check`，并验证权限配置文件存在。
+- Tauri 权限检查验证 M0 不开放 shell command、任意文件系统访问或未记录用途的 capability。
 - 前端类型生成检查验证 `packages/api-client` 没有偏离 `contracts/openapi.json`。
+- 文档检查验证 `docs/operations.md` 和 `docs/security.md` 存在，并覆盖环境隔离、备份恢复、告警 runbook、secret 管理、限流和上传安全边界。
 
 不在初始化阶段引入端到端浏览器测试。等真实发布、搜索和审核流程出现后再加入 Playwright。
 
@@ -917,8 +1025,10 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 5. 权限相关变更必须更新 `docs/auth-permissions.md`，并补充后端 policy 测试。
 6. 数据库结构变更必须新增 migration，不直接改历史 migration。
 7. 后端配置、CORS、secret、日志字段、部署流程或健康检查变化必须更新 `docs/backend.md` 或 `docs/deployment.md`。
-8. 由 agent 推进的非平凡任务必须更新 AI LOG：开始或发现任务时写入 `docs/ai-log/todo.md`，完成后写入 `docs/ai-log/done.md`。
-9. 涉及内容治理、隐私、匿名和 AI 输出的变更必须在 PR 描述中说明风险边界。
+8. 环境隔离、备份恢复、监控告警、runbook、线上数据修复或发布回滚变化必须更新 `docs/operations.md`。
+9. 限流、上传下载、对象存储、Tauri 权限、secret 管理或安全审计变化必须更新 `docs/security.md`。
+10. 由 agent 推进的非平凡任务必须更新 AI LOG：开始或发现任务时写入 `docs/ai-log/todo.md`，完成后写入 `docs/ai-log/done.md`。
+11. 涉及内容治理、隐私、匿名和 AI 输出的变更必须在 PR 描述中说明风险边界。
 
 ## AI LOG 策略
 
@@ -959,13 +1069,14 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 
 初始里程碑：
 
-- `M0 Repository Foundation`：完成 monorepo 边界、Bun 前端、`app/features/components` 前端结构、前端视觉系统、基础组件系统、`/design-system` Style Guide 页面、Tauri WebView 壳、TypeScript API client、`domain/application/db/api` Rust crate 分层、OpenAPI contract、API 对接规范、mock 联调边界、统一错误模型、集中配置、tracing/requestId、`/healthz`、`/readyz`、Dockerfile.api、部署文档、CI、ESLint、Stylelint、测试、`.gitignore`、`.gitattributes`、AI LOG、LFS 文档、架构文档、后端规范文档、权限文档和协作规范。退出条件是新成员能按 README 跑通前端、桌面壳、后端、测试、样式检查、API contract 生成命令、API client 类型检查、mock 类型检查和 API Server 镜像构建检查。
+- `M0 Repository Foundation`：完成 monorepo 边界、Bun 前端、`app/features/components` 前端结构、前端视觉系统、基础组件系统、`/design-system` Style Guide 页面、Tauri WebView 壳、TypeScript API client、`domain/application/db/api` Rust crate 分层、OpenAPI contract、API 对接规范、mock 联调边界、统一错误模型、集中配置、tracing/requestId、`/healthz`、`/readyz`、Dockerfile.api、部署文档、operations 文档、security 文档、CI、ESLint、Stylelint、测试、`.gitignore`、`.gitattributes`、AI LOG、LFS 文档、架构文档、后端规范文档、权限文档和协作规范。退出条件是新成员能按 README 跑通前端、桌面壳、后端、测试、样式检查、API contract 生成命令、API client 类型检查、mock 类型检查、`.env.example` 检查和 API Server 镜像构建检查。
 - `M1 Identity, Permissions And Shell`：完成认证 provider 抽象、模拟校园认证、用户模型、系统角色、资源角色、应用导航、登录态和基础权限边界。退出条件是前端能基于后端 API 完成登录态展示，后端有认证和权限策略测试。
 - `M2 Knowledge Archive Core`：完成资料帖发布、编辑、标签、版本历史、纠错入口和基础列表。退出条件是一篇资料能从创建到更新再到版本追踪完整闭环。
 - `M3 Discussion To Archive Loop`：完成讨论帖、评论、精华回复和从讨论沉淀到资料的工作流。退出条件是高质量评论能被引用或整理进资料帖。
 - `M4 Moderation And AI Drafting`：完成基础审核后台、风险状态、AI 归档草稿和摘要生成占位接口。退出条件是 AI 结果必须可追溯、可编辑、可审核。
 - `M5 Search And Demo Readiness`：完成全文搜索、收藏、引用、贡献展示和比赛演示脚本。退出条件是核心答辩路径可稳定演示，并通过完整 CI。
 - `M6 Real Campus Identity Integration`：在拿到学校侧 CAS/OAuth/OIDC 接入条件后，完成真实校园认证 provider、回调配置、测试账号验证和隐私合规检查。退出条件是真实用户可通过校园身份登录，且业务权限无需重写。
+- `M7 Production Operations And Security`：完成生产前运维和安全加固，包括环境隔离、备份恢复演练、监控指标、告警 runbook、限流、对象存储上传下载安全、Tauri 自动更新签名策略、发布回滚流程和安全审计清单。退出条件是 staging 可按发布流程完成部署、迁移、健康检查、回滚演练和备份恢复演练，且高风险接口具备限流和审计记录。
 
 每个 milestone 都要记录：
 
