@@ -59,13 +59,27 @@ campus-agora/
             Sidebar.tsx
             Topbar.tsx
           ui/
+            Badge.tsx
             Button.tsx
             Card.tsx
+            Checkbox.tsx
+            Drawer.tsx
+            Dropdown.tsx
+            EmptyState.tsx
+            IconButton.tsx
             Input.tsx
+            LoadingState.tsx
             Modal.tsx
+            Select.tsx
+            Switch.tsx
+            Tabs.tsx
+            Textarea.tsx
+            Toast.tsx
+            Tooltip.tsx
         hooks/
         lib/
         pages/
+          DesignSystemPage.tsx
         styles/
           globals.css
           themes.css
@@ -340,51 +354,155 @@ apps/web/src/
     globals.css
   components/
     ui/
+      Badge.tsx
       Button.tsx
-      Input.tsx
-      Modal.tsx
       Card.tsx
+      Checkbox.tsx
+      Drawer.tsx
+      Dropdown.tsx
+      EmptyState.tsx
+      IconButton.tsx
+      Input.tsx
+      LoadingState.tsx
+      Modal.tsx
+      Select.tsx
+      Switch.tsx
+      Tabs.tsx
+      Textarea.tsx
+      Toast.tsx
+      Tooltip.tsx
     layout/
       Sidebar.tsx
       Topbar.tsx
       AppShell.tsx
     icons/
   pages/
+    DesignSystemPage.tsx
   hooks/
   lib/
 ```
 
-职责：
+### 目录职责
 
 - `styles/tokens.css`：集中定义颜色、间距、字号、圆角、阴影、边框、z-index、动效时长等设计 token。
 - `styles/themes.css`：定义 light/dark 或后续主题变量，只覆盖 token 值，不写组件选择器。
 - `styles/globals.css`：放 reset、基础排版、body/root 样式和全局可访问性样式。
-- `components/ui`：提供基础可组合组件，例如 `Button`、`Input`、`Modal`、`Card`。页面不得重复实现按钮、输入框、弹窗和卡片样式。
+- `components/ui`：提供基础可组合组件，页面不得重复实现按钮、输入框、弹窗、卡片、状态提示等基础 UI。
 - `components/layout`：提供 `AppShell`、`Sidebar`、`Topbar` 等应用框架组件。
 - `components/icons`：封装项目使用的 icon 出口，统一 Lucide 配置。
 - `pages`：只负责页面组合和数据连接，不承载基础 UI 样式实现。
 - `hooks`：放可复用 React hooks。
 - `lib`：放非 React 业务辅助函数、格式化函数和配置读取。
 
-视觉规范：
+### Design Tokens
+
+`tokens.css` 要把视觉基础变量集中维护，页面和组件必须通过 CSS custom properties 使用这些 token，不在页面中散落魔法值。
+
+Token 至少覆盖：
+
+- 颜色：`bg`、`surface`、`elevated`、`text`、`text-muted`、`text-disabled`、`border`、`border-strong`、`primary`、`primary-hover`、`primary-active`、`success`、`warning`、`danger`、`info`、`hover`、`active`、`selected`、`focus`。
+- 字号：`12px`、`14px`、`16px`、`20px`、`24px`，后续大标题如确有需要可以增加 `28px`，但不能在页面中随手新增 13px、15px、17px 等散值。
+- 字重：`400` 用于正文，`500` 用于按钮、菜单和强调文本，`600` 用于标题，`700` 只用于少量强强调。
+- 间距：采用 4px 系统，至少提供 `4px`、`8px`、`12px`、`16px`、`24px`、`32px`、`48px`。组件内部小间距使用 4/8/12，组件 padding 使用 12/16/24，区块之间使用 24/32，页面大分区使用 40/48。
+- 圆角：控件默认 `8px` 以内，卡片默认不超过 `8px`，浮层和弹窗可以使用 `12px` 或 `16px`，不得为同类组件随手设置新圆角。
+- 阴影：默认组件不使用阴影，主要靠边框和层级区分；dropdown、tooltip、toast、modal 等浮层使用轻到中等阴影。
+- 动效：普通 hover 使用 `150ms`，浮层使用 `200ms`，页面局部切换使用 `200-300ms`，缓动统一使用 `ease-out` 或项目 token 中定义的 cubic-bezier。
+- 层级：为 dropdown、popover、toast、modal、drawer 定义明确 z-index token，禁止组件各自硬编码层级。
+
+颜色体系必须克制：大面积使用中性色，小面积使用品牌色；危险操作只使用 danger，成功状态只使用 success，警告状态只使用 warning。不能为每个功能随意新增语义不明的颜色。
+
+### 主题与样式技术
+
+初始化阶段默认采用 CSS variables + CSS Modules 管住样式：
+
+- `tokens.css` 定义 token 名称和默认值。
+- `themes.css` 通过 `data-theme="light"` 和 `data-theme="dark"` 覆盖 token 值。
+- 组件样式放在组件同目录或 `styles` 中的 CSS Module，组件通过 class 组合 token。
+- 暂不把 Tailwind 作为 M0 默认依赖；如果后续引入 Tailwind，必须把 Tailwind theme 映射到同一套 CSS variables，并通过 lint/review 禁止常态化使用 arbitrary values，例如 `rounded-[13px]`、`p-[17px]`、`bg-[#181818]`。
+
+Stylelint 要约束样式质量：
+
+- 禁止页面级 CSS 使用裸十六进制颜色、散乱 px 值和负 `letter-spacing`。
+- 允许在 `tokens.css` 和 `themes.css` 中定义 token 原始值。
+- 页面样式只能用于局部排版和组合，不能重新定义基础控件视觉。
+- 组件状态样式必须覆盖 hover、active、focus-visible、disabled、loading、selected/active、error、success 和 empty 中适用的状态。
+
+### 组件规范
+
+M0 至少建立这些基础组件或明确占位：
+
+- 操作：`Button`、`IconButton`。
+- 表单：`Input`、`Textarea`、`Select`、`Checkbox`、`Switch`。
+- 反馈：`Toast`、`Tooltip`、`Badge`、`LoadingState`、`EmptyState`。
+- 浮层：`Modal`、`Drawer`、`Dropdown`。
+- 导航与组织：`Tabs`、`Card`。
+- 布局：`AppShell`、`Sidebar`、`Topbar`。
+
+组件要求：
+
+- `Button` 至少支持 `primary`、`secondary`、`ghost`、`danger` variant，并覆盖 default、hover、active、disabled、loading、focus-visible 状态。
+- `Input` 和表单组件至少覆盖 default、hover、focus-visible、error、disabled 状态，错误文案由调用方传入，但视觉由组件统一。
+- `Modal` 和 `Drawer` 使用统一 overlay、焦点管理和关闭语义，不能由页面临时拼接。
+- `Toast` 统一 success、warning、danger、info 样式和动效。
+- `Card` 只作为独立内容单元、列表项或工具面板使用，不作为页面区块的通用包裹层，也不嵌套卡片。
+- `EmptyState` 和 `LoadingState` 使用统一 icon、文案密度和操作按钮位置，避免每个页面各写一套空状态。
+- 基础组件不绑定具体业务 API；业务页面通过 props、children 和 hooks 组合它们。
+
+### 图标规范
 
 - 图标使用 `lucide-react`。
 - 图标默认使用 rounded outline 风格，`strokeWidth={2}`，尺寸默认 `20px` 或由组件显式传入。
 - 禁止在页面中手写 SVG 图标；新图标必须从 `components/icons` 导出。
-- 基础控件以 8px 以内圆角为默认，不使用夸张圆角或装饰性渐变。
-- 颜色、间距、字号、边框和阴影必须通过 CSS custom properties 使用 token，不能在页面里散落魔法值。
-- 交互状态至少覆盖 default、hover、focus-visible、disabled、loading 和 selected/active。
 - 所有可点击图标按钮必须有可访问名称，必要时使用 `aria-label`。
-- 页面布局使用 `AppShell` 和 layout 组件组合，不在页面中重复写侧边栏、顶栏和主内容框架。
+- ESLint 要限制 `lucide-react` 的直接导入范围：只有 `components/icons` 可以直接导入 Lucide 图标，其他代码从项目 icon 出口使用。
 
-代码约束：
+### 页面布局规范
+
+Tauri/Web 桌面客户端采用固定应用壳：
+
+```text
+AppShell
+  Sidebar
+  Topbar / Toolbar
+  Main Content
+  Toast Layer
+```
+
+页面布局使用 `AppShell` 和 layout 组件组合，不在页面中重复写侧边栏、顶栏和主内容框架。
+
+常见页面模板：
+
+- 列表页：标题、操作按钮、筛选区、表格或列表、分页。
+- 详情页：返回按钮、标题区、信息区、操作区。
+- 设置页：左侧设置导航、右侧表单项。
+- 空状态：统一 icon、标题、描述和主操作按钮。
+- 设计系统页：`/design-system` 展示颜色、字体、按钮、输入框、卡片、弹窗、图标、空状态、加载状态和错误状态。
+
+页面不得通过大面积 hero、营销说明或装饰背景替代真实工作台。首屏必须是可扩展的产品工作区，保留资料库、讨论、归档助手和审核入口的结构位置。
+
+### 文案规范
+
+UI 文案默认使用中文，避免在同一工作流中混用 `Save`、`OK`、`完成`、`提交` 等风格不一致的表达。
+
+基础动词统一：
+
+- 保存、取消、删除、复制、导出、重试、了解更多。
+- 危险操作文案必须明确对象，例如“删除资料”优于“删除”。
+- 错误提示说明可行动原因，例如“保存失败，请检查网络后重试。”、“文件格式不支持。”、“该名称已存在，请换一个名称。”。
+
+文案不使用夸张语气、玩笑式错误提示或过度拟人化表达。工具类产品优先清晰、克制、可执行。
+
+### 代码约束
 
 - `components/ui` 组件必须是受控、可组合、可测试的基础组件，不绑定具体业务 API。
 - `components/layout` 可以依赖路由和当前用户展示状态，但不直接发起后端写操作。
 - `pages` 可以调用 hooks 和 API client，但不能直接导入 `packages/api-client/src/generated.ts`。
+- `pages` 不能直接调用裸 `fetch`；HTTP 请求通过 `@campus-agora/api-client` 或封装好的 hooks 进入。
 - 新增页面前优先复用已有 `ui` 和 `layout` 组件；确实需要新 UI primitive 时先加入 `components/ui`。
-- 初始 CI 要对前端运行 typecheck、lint、unit tests，并通过规则或 review 检查页面中没有手写重复基础控件。
-- `docs/development.md` 要记录组件新增规则、icon 使用方式和 token 修改流程。
+- 页面级样式只允许写组合布局、页面特有 grid/flex 和局部响应式约束；颜色、字号、间距、圆角、阴影必须来自 token。
+- 新增 token 必须先说明语义和使用场景，不能因为单个页面“看起来差一点”临时加散值。
+- 初始 CI 要对前端运行 typecheck、ESLint、Stylelint、unit tests 和 build，并通过规则或 review 检查页面中没有手写重复基础控件。
+- `docs/development.md` 要记录组件新增规则、icon 使用方式、token 修改流程、Style Guide 页面维护方式和 UI 文案约定。
 
 ## 数据库策略
 
@@ -423,15 +541,16 @@ apps/web/src/
 - `bun run api:types`
 - `bun run api:check`
 - `bun run typecheck`
+- `bun run lint:styles`
 - `cargo fmt --all --check`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo test --workspace`
 - `cargo sqlx migrate run --source crates/db/migrations`
 - `cargo sqlx prepare --workspace --check`
 
-CI 在 GitHub Actions 中拆为前端和后端两个 job：
+CI 在 GitHub Actions 中拆为前端、后端、桌面和 contract job：
 
-- 前端 job：安装 Bun，使用 `bun install --frozen-lockfile` 安装依赖，运行 api:types、typecheck、lint、test、build。
+- 前端 job：安装 Bun，使用 `bun install --frozen-lockfile` 安装依赖，运行 api:types、typecheck、lint、lint:styles、test、build。
 - 后端 job：安装固定 Rust toolchain，启动 PostgreSQL 16 服务，运行 fmt、clippy、test、migration smoke test、SQLx prepare check，并导出 OpenAPI contract。
 - Desktop job：对 `apps/desktop/src-tauri` 运行 `cargo check`，并检查 Tauri 权限配置。
 - Contract job：确认 `contracts/openapi.json` 与 `packages/api-client/src/generated.ts` 没有未提交的生成差异。
@@ -447,7 +566,7 @@ CI 在 GitHub Actions 中拆为前端和后端两个 job：
 Bun workspace 要求：
 
 - 根 `package.json` 声明 `workspaces: ["apps/*", "packages/*"]`。
-- 根脚本提供统一入口：`dev`、`build`、`test`、`lint`、`typecheck`、`api:types`、`api:check`。
+- 根脚本提供统一入口：`dev`、`build`、`test`、`lint`、`lint:styles`、`typecheck`、`api:types`、`api:check`。
 - 根脚本通过 `bun --filter` 或显式 `--cwd` 调用 `apps/web`、`apps/desktop` 与 `packages/api-client`，避免协作者需要记住子目录命令。
 - `apps/web` 通过 workspace dependency 引用 `@campus-agora/api-client`，不通过相对路径穿透包边界。
 - `apps/web/package.json` 只保留应用局部脚本和依赖；`apps/desktop/package.json` 只保留 Tauri 壳脚本；`packages/api-client/package.json` 只保留客户端局部脚本和依赖；跨项目质量门禁从根目录执行。
@@ -465,7 +584,7 @@ Bun workspace 要求：
 - `docs/api-contracts.md`：说明前后端接口 contract 的维护方式。
 - `docs/auth-permissions.md`：说明认证 provider、角色、权限策略、匿名语义和审计要求。
 - `docs/desktop.md`：说明 Tauri WebView、command bridge、权限配置和桌面端开发命令。
-- `docs/development.md`：说明前端组件系统、视觉 token、图标规范、开发命令和质量门禁。
+- `docs/development.md`：说明前端组件系统、视觉 token、图标规范、Style Guide 页面、UI 文案约定、开发命令和质量门禁。
 - `docs/milestones.md`：说明项目推进阶段、交付物和退出条件。
 
 ## Git Ignore 与 LFS 策略
@@ -508,6 +627,8 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 - Rust API 测试验证健康检查和 meta 接口。
 - Rust contract 测试验证 OpenAPI 导出包含初始化接口和响应 schema。
 - 前端组件测试验证 `AppShell`、`Topbar`、`Sidebar` 和至少两个 `components/ui` primitive 能渲染核心状态。
+- 前端 Style Guide 页面测试验证 `/design-system` 能渲染颜色、字体、按钮、输入框、卡片、空状态、加载状态和错误状态展示区。
+- 前端 lint 测试或 Stylelint 配置验证页面样式不能使用裸颜色、散乱 px 值和重复基础控件样式。
 - `packages/api-client` 测试验证成功响应、失败响应、错误归一化和 requestId 透传。
 - `apps/desktop/src-tauri` 至少通过 `cargo check`，并验证权限配置文件存在。
 - 前端类型生成检查验证 `packages/api-client` 没有偏离 `contracts/openapi.json`。
@@ -520,7 +641,7 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 
 1. 新功能先补领域模型或 API 契约测试。
 2. 后端变更必须跑 fmt、clippy、test。
-3. 前端变更必须跑 typecheck、lint、test、build。
+3. 前端变更必须跑 typecheck、lint、lint:styles、test、build。
 4. API 变更必须更新 OpenAPI contract、生成前端类型，并说明兼容性影响。
 5. 权限相关变更必须更新 `docs/auth-permissions.md`，并补充后端 policy 测试。
 6. 数据库结构变更必须新增 migration，不直接改历史 migration。
@@ -566,7 +687,7 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 
 初始里程碑：
 
-- `M0 Repository Foundation`：完成 monorepo、Bun 前端、前端视觉系统、基础组件系统、Tauri WebView 壳、TypeScript API client、Rust workspace、OpenAPI contract、CI、lint、测试、`.gitignore`、`.gitattributes`、AI LOG、LFS 文档、权限文档和协作规范。退出条件是新成员能按 README 跑通前端、桌面壳、后端、测试和生成命令。
+- `M0 Repository Foundation`：完成 monorepo、Bun 前端、前端视觉系统、基础组件系统、`/design-system` Style Guide 页面、Tauri WebView 壳、TypeScript API client、Rust workspace、OpenAPI contract、CI、ESLint、Stylelint、测试、`.gitignore`、`.gitattributes`、AI LOG、LFS 文档、权限文档和协作规范。退出条件是新成员能按 README 跑通前端、桌面壳、后端、测试、样式检查和生成命令。
 - `M1 Identity, Permissions And Shell`：完成认证 provider 抽象、模拟校园认证、用户模型、系统角色、资源角色、应用导航、登录态和基础权限边界。退出条件是前端能基于后端 API 完成登录态展示，后端有认证和权限策略测试。
 - `M2 Knowledge Archive Core`：完成资料帖发布、编辑、标签、版本历史、纠错入口和基础列表。退出条件是一篇资料能从创建到更新再到版本追踪完整闭环。
 - `M3 Discussion To Archive Loop`：完成讨论帖、评论、精华回复和从讨论沉淀到资料的工作流。退出条件是高质量评论能被引用或整理进资料帖。
