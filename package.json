@@ -1,6 +1,11 @@
 {
   "name": "campus-agora",
   "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/114August514/campus-agora"
+  },
   "packageManager": "bun@1.3.14",
   "workspaces": [
     "apps/*",

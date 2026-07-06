@@ -2,8 +2,8 @@
 name = "campus-agora-desktop"
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
-repository = "https://github.com/campus-agora/campus-agora"
+license = "Apache-2.0"
+repository = "https://github.com/114August514/campus-agora"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
