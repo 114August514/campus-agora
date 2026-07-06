@@ -14,6 +14,7 @@
 - 前端依赖、脚本和锁文件使用 Bun 管理，减少 Node 工具链分歧。
 - 后端使用 Rust 生态，保证领域模型、状态流转、权限和数据边界更严格。
 - CI 同时覆盖前端和后端的格式、lint、测试与构建。
+- 工具链版本固定在仓库内，避免本地和 CI 使用不同的 Bun、Rust 或 PostgreSQL 版本。
 - 文档明确项目定位、开发命令、质量门禁和协作方式。
 - 初始代码只实现工程可运行闭环和核心领域骨架，不提前实现完整论坛产品。
 
@@ -85,6 +86,7 @@ campus-agora/
   Cargo.toml
   bun.lock
   package.json
+  rust-toolchain.toml
   README.md
 ```
 
@@ -141,6 +143,18 @@ API 初始化阶段提供：
 - 前端使用 `openapi-typescript` 生成类型。
 - 前端请求封装使用轻量 fetch wrapper 或 `openapi-fetch`，保持请求和响应类型来自同一份 contract。
 
+共享协议约定：
+
+- JSON 字段名使用 `camelCase`。
+- 枚举值使用小写 `snake_case`，例如 `pending_review`。
+- 时间字段使用 UTC ISO 8601 字符串，例如 `2026-07-06T02:30:00Z`。
+- ID 字段使用 UUID 字符串。
+- 错误响应统一为 `ErrorResponse`：`code`、`message`、`requestId`、`details`。
+- 列表分页统一为 `PaginatedResponse<T>`：`items`、`page`、`pageSize`、`totalItems`、`totalPages`。
+- 写操作成功后返回资源当前状态，不只返回布尔值。
+- 认证失败使用 `401`，权限不足使用 `403`，资源不存在使用 `404`，审核或状态流转冲突使用 `409`。
+- 每个响应都应能通过日志或响应头关联 `requestId`，方便排查前后端对接问题。
+
 接口变更流程：
 
 1. 后端先更新 DTO、路由和 API 测试。
@@ -185,13 +199,37 @@ API 初始化阶段提供：
 - `Maintainer`：资料维护者，可以更新指定资料帖、处理纠错、发布新版本。
 - `Reviewer`：审核者，可以通过或拒绝指定范围内的内容。
 
+角色不是全局线性等级，不能使用未定义的“及以上”推断权限。权限必须由 action/resource 矩阵决定；系统角色、组织成员关系、资源角色和资源状态共同决定是否允许操作。
+
+矩阵判定规则：
+
+- `read_public` 对未登录用户开放，其余写操作都要求已认证用户。
+- `Admin` 对管理类操作有系统级授权，但仍必须满足额外约束，例如不能移除最后一个管理员。
+- 当 `Allowed resource roles` 为 `none` 时，只检查系统角色和额外约束。
+- 当 `Allowed resource roles` 不为 `none` 时，用户必须拥有列出的系统角色之一，并拥有对应资源角色或满足额外约束中的组织/审核范围。
+- 权限拒绝默认返回 `403`；资源不存在或用户不可见时返回 `404`，避免泄露私有资源存在性。
+
+初始权限矩阵：
+
+| Action | Resource | Allowed system roles | Allowed resource roles | Extra constraints | Audit |
+| --- | --- | --- | --- | --- | --- |
+| `read_public` | published post/comment | `Guest`, `Student`, `OrganizationMember`, `Moderator`, `Admin` | none | resource is public and published | no |
+| `create_discussion` | discussion post | `Student`, `OrganizationMember`, `Moderator`, `Admin` | none | user is authenticated | no |
+| `create_knowledge_draft` | knowledge post draft | `Student`, `OrganizationMember`, `Moderator`, `Admin` | none | user is authenticated | no |
+| `edit_own_draft` | draft post | `Student`, `OrganizationMember`, `Moderator`, `Admin` | `Author` | post status is `Draft` or `Rejected` | no |
+| `update_published_knowledge` | knowledge post | `Moderator`, `Admin` | `Maintainer` | update creates a new `post_revisions` row | yes |
+| `maintain_organization_content` | organization post/page | `OrganizationMember`, `Moderator`, `Admin` | `Maintainer` | user belongs to the organization or has moderation scope | yes |
+| `review_content` | pending post/comment | `Moderator`, `Admin` | `Reviewer` | reviewer scope matches board or organization | yes |
+| `change_moderation_status` | post/comment | `Moderator`, `Admin` | `Reviewer` | transition must be valid for current status | yes |
+| `manage_roles` | user/organization roles | `Admin` | none | cannot remove last admin | yes |
+
 权限策略示例：
 
-- 只有 `Student` 及以上可以发布讨论和提交资料草稿。
+- 只有矩阵允许的已认证用户可以发布讨论和提交资料草稿。
 - 只有 `Author` 或 `Maintainer` 可以编辑资料内容；已发布资料的更新必须形成 `post_revisions`。
 - 只有 `Moderator` 或指定 `Reviewer` 可以改变审核状态。
 - 匿名讨论仍绑定真实用户 ID，仅在公开展示层匿名；后台审核和风控必须可追溯。
-- 组织资料必须由 `OrganizationMember` 或更高权限维护。
+- 组织资料必须由具备组织成员关系的 `OrganizationMember`、对应 `Maintainer`、`Moderator` 或 `Admin` 维护。
 - `Admin` 操作必须写入审计事件。
 
 权限实现原则：
@@ -220,6 +258,15 @@ API 初始化阶段提供：
 
 初始化使用 PostgreSQL。`crates/db/migrations` 放置 SQLx migration。
 
+数据库和 SQLx 校验策略：
+
+- CI 使用 PostgreSQL 16 服务运行 migration smoke test。
+- 后端测试在 CI 中设置 `DATABASE_URL`，至少验证 migration 可以应用到空库。
+- 使用 SQLx query macros 时，必须提交 `.sqlx/` 离线元数据，并运行 `cargo sqlx prepare --workspace --check`。
+- `.gitignore` 不能忽略 `.sqlx/`；SQLx 离线元数据属于可审查 contract。
+- 如果某个 crate 暂时只使用运行时 SQL 或 migration 文件，仍要在 CI 运行 `sqlx migrate run`。
+- 历史 migration 一旦进入主分支，不直接修改；新增 schema 变化必须追加 migration。
+
 初始 migration 可以创建可演进的基础表：
 
 - `users`
@@ -243,20 +290,38 @@ API 初始化阶段提供：
 - `bun run build`
 - `bun run api:types`
 - `bun run api:check`
+- `bun run typecheck`
 - `cargo fmt --all --check`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo test --workspace`
+- `cargo sqlx migrate run --source crates/db/migrations`
+- `cargo sqlx prepare --workspace --check`
 
 CI 在 GitHub Actions 中拆为前端和后端两个 job：
 
 - 前端 job：安装 Bun，使用 `bun install --frozen-lockfile` 安装依赖，运行 api:types、typecheck、lint、test、build。
-- 后端 job：安装 Rust stable，运行 fmt、clippy、test，并导出 OpenAPI contract。
+- 后端 job：安装固定 Rust toolchain，启动 PostgreSQL 16 服务，运行 fmt、clippy、test、migration smoke test、SQLx prepare check，并导出 OpenAPI contract。
 - Contract job：确认 `contracts/openapi.json` 与 `apps/web/src/api/generated.ts` 没有未提交的生成差异。
+
+工具链固定：
+
+- `rust-toolchain.toml` 固定 Rust stable channel 和必要组件，例如 `rustfmt`、`clippy`。
+- 根 `package.json` 使用 `packageManager` 声明 Bun 版本。
+- GitHub Actions 使用同一 Bun 版本和 Rust toolchain。
+- 本地开发文档明确 PostgreSQL 16 为默认数据库版本。
+- Rust crate 在各自 `Cargo.toml` 统一使用 2021 edition，后续升级 edition 必须一次性更新 workspace。
+
+Bun workspace 要求：
+
+- 根 `package.json` 声明 `workspaces: ["apps/*"]`。
+- 根脚本提供统一入口：`dev`、`build`、`test`、`lint`、`typecheck`、`api:types`、`api:check`。
+- 根脚本通过 `bun --filter` 或显式 `--cwd apps/web` 调用前端子项目，避免协作者需要记住子目录命令。
+- `apps/web/package.json` 只保留前端局部脚本和依赖，跨项目质量门禁从根目录执行。
 
 本地协作文件：
 
 - `.editorconfig`：统一换行、缩进和末尾换行。
-- `.gitignore`：忽略构建产物、依赖目录、环境文件、覆盖率输出、临时目录和 SQLx 本地缓存。
+- `.gitignore`：忽略构建产物、依赖目录、环境文件、覆盖率输出、临时目录、数据库 dump 和日志文件，但不忽略 `.sqlx/`。
 - `.gitattributes`：声明 Git LFS 跟踪范围，只跟踪确实不适合进入普通 Git 历史的大型二进制资源。
 - `CONTRIBUTING.md`：说明分支、提交、测试和 PR 前检查。
 - `AGENTS.md`：说明后续 agent 或协作者在本仓库里的工作规范。
@@ -278,17 +343,25 @@ CI 在 GitHub Actions 中拆为前端和后端两个 job：
 - Bun 本地缓存或调试输出。
 - 测试覆盖率：`coverage/`、`apps/web/coverage/`。
 - 环境变量：`.env`、`.env.*`，但保留 `.env.example`。
-- SQLx 本地缓存：`.sqlx/`。
+- 临时数据库 dump、日志文件和本地 scratch 文件。
 - 编辑器、系统文件和临时目录。
+- 不忽略 `.sqlx/`，因为使用 SQLx query macros 时它是需要提交的离线校验元数据。
 
-Git LFS 只用于大型二进制资产，初始 `.gitattributes` 建议覆盖：
+Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径限定，不能按全局扩展名捕获所有图片或字体。
 
-- 设计源文件：`*.psd`、`*.ai`、`*.fig`。
-- 大型图片：`*.png`、`*.jpg`、`*.jpeg`、`*.webp`、`*.avif`。
-- 音视频和字体：`*.mp4`、`*.mov`、`*.webm`、`*.ttf`、`*.otf`、`*.woff`、`*.woff2`。
-- 压缩包和模型文件：`*.zip`、`*.tar.gz`、`*.onnx`、`*.safetensors`。
+初始 LFS 路径：
 
-禁止默认把源码、Markdown、SQL migration、JSON、SVG、lockfile 和小型配置文件放进 LFS。SVG 默认作为可审查文本资源进入普通 Git，除非后续明确存在大型生成 SVG 资产。
+- `design/lfs/**`
+- `assets/lfs/**`
+- `docs/assets/lfs/**`
+
+允许放入这些路径的内容：
+
+- 设计源文件，例如 `.psd`、`.ai`、`.fig`。
+- 大型图片、视频、字体、压缩包和模型文件。
+- 不适合普通 Git diff 审查且超过项目约定大小阈值的二进制资源。
+
+禁止默认把源码、Markdown、SQL migration、JSON、SVG、lockfile、小型 UI 图片、小型字体和配置文件放进 LFS。常规前端静态资源默认进入普通 Git；只有确实大到影响仓库体积或 diff 审查的资产才移动到 LFS 路径。
 
 ## 测试策略
 
