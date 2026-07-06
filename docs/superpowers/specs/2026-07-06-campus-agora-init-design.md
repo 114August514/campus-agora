@@ -143,7 +143,18 @@ campus-agora/
   bun.lock
   mkdocs.yml
   package.json
-  requirements-docs.txt
+  pyproject.toml
+  scripts/
+    README.md
+    build.sh
+    ci/
+      frontend.sh
+      backend.sh
+      desktop.sh
+      contract.sh
+      docs.sh
+      container.sh
+  uv.lock
   rust-toolchain.toml
   README.md
 ```
@@ -1030,7 +1041,7 @@ M0.2 不引入完整截图回归体系，但必须建立页面验收标准：
 - `cargo sqlx migrate run --source crates/db/migrations`
 - `cargo sqlx prepare --workspace --check`
 - `cargo run -p campus_agora_api --bin export-openapi -- contracts/openapi.json`
-- `mkdocs build --strict`
+- `uv run --locked mkdocs build --strict`
 
 这些命令不要求在 M0 一次性全部成为硬门禁。M0 只保留能证明仓库可运行的最小检查；M0.1 再把 contract、类型生成、数据库、lint、测试、构建、文档发布和镜像检查收敛到 CI。
 
@@ -1038,13 +1049,13 @@ M0.2 不引入完整截图回归体系，但必须建立页面验收标准：
 
 - `docker build -f Dockerfile.api .`
 
-CI 在 GitHub Actions 中拆为前端、后端、桌面、contract、docs 和 container job：
+CI 在 GitHub Actions 中拆为前端、后端、桌面、contract、docs 和 container job。`.github/workflows/ci.yml` 保持一个 workflow 文件；每个 job 调用 `scripts/ci/*.sh`，让本地和 CI 使用同一组命令。只有当某类检查需要不同触发条件、权限边界、部署目标、缓存策略或定时节奏时，才拆成多个 workflow 文件。
 
-- 前端 job：安装 Bun，使用 `bun install --frozen-lockfile` 安装依赖，运行 api:types、typecheck、lint、lint:styles、test、build。
+- 前端 job：安装 Bun，使用 `bun install --frozen-lockfile` 安装依赖，运行 typecheck、lint、lint:styles、test、build。contract 生成漂移由 contract job 负责，避免前端 job 隐式依赖 Rust。
 - 后端 job：安装固定 Rust toolchain，启动 PostgreSQL 16 服务，运行 fmt、check、clippy、test、migration smoke test、SQLx prepare check，并导出 OpenAPI contract。
 - Desktop job：对 `apps/desktop/src-tauri` 运行 `cargo check`，并检查 Tauri 权限配置。
 - Contract job：确认 `contracts/openapi.json` 与 `packages/api-client/src/generated.ts` 没有未提交的生成差异，并运行 API client 与 mock handler 的类型检查。
-- Docs job：安装 `requirements-docs.txt` 中固定的 MkDocs 依赖，运行 `mkdocs build --strict`，并确认 `superpowers/specs/**` 不进入发布站点。
+- Docs job：安装 uv，按 `pyproject.toml` 和 `uv.lock` 中固定的 MkDocs 依赖运行 `uv run --locked mkdocs build --strict`，并确认 `superpowers/specs/**` 不进入发布站点。
 - Container job：如果 CI runner 支持 Docker，运行 `docker build -f Dockerfile.api .`，验证 API Server 可构建为部署镜像。
 
 工具链固定：
@@ -1059,7 +1070,7 @@ CI 在 GitHub Actions 中拆为前端、后端、桌面、contract、docs 和 co
 Bun workspace 要求：
 
 - 根 `package.json` 声明 `workspaces: ["apps/*", "packages/*"]`。
-- 根脚本提供统一入口：`dev`、`build`、`test`、`lint`、`lint:styles`、`typecheck`、`api:types`、`api:check`。
+- 根脚本提供统一入口：`dev`、`build`、`build:all`、`test`、`lint`、`lint:styles`、`typecheck`、`api:types`、`api:check`、`ci:*`。
 - 根脚本通过 `bun --filter` 或显式 `--cwd` 调用 `apps/web`、`apps/desktop` 与 `packages/api-client`，避免协作者需要记住子目录命令。
 - `apps/web` 通过 workspace dependency 引用 `@campus-agora/api-client`，不通过相对路径穿透包边界。
 - `apps/web/package.json` 只保留应用局部脚本和依赖；`apps/desktop/package.json` 只保留 Tauri 壳脚本；`packages/api-client/package.json` 只保留客户端局部脚本和依赖；跨项目质量门禁从根目录执行。
@@ -1070,7 +1081,8 @@ Bun workspace 要求：
 - `.gitignore`：忽略构建产物、依赖目录、环境文件、覆盖率输出、临时目录、数据库 dump 和日志文件，但不忽略 `.sqlx/`。
 - `.gitattributes`：声明 Git LFS 跟踪范围，只跟踪确实不适合进入普通 Git 历史的大型二进制资源。
 - `mkdocs.yml`：定义文档站点名称、`docs_dir`、导航结构、校验策略和发布排除规则。
-- `requirements-docs.txt`：固定 MkDocs 及后续文档插件版本，避免本地和 CI 构建结果漂移。
+- `pyproject.toml` 和 `uv.lock`：固定 MkDocs 及后续文档插件版本，避免本地和 CI 构建结果漂移。
+- `scripts/README.md` 和 `scripts/ci/*.sh`：记录仓库自动化脚本约定，并让 CI job 与本地复现共用同一批命令。
 - `CONTRIBUTING.md`：说明分支、提交、测试和 PR 前检查。
 - `AGENTS.md`：说明后续 agent 或协作者在本仓库里的工作规范。
 - `docs/index.md`：作为 MkDocs 首页，说明 Campus Agora 是什么、当前阶段、快速入口和贡献方式。
@@ -1108,8 +1120,8 @@ MkDocs 发布规则：
 - `nav` 只暴露 `index.md`、`product/`、`architecture/`、`engineering/`、`operations/` 和 `ai-log/` 下的正式文档。
 - `nav` 不包含 `superpowers/specs/`；spec 是设计过程记录，不进入站点导航。
 - 发布构建必须排除 `superpowers/specs/**`。如果当前 MkDocs 版本支持 `exclude_docs`，在 `mkdocs.yml` 中直接排除；否则必须在发布脚本中用等价方式排除，或把 specs 移到 MkDocs `docs_dir` 之外。
-- CI 提供文档检查命令，例如 `mkdocs build --strict`，确保导航、链接和 Markdown 基本结构可发布。
-- MkDocs 依赖通过 `requirements-docs.txt` 固定；如果后续引入主题或插件，也必须进入该文件并通过 CI 验证。
+- CI 提供文档检查命令，例如 `uv run --locked mkdocs build --strict`，确保导航、链接和 Markdown 基本结构可发布。
+- MkDocs 依赖通过 `pyproject.toml` 和 `uv.lock` 固定；如果后续引入主题或插件，也必须进入该文件并通过 CI 验证。
 - 新增正式文档必须同时更新 `mkdocs.yml` 的 `nav`；新增迭代 spec 不需要进入 MkDocs nav。
 - Markdown 文件名使用小写 kebab-case 或稳定语义名，目录用复数或领域名；避免后续重命名造成外链失效。
 
@@ -1172,8 +1184,8 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 - `apps/desktop/src-tauri` 至少通过 `cargo check`，并验证权限配置文件存在。
 - Tauri 权限检查验证 M0 不开放 shell command、任意文件系统访问或未记录用途的 capability。
 - 前端类型生成检查验证 `packages/api-client` 没有偏离 `contracts/openapi.json`。
-- 文档检查验证 `docs/index.md`、`mkdocs.yml`、`requirements-docs.txt`、`docs/product/overview.md`、`docs/product/privacy.md`、`docs/engineering/quality.md`、`docs/operations/overview.md` 和 `docs/operations/security.md` 存在，并分别覆盖首页入口、发布导航、文档依赖、产品范围、数据清单、可访问性/UI 回归/性能预算、环境隔离/备份恢复/告警 runbook、secret 管理/限流/上传安全边界。
-- 文档发布检查运行 `mkdocs build --strict`，并验证 `superpowers/specs/**` 不出现在发布站点导航或站点产物中。
+- 文档检查验证 `docs/index.md`、`mkdocs.yml`、`pyproject.toml`、`uv.lock`、`docs/product/overview.md`、`docs/product/privacy.md`、`docs/engineering/quality.md`、`docs/operations/overview.md` 和 `docs/operations/security.md` 存在，并分别覆盖首页入口、发布导航、文档依赖、产品范围、数据清单、可访问性/UI 回归/性能预算、环境隔离/备份恢复/告警 runbook、secret 管理/限流/上传安全边界。
+- 文档发布检查运行 `uv run --locked mkdocs build --strict`，并验证 `superpowers/specs/**` 不出现在发布站点导航或站点产物中。
 
 不在初始化阶段引入端到端浏览器测试。等真实发布、搜索和审核流程出现后再加入 Playwright。
 
@@ -1194,7 +1206,7 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 11. 数据清单、保留期限、软删除/硬删除、导出/删除、匿名语义、审计事件或第三方共享变化必须更新 `docs/product/privacy.md`；涉及风险处置时同步更新 `docs/operations/security.md`。
 12. 可访问性、UI 回归、性能预算、seed 数据、feature flag、版本策略或依赖升级策略变化必须更新 `docs/engineering/quality.md`；涉及开发流程时同步更新 `docs/engineering/development.md`。
 13. `/api/v1/meta` capability flags 变化必须更新 OpenAPI contract、`packages/api-client` 类型、mock handler、前端消费点和 `docs/architecture/api-contracts.md`。
-14. 新增、移动或删除正式文档必须同步更新 `mkdocs.yml` nav，并运行 `mkdocs build --strict`；`docs/superpowers/specs/**` 只作为迭代记录，不加入发布导航。
+14. 新增、移动或删除正式文档必须同步更新 `mkdocs.yml` nav，并运行 `uv run --locked mkdocs build --strict`；`docs/superpowers/specs/**` 只作为迭代记录，不加入发布导航。
 15. 由 agent 推进的非平凡任务必须更新 AI LOG：开始或发现任务时写入 `docs/ai-log/todo.md`，完成后写入 `docs/ai-log/done.md`。
 16. 涉及内容治理、隐私、匿名、AI 输出、审计或数据生命周期的变更必须在 PR 描述中说明风险边界。
 
@@ -1240,7 +1252,7 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 初始里程碑：
 
 - `M0 Repository Skeleton`：只完成能跑起来的仓库骨架。交付物包括 monorepo 目录、Bun workspace、React/Vite Web 应用壳、Tauri WebView 壳、Rust `domain/application/db/api` crate 骨架、最小 `AppShell`、基础 design tokens 占位、`/healthz`、最小 `/api/v1/meta`、README 本地启动命令、工具链锁定、`.gitignore`、`.gitattributes` 和最小 CI smoke check。退出条件是新成员能按 README 安装依赖、启动 Web 壳、运行 API Server、看到健康检查和 meta 响应，并能执行最小前端 typecheck、后端 cargo check、桌面 cargo check。
-- `M0.1 Contract And Quality Gates`：在 M0 骨架上补齐工程质量闭环。交付物包括 OpenAPI 导出、TypeScript API client 生成、API client request wrapper、mock 联调边界、统一错误模型、requestId/tracing、`/readyz`、`.env.example`、初始 migration、PostgreSQL migration smoke test、SQLx 校验策略、ESLint、Stylelint、前后端测试、`mkdocs build --strict`、Dockerfile.api 和完整 CI jobs。退出条件是 CI 能验证 contract 生成无差异、API client 类型检查、mock 类型检查、migration smoke、前端 lint/typecheck/test/build、后端 fmt/check/clippy/test、桌面权限检查、MkDocs 发布检查和 API Server 镜像构建检查。
+- `M0.1 Contract And Quality Gates`：在 M0 骨架上补齐工程质量闭环。交付物包括 OpenAPI 导出、TypeScript API client 生成、API client request wrapper、mock 联调边界、统一错误模型、requestId/tracing、`/readyz`、`.env.example`、初始 migration、PostgreSQL migration smoke test、SQLx 校验策略、ESLint、Stylelint、前后端测试、`uv run --locked mkdocs build --strict`、Dockerfile.api、`scripts/ci/*.sh` 和完整 CI jobs。退出条件是 CI 能验证 contract 生成无差异、API client 类型检查、mock 类型检查、migration smoke、前端 lint/typecheck/test/build、后端 fmt/check/clippy/test、桌面权限检查、MkDocs 发布检查和 API Server 镜像构建检查。
 - `M0.2 Governance Docs And Boundaries`：补齐协作、治理和后续风险边界，不扩大运行时功能。交付物包括 `docs/product/overview.md`、`docs/product/privacy.md`、`docs/product/milestones.md`、`docs/architecture/*`、`docs/engineering/*`、`docs/operations/*`、AI LOG、LFS 文档、权限文档、后端规范、开发规范、质量规范、软删除/审计事件边界、seed/mock 数据边界、feature flag 规范、Tauri 权限说明和 MkDocs nav 维护规则。退出条件是正式文档分层清楚，`docs/superpowers/specs/**` 不进入发布站点，后续每个高风险方向都有文档入口、协作规则和验收检查。
 - `M1 Identity, Permissions And Shell`：完成认证 provider 抽象、模拟校园认证、用户模型、系统角色、资源角色、应用导航、登录态和基础权限边界。退出条件是前端能基于后端 API 完成登录态展示，后端有认证和权限策略测试。
 - `M2 Knowledge Archive Core`：完成资料帖发布、编辑、标签、版本历史、纠错入口和基础列表。退出条件是一篇资料能从创建到更新再到版本追踪完整闭环。
