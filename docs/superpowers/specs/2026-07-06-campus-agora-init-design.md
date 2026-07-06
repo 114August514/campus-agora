@@ -72,6 +72,7 @@ campus-agora/
     api-contracts.md
     architecture.md
     development.md
+    milestones.md
   .github/
     workflows/
       ci.yml
@@ -90,7 +91,7 @@ campus-agora/
 - `crates/domain`：领域类型、状态枚举、输入校验和无需数据库的业务规则。
 - `crates/db`：数据库连接、migration、repository 边界和 SQLx 类型。
 - `crates/api`：HTTP 入口、路由、中间件、错误响应和依赖注入。
-- `docs`：项目定位、架构说明、开发命令和协作约定。
+- `docs`：项目定位、架构说明、开发命令、里程碑和协作约定。
 
 ## 后端边界
 
@@ -206,6 +207,7 @@ CI 在 GitHub Actions 中拆为前端和后端两个 job：
 - `AGENTS.md`：说明后续 agent 或协作者在本仓库里的工作规范。
 - `docs/lfs.md`：说明 Git LFS 的启用、检查和禁止滥用规则。
 - `docs/api-contracts.md`：说明前后端接口 contract 的维护方式。
+- `docs/milestones.md`：说明项目推进阶段、交付物和退出条件。
 
 ## Git Ignore 与 LFS 策略
 
@@ -253,6 +255,28 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 建议覆盖：
 4. API 变更必须更新 OpenAPI contract、生成前端类型，并说明兼容性影响。
 5. 数据库结构变更必须新增 migration，不直接改历史 migration。
 6. 涉及内容治理、隐私、匿名和 AI 输出的变更必须在 PR 描述中说明风险边界。
+
+## Milestone 策略
+
+初始化仓库时要提供 `docs/milestones.md`，作为本地可审查的推进计划。后续如果启用 GitHub Issues，再把这些阶段同步为 GitHub Milestones；本地文档仍保留为项目事实来源，避免仓库脱离项目管理平台后丢失路线图。
+
+初始里程碑：
+
+- `M0 Repository Foundation`：完成 monorepo、Bun 前端、Rust workspace、OpenAPI contract、CI、lint、测试、`.gitignore`、`.gitattributes`、LFS 文档和协作规范。退出条件是新成员能按 README 跑通前端、后端、测试和生成命令。
+- `M1 Identity And Shell`：完成模拟校园认证、用户模型、应用导航、登录态和基础权限边界。退出条件是前端能基于真实 API 完成登录态展示，后端有认证相关测试。
+- `M2 Knowledge Archive Core`：完成资料帖发布、编辑、标签、版本历史、纠错入口和基础列表。退出条件是一篇资料能从创建到更新再到版本追踪完整闭环。
+- `M3 Discussion To Archive Loop`：完成讨论帖、评论、精华回复和从讨论沉淀到资料的工作流。退出条件是高质量评论能被引用或整理进资料帖。
+- `M4 Moderation And AI Drafting`：完成基础审核后台、风险状态、AI 归档草稿和摘要生成占位接口。退出条件是 AI 结果必须可追溯、可编辑、可审核。
+- `M5 Search And Demo Readiness`：完成全文搜索、收藏、引用、贡献展示和比赛演示脚本。退出条件是核心答辩路径可稳定演示，并通过完整 CI。
+
+每个 milestone 都要记录：
+
+- 目标。
+- 主要用户价值。
+- 交付物。
+- 明确不做的内容。
+- 退出条件。
+- 风险和需要确认的问题。
 
 ## 后续扩展顺序
 
