@@ -6,6 +6,7 @@ apps/web/dist/
 packages/*/dist/
 apps/web/coverage/
 coverage/
+site/
 
 # Rust outputs
 target/
@@ -21,6 +22,7 @@ apps/desktop/src-tauri/gen/
 
 # Local caches and logs
 .bun/
+.venv/
 *.log
 *.tmp
 tmp/

@@ -11,6 +11,8 @@ campus_agora_application = { path = "../application" }
 campus_agora_db = { path = "../db" }
 campus_agora_domain = { path = "../domain" }
 serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
 tokio.workspace = true
 tower-http.workspace = true
 tracing.workspace = true

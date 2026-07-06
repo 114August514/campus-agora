@@ -16,11 +16,23 @@
     "dev:web": "bun --cwd apps/web dev",
     "dev:api": "cargo run -p campus_agora_api",
     "dev:desktop": "bun --cwd apps/desktop dev",
+    "api:types": "cargo run -p campus_agora_api --bin export-openapi -- contracts/openapi.json && bun --cwd packages/api-client generate",
+    "api:check": "bun run api:types && git diff --exit-code contracts/openapi.json packages/api-client/src/generated.ts",
+    "db:migrate": "cargo sqlx migrate run --source crates/db/migrations",
+    "docs:build": "uv run --locked mkdocs build --strict",
+    "docker:api": "docker build -f Dockerfile.api .",
+    "ci:frontend": "./scripts/ci/frontend.sh",
+    "ci:backend": "./scripts/ci/backend.sh",
+    "ci:desktop": "./scripts/ci/desktop.sh",
+    "ci:contract": "./scripts/ci/contract.sh",
+    "ci:docs": "./scripts/ci/docs.sh",
+    "ci:container": "./scripts/ci/container.sh",
     "typecheck": "bun --cwd packages/api-client typecheck && bun --cwd apps/web typecheck",
     "lint": "bun --cwd apps/web lint",
     "lint:styles": "bun --cwd apps/web lint:styles",
-    "test": "bun --cwd apps/web test && cargo test --workspace",
-    "build": "bun --cwd packages/api-client build && bun --cwd apps/web build"
+    "test": "bun --cwd packages/api-client test && bun --cwd apps/web test && cargo test --workspace",
+    "build": "bun --cwd packages/api-client build && bun --cwd apps/web build",
+    "build:all": "./scripts/build.sh"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4"

@@ -1,0 +1,21 @@
+site_name: Campus Agora
+site_description: Campus Agora engineering and collaboration documentation
+docs_dir: docs
+site_dir: site
+strict: true
+exclude_docs: |
+  superpowers/specs/**
+  superpowers/plans/**
+
+nav:
+  - Home: index.md
+  - Architecture:
+      - API Contracts: architecture/api-contracts.md
+  - Engineering:
+      - Development: engineering/development.md
+      - Quality Gates: engineering/quality.md
+  - Operations:
+      - Deployment: operations/deployment.md
+  - AI Log:
+      - Todo: ai-log/todo.md
+      - Done: ai-log/done.md
