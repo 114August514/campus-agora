@@ -52,6 +52,24 @@ campus-agora/
   apps/
     web/
       src/
+        components/
+          icons/
+          layout/
+            AppShell.tsx
+            Sidebar.tsx
+            Topbar.tsx
+          ui/
+            Button.tsx
+            Card.tsx
+            Input.tsx
+            Modal.tsx
+        hooks/
+        lib/
+        pages/
+        styles/
+          globals.css
+          themes.css
+          tokens.css
       index.html
       package.json
       vite.config.ts
@@ -308,6 +326,66 @@ TypeScript API client 职责：
 - 由 OpenAPI 生成类型约束的 API client package。
 - 基础样式和响应式布局。
 
+## 前端视觉系统与组件系统
+
+`apps/web` 必须优先维护一套视觉系统和组件系统，页面层不直接手画重复 UI。
+
+目录结构：
+
+```text
+apps/web/src/
+  styles/
+    tokens.css
+    themes.css
+    globals.css
+  components/
+    ui/
+      Button.tsx
+      Input.tsx
+      Modal.tsx
+      Card.tsx
+    layout/
+      Sidebar.tsx
+      Topbar.tsx
+      AppShell.tsx
+    icons/
+  pages/
+  hooks/
+  lib/
+```
+
+职责：
+
+- `styles/tokens.css`：集中定义颜色、间距、字号、圆角、阴影、边框、z-index、动效时长等设计 token。
+- `styles/themes.css`：定义 light/dark 或后续主题变量，只覆盖 token 值，不写组件选择器。
+- `styles/globals.css`：放 reset、基础排版、body/root 样式和全局可访问性样式。
+- `components/ui`：提供基础可组合组件，例如 `Button`、`Input`、`Modal`、`Card`。页面不得重复实现按钮、输入框、弹窗和卡片样式。
+- `components/layout`：提供 `AppShell`、`Sidebar`、`Topbar` 等应用框架组件。
+- `components/icons`：封装项目使用的 icon 出口，统一 Lucide 配置。
+- `pages`：只负责页面组合和数据连接，不承载基础 UI 样式实现。
+- `hooks`：放可复用 React hooks。
+- `lib`：放非 React 业务辅助函数、格式化函数和配置读取。
+
+视觉规范：
+
+- 图标使用 `lucide-react`。
+- 图标默认使用 rounded outline 风格，`strokeWidth={2}`，尺寸默认 `20px` 或由组件显式传入。
+- 禁止在页面中手写 SVG 图标；新图标必须从 `components/icons` 导出。
+- 基础控件以 8px 以内圆角为默认，不使用夸张圆角或装饰性渐变。
+- 颜色、间距、字号、边框和阴影必须通过 CSS custom properties 使用 token，不能在页面里散落魔法值。
+- 交互状态至少覆盖 default、hover、focus-visible、disabled、loading 和 selected/active。
+- 所有可点击图标按钮必须有可访问名称，必要时使用 `aria-label`。
+- 页面布局使用 `AppShell` 和 layout 组件组合，不在页面中重复写侧边栏、顶栏和主内容框架。
+
+代码约束：
+
+- `components/ui` 组件必须是受控、可组合、可测试的基础组件，不绑定具体业务 API。
+- `components/layout` 可以依赖路由和当前用户展示状态，但不直接发起后端写操作。
+- `pages` 可以调用 hooks 和 API client，但不能直接导入 `packages/api-client/src/generated.ts`。
+- 新增页面前优先复用已有 `ui` 和 `layout` 组件；确实需要新 UI primitive 时先加入 `components/ui`。
+- 初始 CI 要对前端运行 typecheck、lint、unit tests，并通过规则或 review 检查页面中没有手写重复基础控件。
+- `docs/development.md` 要记录组件新增规则、icon 使用方式和 token 修改流程。
+
 ## 数据库策略
 
 初始化使用 PostgreSQL。`crates/db/migrations` 放置 SQLx migration。
@@ -387,6 +465,7 @@ Bun workspace 要求：
 - `docs/api-contracts.md`：说明前后端接口 contract 的维护方式。
 - `docs/auth-permissions.md`：说明认证 provider、角色、权限策略、匿名语义和审计要求。
 - `docs/desktop.md`：说明 Tauri WebView、command bridge、权限配置和桌面端开发命令。
+- `docs/development.md`：说明前端组件系统、视觉 token、图标规范、开发命令和质量门禁。
 - `docs/milestones.md`：说明项目推进阶段、交付物和退出条件。
 
 ## Git Ignore 与 LFS 策略
@@ -428,7 +507,7 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 - Rust domain 单元测试验证权限策略，例如作者编辑、维护者更新、审核者改状态、普通用户被拒绝。
 - Rust API 测试验证健康检查和 meta 接口。
 - Rust contract 测试验证 OpenAPI 导出包含初始化接口和响应 schema。
-- 前端组件测试验证应用壳能渲染核心入口。
+- 前端组件测试验证 `AppShell`、`Topbar`、`Sidebar` 和至少两个 `components/ui` primitive 能渲染核心状态。
 - `packages/api-client` 测试验证成功响应、失败响应、错误归一化和 requestId 透传。
 - `apps/desktop/src-tauri` 至少通过 `cargo check`，并验证权限配置文件存在。
 - 前端类型生成检查验证 `packages/api-client` 没有偏离 `contracts/openapi.json`。
@@ -487,7 +566,7 @@ Git LFS 只用于大型二进制资产，初始 `.gitattributes` 必须按路径
 
 初始里程碑：
 
-- `M0 Repository Foundation`：完成 monorepo、Bun 前端、Tauri WebView 壳、TypeScript API client、Rust workspace、OpenAPI contract、CI、lint、测试、`.gitignore`、`.gitattributes`、AI LOG、LFS 文档、权限文档和协作规范。退出条件是新成员能按 README 跑通前端、桌面壳、后端、测试和生成命令。
+- `M0 Repository Foundation`：完成 monorepo、Bun 前端、前端视觉系统、基础组件系统、Tauri WebView 壳、TypeScript API client、Rust workspace、OpenAPI contract、CI、lint、测试、`.gitignore`、`.gitattributes`、AI LOG、LFS 文档、权限文档和协作规范。退出条件是新成员能按 README 跑通前端、桌面壳、后端、测试和生成命令。
 - `M1 Identity, Permissions And Shell`：完成认证 provider 抽象、模拟校园认证、用户模型、系统角色、资源角色、应用导航、登录态和基础权限边界。退出条件是前端能基于后端 API 完成登录态展示，后端有认证和权限策略测试。
 - `M2 Knowledge Archive Core`：完成资料帖发布、编辑、标签、版本历史、纠错入口和基础列表。退出条件是一篇资料能从创建到更新再到版本追踪完整闭环。
 - `M3 Discussion To Archive Loop`：完成讨论帖、评论、精华回复和从讨论沉淀到资料的工作流。退出条件是高质量评论能被引用或整理进资料帖。
