@@ -1,0 +1,29 @@
+:root {
+  --color-bg: #f7f8fb;
+  --color-surface: #ffffff;
+  --color-elevated: #ffffff;
+  --color-border: #d9dee8;
+  --color-text: #172033;
+  --color-text-muted: #647086;
+  --color-primary: #315fcb;
+  --color-primary-hover: #234da8;
+  --color-primary-active: #193b82;
+  --color-focus: #7aa2ff;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+
+  --duration-fast: 150ms;
+}

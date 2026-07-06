@@ -1,0 +1,5 @@
+* text=auto eol=lf
+
+design/lfs/** filter=lfs diff=lfs merge=lfs -text
+assets/lfs/** filter=lfs diff=lfs merge=lfs -text
+docs/assets/lfs/** filter=lfs diff=lfs merge=lfs -text
