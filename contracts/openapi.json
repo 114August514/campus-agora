@@ -239,6 +239,16 @@
               }
             },
             "description": "Missing, invalid, expired, or revoked session token"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Unexpected server error"
           }
         },
         "security": [
@@ -303,6 +313,16 @@
               }
             },
             "description": "Unknown persona"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Unexpected server error"
           }
         },
         "security": [],
@@ -332,6 +352,16 @@
               }
             },
             "description": "Missing, invalid, expired, or revoked session token"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Unexpected server error"
           }
         },
         "security": [
