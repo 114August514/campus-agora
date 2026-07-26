@@ -12,10 +12,14 @@ use campus_agora_application::ports::{
     NewSession, NewUser, OrganizationRecord, OrganizationRepository, Page, RevisionRecord,
     RevisionWrite, SessionRecord, SessionRepository, UserRecord, UserRepository, VisibilityScope,
 };
+use campus_agora_application::ports::{
+    ContentReportRecord, ModerationQueueItem, NewContentReport, PostRepository, PostSummary,
+    ReportRepository, ReportResolution,
+};
 use campus_agora_domain::{
-    ApplicableAudience, ArchiveCategory, AuthProviderKind, CommentId, CorrectionId,
-    ModerationStatus, OrganizationId, PostId, PostKind, RevisionId, SessionId, SourceKind,
-    SystemRole, UserId,
+    risk_for, ApplicableAudience, ArchiveCategory, AuthProviderKind, CommentId, CorrectionId,
+    ModerationStatus, OrganizationId, PostId, PostKind, ReportCategory, ReportId, RevisionId,
+    SessionId, SourceKind, SystemRole, UserId,
 };
 use chrono::{DateTime, Utc};
 use sqlx::postgres::PgRow;
@@ -1302,4 +1306,332 @@ mod visibility_tests {
             assert!(visibility_predicate(kind).contains("p.deleted_at is null"));
         }
     }
+}
+
+fn report_from_row(row: &PgRow) -> Result<ContentReportRecord, ApplicationError> {
+    let category: String = row.try_get("category").map_err(internal)?;
+    let resolution: Option<String> = row.try_get("resolution").map_err(internal)?;
+
+    Ok(ContentReportRecord {
+        id: ReportId::from_uuid(row.try_get::<Uuid, _>("id").map_err(internal)?),
+        post_id: PostId::from_uuid(row.try_get::<Uuid, _>("post_id").map_err(internal)?),
+        reporter_id: UserId::from_uuid(row.try_get::<Uuid, _>("reporter_id").map_err(internal)?),
+        category: ReportCategory::parse(&category).ok_or_else(|| {
+            ApplicationError::Internal(format!("unknown report category: {category}"))
+        })?,
+        message: row.try_get("message").map_err(internal)?,
+        created_at: row.try_get("created_at").map_err(internal)?,
+        resolved_at: row.try_get("resolved_at").map_err(internal)?,
+        resolved_by: row
+            .try_get::<Option<Uuid>, _>("resolved_by")
+            .map_err(internal)?
+            .map(UserId::from_uuid),
+        resolution: resolution
+            .as_deref()
+            .map(|value| {
+                ReportResolution::parse(value).ok_or_else(|| {
+                    ApplicationError::Internal(format!("unknown resolution: {value}"))
+                })
+            })
+            .transpose()?,
+    })
+}
+
+const REPORT_COLUMNS: &str = "id, post_id, reporter_id, category, message, created_at, \
+     resolved_at, resolved_by, resolution";
+
+#[async_trait]
+impl PostRepository for PgAuthStore {
+    /// Spans both post kinds, because reporting and review treat content as
+    /// content. The visibility predicate is the same one every other read
+    /// uses; only the `post_type` filter is dropped.
+    async fn find_visible_post(
+        &self,
+        id: PostId,
+        scope: VisibilityScope,
+    ) -> Result<Option<PostSummary>, ApplicationError> {
+        let (viewer, full) = scope_bindings(scope);
+        let visibility = any_kind_visibility_predicate();
+        let sql = format!(
+            "select p.id, p.post_type, p.author_id, p.title, p.moderation_status, p.updated_at \
+             from posts p where p.id = $3 and {visibility}"
+        );
+
+        let row = sqlx::query(&sql)
+            .bind(viewer)
+            .bind(full)
+            .bind(id.into_uuid())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(internal)?;
+
+        row.as_ref().map(post_summary_from_row).transpose()
+    }
+
+    async fn set_status(
+        &self,
+        id: PostId,
+        expected: ModerationStatus,
+        status: ModerationStatus,
+        updated_at: DateTime<Utc>,
+    ) -> Result<PostSummary, ApplicationError> {
+        // Compare-and-swap, like every other status write: the caller decided
+        // against the status they read.
+        let row = sqlx::query(
+            r#"
+            update posts
+            set moderation_status = $2, updated_at = $3
+            where id = $1 and deleted_at is null and moderation_status = $4
+            returning id, post_type, author_id, title, moderation_status, updated_at
+            "#,
+        )
+        .bind(id.into_uuid())
+        .bind(status.as_str())
+        .bind(updated_at)
+        .bind(expected.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| {
+            ApplicationError::Conflict(
+                "the content changed state concurrently; reload and retry".to_owned(),
+            )
+        })?;
+
+        post_summary_from_row(&row)
+    }
+}
+
+fn post_summary_from_row(row: &PgRow) -> Result<PostSummary, ApplicationError> {
+    let kind: String = row.try_get("post_type").map_err(internal)?;
+    let status: String = row.try_get("moderation_status").map_err(internal)?;
+
+    Ok(PostSummary {
+        id: PostId::from_uuid(row.try_get::<Uuid, _>("id").map_err(internal)?),
+        kind: PostKind::parse(&kind)
+            .ok_or_else(|| ApplicationError::Internal(format!("unknown post kind: {kind}")))?,
+        author_id: UserId::from_uuid(row.try_get::<Uuid, _>("author_id").map_err(internal)?),
+        title: row.try_get("title").map_err(internal)?,
+        moderation_status: ModerationStatus::parse(&status).ok_or_else(|| {
+            ApplicationError::Internal(format!("unknown moderation status: {status}"))
+        })?,
+        updated_at: row.try_get("updated_at").map_err(internal)?,
+    })
+}
+
+#[async_trait]
+impl ReportRepository for PgAuthStore {
+    async fn insert(
+        &self,
+        report: NewContentReport,
+    ) -> Result<ContentReportRecord, ApplicationError> {
+        let sql = format!(
+            "insert into content_reports (post_id, reporter_id, category, message, created_at) \
+             values ($1, $2, $3, $4, $5) returning {REPORT_COLUMNS}"
+        );
+
+        let row = sqlx::query(&sql)
+            .bind(report.post_id.into_uuid())
+            .bind(report.reporter_id.into_uuid())
+            .bind(report.category.as_str())
+            .bind(&report.message)
+            .bind(report.created_at)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|error| match &error {
+                // The partial unique index over open reports. A reporter may
+                // file again once the first one is closed.
+                sqlx::Error::Database(db_error) if db_error.is_unique_violation() => {
+                    ApplicationError::Conflict(
+                        "you already have an open report on this content".to_owned(),
+                    )
+                }
+                _ => internal(error),
+            })?;
+
+        report_from_row(&row)
+    }
+
+    async fn list_for_post(
+        &self,
+        post_id: PostId,
+    ) -> Result<Vec<ContentReportRecord>, ApplicationError> {
+        let sql = format!(
+            "select {REPORT_COLUMNS} from content_reports \
+             where post_id = $1 and deleted_at is null order by created_at"
+        );
+
+        let rows = sqlx::query(&sql)
+            .bind(post_id.into_uuid())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(internal)?;
+
+        rows.iter().map(report_from_row).collect()
+    }
+
+    /// Scoped to `post_id`: the caller was authorized against the item in the
+    /// request path, so a report belonging to a different item is reported as
+    /// missing rather than resolved.
+    async fn resolve(
+        &self,
+        post_id: PostId,
+        id: ReportId,
+        resolution: ReportResolution,
+        resolved_by: UserId,
+        resolved_at: DateTime<Utc>,
+    ) -> Result<ContentReportRecord, ApplicationError> {
+        sqlx::query(
+            r#"
+            update content_reports
+            set resolved_at = $3, resolved_by = $4, resolution = $5
+            where id = $1 and post_id = $2 and resolved_at is null and deleted_at is null
+            "#,
+        )
+        .bind(id.into_uuid())
+        .bind(post_id.into_uuid())
+        .bind(resolved_at)
+        .bind(resolved_by.into_uuid())
+        .bind(resolution.as_str())
+        .execute(&self.pool)
+        .await
+        .map_err(internal)?;
+
+        // The read-back carries the same predicate, so a report belonging to
+        // another item is missing rather than having its contents disclosed.
+        let sql = format!(
+            "select {REPORT_COLUMNS} from content_reports \
+             where id = $1 and post_id = $2 and deleted_at is null"
+        );
+
+        let row = sqlx::query(&sql)
+            .bind(id.into_uuid())
+            .bind(post_id.into_uuid())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(internal)?
+            .ok_or_else(|| ApplicationError::NotFound("report not found".to_owned()))?;
+
+        report_from_row(&row)
+    }
+
+    async fn queue(
+        &self,
+        page: u32,
+        page_size: u32,
+    ) -> Result<Page<ModerationQueueItem>, ApplicationError> {
+        // Everything awaiting a decision: content with open reports, plus
+        // content an author submitted for review with none. Grouped in SQL so
+        // the counts and the earliest wait are one pass rather than N+1.
+        let selection = "
+            select p.id, p.post_type, p.author_id, p.title, p.moderation_status, p.updated_at,
+                   coalesce(count(r.id), 0) as open_reports,
+                   coalesce(min(r.created_at), p.updated_at) as queued_at,
+                   coalesce(array_agg(r.category) filter (where r.id is not null), '{}') as categories
+            from posts p
+            left join content_reports r
+              on r.post_id = p.id and r.resolved_at is null and r.deleted_at is null
+            where p.deleted_at is null
+            group by p.id
+            having count(r.id) > 0 or p.moderation_status = 'pending_review'
+        ";
+
+        let (total_items,): (i64,) =
+            sqlx::query_as(&format!("select count(*) from ({selection}) queued"))
+                .fetch_one(&self.pool)
+                .await
+                .map_err(internal)?;
+
+        let page_size = page_size.max(1);
+        let offset = i64::from(page.saturating_sub(1)) * i64::from(page_size);
+        let rows = sqlx::query(&format!(
+            "select * from ({selection}) queued order by queued_at limit $1 offset $2"
+        ))
+        .bind(i64::from(page_size))
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(internal)?;
+
+        let mut items: Vec<ModerationQueueItem> = rows
+            .iter()
+            .map(queue_item_from_row)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Risk is derived in Rust from the same domain function the in-memory
+        // store uses, so the two orderings cannot drift.
+        items.sort_by(|left, right| {
+            right
+                .risk
+                .cmp(&left.risk)
+                .then_with(|| left.queued_at.cmp(&right.queued_at))
+                .then_with(|| left.post_id.cmp(&right.post_id))
+        });
+
+        let total_items = total_items.max(0) as u64;
+
+        Ok(Page {
+            items,
+            page,
+            page_size,
+            total_items,
+            total_pages: total_items.div_ceil(u64::from(page_size)) as u32,
+        })
+    }
+}
+
+fn queue_item_from_row(row: &PgRow) -> Result<ModerationQueueItem, ApplicationError> {
+    let summary = post_summary_from_row(row)?;
+    let categories: Vec<String> = row.try_get("categories").map_err(internal)?;
+
+    let parsed: Vec<ReportCategory> = categories
+        .iter()
+        .map(|value| {
+            ReportCategory::parse(value).ok_or_else(|| {
+                ApplicationError::Internal(format!("unknown report category: {value}"))
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(ModerationQueueItem {
+        post_id: summary.id,
+        post_kind: summary.kind,
+        title: summary.title,
+        author_id: summary.author_id,
+        moderation_status: summary.moderation_status,
+        risk: risk_for(&parsed),
+        open_report_count: row.try_get::<i64, _>("open_reports").map_err(internal)?,
+        queued_at: row.try_get("queued_at").map_err(internal)?,
+    })
+}
+
+/// The visibility rule without the post-kind filter, for the paths that treat
+/// content as content. Derived from the domain like every other predicate.
+fn any_kind_visibility_predicate() -> String {
+    let public = ModerationStatus::ALL
+        .iter()
+        .filter(|status| status.is_publicly_visible())
+        .map(|status| format!("'{}'", status.as_str()))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    format!(
+        "
+    p.deleted_at is null
+    and (
+        p.moderation_status in ({public})
+        or $2
+        or (
+            $1::uuid is not null
+            and (
+                p.author_id = $1::uuid
+                or exists (
+                    select 1 from post_maintainers m
+                    where m.post_id = p.id and m.user_id = $1::uuid
+                )
+            )
+        )
+    )
+"
+    )
 }

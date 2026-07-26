@@ -4,14 +4,16 @@ use std::sync::Arc;
 use campus_agora_application::ports::{
     ArchiveEntryUpdate, ArchiveListQuery, ArchiveRepository, ArchiveSourceRepository,
     AuditEventRepository, CommentRepository, CorrectionRepository, DiscussionRepository,
-    NewArchiveEntry, NewArchiveSource, NewAuditEvent, NewComment, NewCorrection, NewDiscussion,
-    NewRevision, NewSession, NewUser, OrganizationRepository, RevisionWrite, SessionRepository,
-    UserRepository, VisibilityScope,
+    NewArchiveEntry, NewArchiveSource, NewAuditEvent, NewComment, NewContentReport, NewCorrection,
+    NewDiscussion, NewRevision, NewSession, NewUser, OrganizationRepository, PostRepository,
+    ReportRepository, ReportResolution, RevisionWrite, SessionRepository, UserRepository,
+    VisibilityScope,
 };
 use campus_agora_application::ApplicationError;
 use campus_agora_db::{PgAuthStore, MIGRATIONS_DIR};
 use campus_agora_domain::{
-    ApplicableAudience, ArchiveCategory, AuthProviderKind, ModerationStatus, SourceKind, SystemRole,
+    ApplicableAudience, ArchiveCategory, AuthProviderKind, ModerationStatus, ReportCategory,
+    RiskLevel, SourceKind, SystemRole,
 };
 use chrono::{Duration, Utc};
 use uuid::Uuid;
@@ -781,4 +783,247 @@ async fn pg_repositories_cover_the_m3_discussion_loop() {
     .await
     .expect("sources after hide")
     .is_empty());
+}
+
+#[tokio::test]
+async fn pg_repositories_cover_the_m4_moderation_queue() {
+    let Ok(database_url) = std::env::var("DATABASE_URL") else {
+        eprintln!("skipping pg moderation test: DATABASE_URL is not set");
+        return;
+    };
+
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(2)
+        .connect(&database_url)
+        .await
+        .expect("connect to test database");
+
+    let migrations = Path::new(env!("CARGO_MANIFEST_DIR")).join(MIGRATIONS_DIR);
+    sqlx::migrate::Migrator::new(migrations)
+        .await
+        .expect("load migrations")
+        .run(&pool)
+        .await
+        .expect("run migrations");
+
+    let store = Arc::new(PgAuthStore::new(pool.clone()));
+    let unique = Uuid::new_v4().simple().to_string();
+
+    let make_user = |suffix: &str| {
+        let store = store.clone();
+        let subject = format!("m4-{suffix}-{unique}");
+        async move {
+            store
+                .upsert(NewUser {
+                    auth_provider: AuthProviderKind::MockCampus,
+                    provider_subject_hash: subject,
+                    display_name: "审核测试用户".to_owned(),
+                    system_role: SystemRole::Student,
+                })
+                .await
+                .expect("create user")
+        }
+    };
+
+    let author = make_user("author").await;
+    let reporter = make_user("reporter").await;
+    let other = make_user("other").await;
+
+    let entry = ArchiveRepository::insert(
+        store.as_ref(),
+        NewArchiveEntry {
+            author_id: author.id,
+            title: "被举报的资料".to_owned(),
+            body: "正文".to_owned(),
+            summary: None,
+            tags: Vec::new(),
+            category: ArchiveCategory::Other,
+            applicable_audience: ApplicableAudience::AllStudents,
+            source_kind: SourceKind::Unspecified,
+            source_reference: None,
+            ai_provider: None,
+            created_at: Utc::now(),
+        },
+    )
+    .await
+    .expect("entry");
+
+    ArchiveRepository::set_status(
+        store.as_ref(),
+        entry.id,
+        ModerationStatus::Draft,
+        ModerationStatus::Published,
+        Utc::now(),
+    )
+    .await
+    .expect("publish");
+
+    // A report leaves the content exactly where it was.
+    let filed = ReportRepository::insert(
+        store.as_ref(),
+        NewContentReport {
+            post_id: entry.id,
+            reporter_id: reporter.id,
+            category: ReportCategory::Illegal,
+            message: "违法内容".to_owned(),
+            created_at: Utc::now(),
+        },
+    )
+    .await
+    .expect("report");
+
+    let after =
+        PostRepository::find_visible_post(store.as_ref(), entry.id, VisibilityScope::Public)
+            .await
+            .expect("lookup")
+            .expect("still public");
+    assert_eq!(after.moderation_status, ModerationStatus::Published);
+
+    // The partial unique index: one open report per reporter and post.
+    assert!(matches!(
+        ReportRepository::insert(
+            store.as_ref(),
+            NewContentReport {
+                post_id: entry.id,
+                reporter_id: reporter.id,
+                category: ReportCategory::Spam,
+                message: "再来一次".to_owned(),
+                created_at: Utc::now(),
+            },
+        )
+        .await,
+        Err(ApplicationError::Conflict(_))
+    ));
+
+    // A different reporter is not a duplicate, and corroboration is the point.
+    ReportRepository::insert(
+        store.as_ref(),
+        NewContentReport {
+            post_id: entry.id,
+            reporter_id: other.id,
+            category: ReportCategory::Spam,
+            message: "我也看到了".to_owned(),
+            created_at: Utc::now(),
+        },
+    )
+    .await
+    .expect("second reporter");
+
+    let queue = ReportRepository::queue(store.as_ref(), 1, 100)
+        .await
+        .expect("queue");
+    let item = queue
+        .items
+        .iter()
+        .find(|item| item.post_id == entry.id)
+        .expect("queued");
+    assert_eq!(item.open_report_count, 2);
+    // The worst category wins, not the most recent one.
+    assert_eq!(item.risk, RiskLevel::High);
+
+    // Scoped resolution: a report cannot be closed through an unrelated item.
+    let unrelated = ArchiveRepository::insert(
+        store.as_ref(),
+        NewArchiveEntry {
+            author_id: author.id,
+            title: "无关的资料".to_owned(),
+            body: "正文".to_owned(),
+            summary: None,
+            tags: Vec::new(),
+            category: ArchiveCategory::Other,
+            applicable_audience: ApplicableAudience::AllStudents,
+            source_kind: SourceKind::Unspecified,
+            source_reference: None,
+            ai_provider: None,
+            created_at: Utc::now(),
+        },
+    )
+    .await
+    .expect("unrelated entry");
+
+    assert!(matches!(
+        ReportRepository::resolve(
+            store.as_ref(),
+            unrelated.id,
+            filed.id,
+            ReportResolution::Dismissed,
+            author.id,
+            Utc::now(),
+        )
+        .await,
+        Err(ApplicationError::NotFound(_))
+    ));
+
+    let resolved = ReportRepository::resolve(
+        store.as_ref(),
+        entry.id,
+        filed.id,
+        ReportResolution::Upheld,
+        author.id,
+        Utc::now(),
+    )
+    .await
+    .expect("resolve");
+    assert_eq!(resolved.resolution, Some(ReportResolution::Upheld));
+    assert_eq!(resolved.resolved_by, Some(author.id));
+
+    // Closing one frees that reporter to raise the content again later.
+    ReportRepository::insert(
+        store.as_ref(),
+        NewContentReport {
+            post_id: entry.id,
+            reporter_id: reporter.id,
+            category: ReportCategory::Spam,
+            message: "又出现了".to_owned(),
+            created_at: Utc::now(),
+        },
+    )
+    .await
+    .expect("reporter may file again once the first is closed");
+
+    // AI provenance survives a round trip, and stays empty for hand-written
+    // entries so the marker means something.
+    let drafted = ArchiveRepository::insert(
+        store.as_ref(),
+        NewArchiveEntry {
+            author_id: author.id,
+            title: "AI 起草的资料".to_owned(),
+            body: "正文".to_owned(),
+            summary: None,
+            tags: Vec::new(),
+            category: ArchiveCategory::Other,
+            applicable_audience: ApplicableAudience::AllStudents,
+            source_kind: SourceKind::Discussion,
+            source_reference: None,
+            ai_provider: Some("deterministic-v1".to_owned()),
+            created_at: Utc::now(),
+        },
+    )
+    .await
+    .expect("drafted entry");
+    assert_eq!(drafted.ai_provider.as_deref(), Some("deterministic-v1"));
+    assert_eq!(entry.ai_provider, None);
+
+    // `pending_review` reaches the queue with no report behind it.
+    let submitted = ArchiveRepository::set_status(
+        store.as_ref(),
+        unrelated.id,
+        ModerationStatus::Draft,
+        ModerationStatus::PendingReview,
+        Utc::now(),
+    )
+    .await
+    .expect("submit for review");
+    assert_eq!(submitted.moderation_status, ModerationStatus::PendingReview);
+
+    let queue = ReportRepository::queue(store.as_ref(), 1, 100)
+        .await
+        .expect("queue");
+    let submitted_item = queue
+        .items
+        .iter()
+        .find(|item| item.post_id == unrelated.id)
+        .expect("submitted content is queued");
+    assert_eq!(submitted_item.open_report_count, 0);
+    assert_eq!(submitted_item.risk, RiskLevel::None);
 }
