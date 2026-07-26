@@ -712,6 +712,9 @@ async fn pg_repositories_cover_the_m3_discussion_loop() {
     .expect("source");
     assert_eq!(source.source_title, discussion.title);
     assert_eq!(source.source_author_id, helper.id);
+    // The join, not just the column: attribution is the reason the id is
+    // recorded, and a reader cannot be attributed to by a UUID.
+    assert_eq!(source.source_author_name, helper.display_name);
 
     // The same source recorded twice for one entry is a duplicate.
     assert!(matches!(

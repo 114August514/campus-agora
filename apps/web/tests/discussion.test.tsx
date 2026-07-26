@@ -235,6 +235,42 @@ describe("discussion detail page", () => {
   });
 
   /**
+   * The reply box is rendered from state loaded before the submit, so a thread
+   * closed in between still shows one. What the reader typed has to survive
+   * the refusal — a form that clears itself on failure loses their answer with
+   * no way to recover it.
+   */
+  test("a refused reply keeps the text and says why", async () => {
+    const { login, id } = await seedThread();
+
+    renderDetail(id, authedSession(login.user));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("写下你的回答")).toBeTruthy();
+    });
+
+    type(
+      screen.getByLabelText("写下你的回答") as HTMLTextAreaElement,
+      "我花了很久才写完的回答。",
+    );
+
+    // The thread closes after the page loaded and before the submit lands.
+    await apiClient.changeDiscussionStatus(id, "archived");
+
+    fireEvent.click(screen.getByRole("button", { name: "发表回复" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toContain(
+        "该操作在当前状态下不被允许",
+      );
+    });
+    expect(screen.getByLabelText("写下你的回答")).toBeTruthy();
+    expect((screen.getByLabelText("写下你的回答") as HTMLTextAreaElement).value).toBe(
+      "我花了很久才写完的回答。",
+    );
+  });
+
+  /**
    * The server refuses replies on a closed thread, so the UI must not offer
    * one. Rendering a box that guarantees a 409 is worse than rendering none.
    */
@@ -294,6 +330,34 @@ describe("the discussion-to-archive loop", () => {
     });
 
     // The per-reply control, not the thread-level one.
+    fireEvent.click(screen.getByRole("button", { name: "整理为资料" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("资料编辑器")).toBeTruthy();
+    });
+  });
+
+  /**
+   * The reply-promotion title is built from the thread's, so a thread titled
+   * at or near the 200-character limit produced an over-long entry title and a
+   * 422 the reader could do nothing about — the button simply never worked.
+   */
+  test("promoting a reply works even when the thread's title is at the limit", async () => {
+    const login = await signIn("student");
+    const created = await apiClient.createDiscussion({
+      title: "长".repeat(199) + "尾",
+      body: "正文",
+      tags: [],
+    });
+    await apiClient.changeDiscussionStatus(created.id, "published");
+    await apiClient.replyToDiscussion(created.id, "一条值得沉淀的回复。");
+
+    renderDetail(created.id, authedSession(login.user));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "整理为资料" })).toBeTruthy();
+    });
+
     fireEvent.click(screen.getByRole("button", { name: "整理为资料" }));
 
     await waitFor(() => {
@@ -363,7 +427,13 @@ describe("the discussion-to-archive loop", () => {
       expect(screen.getByText("内容来源")).toBeTruthy();
     });
     expect(screen.getByText(title)).toBeTruthy();
-    expect(screen.getByText(/整理自该讨论的一条回复/)).toBeTruthy();
+    // Attribution has to be legible: a UUID names nobody.
+    expect(screen.getByText(/整理自该讨论的一条回复/).textContent).toContain(
+      login.user.displayName,
+    );
+    expect(screen.getByText(/整理自该讨论的一条回复/).textContent).not.toContain(
+      promoted.source.sourceAuthorId,
+    );
     // Attribution survives promotion: the quoted text is the asker's reply,
     // and the entry belongs to the curator.
     expect(promoted.source.sourceAuthorId).toBe(login.user.id);

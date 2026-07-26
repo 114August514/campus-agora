@@ -30,6 +30,7 @@ export interface ArchiveSource {
   createdAt: string;
   entryId: string;
   sourceAuthorId: string;
+  sourceAuthorName: string;
   sourceCommentId?: string | null;
   sourcePostId: string;
   sourceTitle: string;

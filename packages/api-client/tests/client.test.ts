@@ -1060,3 +1060,126 @@ describe("discussion mock matches the server's rules", () => {
     ).rejects.toMatchObject({ status: 404 });
   });
 });
+
+/**
+ * The mock is the only backend apps/web tests ever see, so a bound the server
+ * enforces and the mock does not is a hole in the web suite rather than a
+ * cosmetic gap. Three milestones in a row have shipped a divergence of this
+ * shape; these assert the whole set at once so the next handler cannot skip
+ * one quietly.
+ */
+describe("mock enforces the server's content bounds", () => {
+  async function authed() {
+    const fetchImpl = createCampusAgoraMockFetch();
+    const holder: { token?: string } = {};
+    const client = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder.token,
+    });
+    holder.token = (await client.mockLogin("student")).token;
+    return client;
+  }
+
+  async function published(client: CampusAgoraApiClient, title = "可晋升的讨论") {
+    const created = await client.createDiscussion({ title, body: "正文", tags: [] });
+    return client.changeDiscussionStatus(created.id, "published");
+  }
+
+  test("a discussion cannot carry more than ten tags", async () => {
+    const client = await authed();
+
+    await expect(
+      client.createDiscussion({
+        title: "多标签",
+        body: "正文",
+        tags: Array.from({ length: 11 }, (_, i) => `t${i}`),
+      }),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+
+  test("a discussion tag cannot exceed thirty-two characters", async () => {
+    const client = await authed();
+
+    await expect(
+      client.createDiscussion({ title: "长标签", body: "正文", tags: ["x".repeat(33)] }),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+
+  test("discussion tags are lowercased and deduped the way the server stores them", async () => {
+    const client = await authed();
+
+    const created = await client.createDiscussion({
+      title: "重复标签",
+      body: "正文",
+      tags: ["Onboarding", "onboarding", " 新生 "],
+    });
+
+    expect(created.tags).toEqual(["onboarding", "新生"]);
+  });
+
+  test("a discussion title and body are bounded", async () => {
+    const client = await authed();
+
+    await expect(
+      client.createDiscussion({ title: "t".repeat(201), body: "正文", tags: [] }),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(
+      client.createDiscussion({ title: "标题", body: "b".repeat(50001), tags: [] }),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+
+  /**
+   * The concrete path: promoting a reply builds its title from the thread's,
+   * so a legal thread title plus a suffix can exceed the entry limit. Without
+   * this bound the web tests happily assert a navigation the server refuses.
+   */
+  test("a promotion's overridden fields are bounded", async () => {
+    const client = await authed();
+    const discussion = await published(client);
+
+    await expect(
+      client.promoteDiscussion(discussion.id, { title: "t".repeat(201) }),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(
+      client.promoteDiscussion(discussion.id, { summary: "s".repeat(501) }),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(
+      client.promoteDiscussion(discussion.id, { body: "b".repeat(50001) }),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(
+      client.promoteDiscussion(discussion.id, {
+        tags: Array.from({ length: 11 }, (_, i) => `t${i}`),
+      }),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+
+  test("an over-long search term is rejected on both list endpoints", async () => {
+    const client = await authed();
+
+    await expect(
+      client.listDiscussions({ q: "z".repeat(101) }),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(
+      client.listKnowledgeEntries({ q: "z".repeat(101) }),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+
+  test("an archive entry's body and summary are bounded too", async () => {
+    const client = await authed();
+    const base = {
+      title: "标题",
+      tags: [],
+      category: "other" as const,
+      applicableAudience: "all_students" as const,
+      sourceKind: "unspecified" as const,
+    };
+
+    await expect(
+      client.createKnowledgeEntry({ ...base, body: "b".repeat(50001) }),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(
+      client.createKnowledgeEntry({ ...base, body: "正文", summary: "s".repeat(501) }),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+});

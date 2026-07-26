@@ -68,6 +68,9 @@
           "sourceAuthorId": {
             "type": "string"
           },
+          "sourceAuthorName": {
+            "type": "string"
+          },
           "sourceCommentId": {
             "type": [
               "string",
@@ -85,6 +88,7 @@
           "entryId",
           "sourcePostId",
           "sourceAuthorId",
+          "sourceAuthorName",
           "sourceTitle",
           "createdAt"
         ],
@@ -1089,6 +1093,16 @@
               }
             },
             "description": "Authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "page, pageSize, or q is out of range"
           },
           "500": {
             "content": {

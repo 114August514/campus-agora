@@ -376,6 +376,10 @@ pub struct ArchiveSourceRecord {
     pub source_post_id: PostId,
     pub source_comment_id: Option<CommentId>,
     pub source_author_id: UserId,
+    /// The quoted author's display name. Carried alongside the id because the
+    /// point of recording the id is attribution, and a reader cannot be
+    /// attributed to by a UUID.
+    pub source_author_name: String,
     pub source_title: String,
     pub created_at: DateTime<Utc>,
 }

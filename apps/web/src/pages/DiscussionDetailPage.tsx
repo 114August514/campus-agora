@@ -19,6 +19,7 @@ import {
   DISCUSSION_TRANSITION_LABELS,
   acceptsReplies,
   allowedDiscussionTransitions,
+  boundedTitle,
   canPromote,
 } from "../features/discussion/labels";
 import { formatDateTime } from "../lib/format";
@@ -76,7 +77,7 @@ export function DiscussionDetailPage({ session }: { session: SessionController }
   async function promote(commentId: string | null, title: string) {
     const promotion = await controller.promote({
       commentId,
-      title,
+      title: boundedTitle(title),
     });
 
     // Promotion is the start of curating, not the end: the new entry is a

@@ -46,6 +46,14 @@ pub(crate) fn paths() -> Value {
                         }
                     }
                 },
+                "422": {
+                    "description": "page, pageSize, or q is out of range",
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                        }
+                    }
+                },
                 "500": {
                     "description": "Unexpected server error",
                     "content": {
@@ -750,13 +758,15 @@ pub(crate) fn schemas() -> Value {
     "ArchiveSource": {
         "type": "object",
         "required": [
-            "entryId", "sourcePostId", "sourceAuthorId", "sourceTitle", "createdAt"
+            "entryId", "sourcePostId", "sourceAuthorId", "sourceAuthorName",
+            "sourceTitle", "createdAt"
         ],
         "properties": {
             "entryId": { "type": "string" },
             "sourcePostId": { "type": "string" },
             "sourceCommentId": { "type": ["string", "null"] },
             "sourceAuthorId": { "type": "string" },
+            "sourceAuthorName": { "type": "string" },
             "sourceTitle": { "type": "string" },
             "createdAt": { "type": "string" }
         }

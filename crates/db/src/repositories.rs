@@ -1139,6 +1139,7 @@ fn archive_source_from_row(row: &PgRow) -> Result<ArchiveSourceRecord, Applicati
             row.try_get::<Uuid, _>("source_author_id")
                 .map_err(internal)?,
         ),
+        source_author_name: row.try_get("source_author_name").map_err(internal)?,
         source_title: row.try_get("source_title").map_err(internal)?,
         created_at: row.try_get("created_at").map_err(internal)?,
     })
@@ -1159,9 +1160,10 @@ impl ArchiveSourceRepository for PgAuthStore {
                 values ($1, $2, $3, $4, $5)
                 returning entry_id, source_post_id, source_comment_id, source_author_id, created_at
             )
-            select i.*, p.title as source_title
+            select i.*, p.title as source_title, u.display_name as source_author_name
             from inserted i
             join posts p on p.id = i.source_post_id
+            join users u on u.id = i.source_author_id
             "#,
         )
         .bind(source.entry_id.into_uuid())
@@ -1195,8 +1197,10 @@ impl ArchiveSourceRepository for PgAuthStore {
         let visibility = discussion_visibility_predicate();
         let sql = format!(
             "select s.entry_id, s.source_post_id, s.source_comment_id, s.source_author_id, \
-             s.created_at, p.title as source_title \
-             from archive_sources s join posts p on p.id = s.source_post_id \
+             s.created_at, p.title as source_title, u.display_name as source_author_name \
+             from archive_sources s \
+             join posts p on p.id = s.source_post_id \
+             join users u on u.id = s.source_author_id \
              where s.entry_id = $3 and {visibility} order by s.created_at, s.source_post_id"
         );
 

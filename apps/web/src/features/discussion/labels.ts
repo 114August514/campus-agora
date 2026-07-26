@@ -86,3 +86,20 @@ export function canPromote(status: ModerationStatus): boolean {
 export function acceptsReplies(status: ModerationStatus): boolean {
   return status === "published";
 }
+
+/**
+ * `TITLE_MAX_CHARS` from `crates/domain/src/archive.rs`. A promoted title is
+ * derived from the thread's, which may itself be at the limit, so the derived
+ * one has to be trimmed to fit. Sending an over-long title produced a 422 the
+ * reader could not act on — there is no field to shorten it in — which made
+ * the promote button permanently dead for long-titled threads.
+ */
+export const TITLE_MAX_CHARS = 200;
+
+export function boundedTitle(title: string): string {
+  const characters = [...title.trim()];
+
+  return characters.length <= TITLE_MAX_CHARS
+    ? characters.join("")
+    : `${characters.slice(0, TITLE_MAX_CHARS - 1).join("")}…`;
+}

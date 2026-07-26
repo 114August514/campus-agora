@@ -293,3 +293,66 @@ fn moderation_status_enum_includes_archived() {
         serde_json::json!(["draft", "published", "hidden", "rejected", "archived"])
     );
 }
+
+/// The contract has to declare every status a handler can actually return.
+/// Asserting only that 500 is present let M3 ship `listDiscussions` without
+/// its 422, which the sibling archive listing does declare. Pinning the exact
+/// set is what catches an omission rather than a presence check.
+#[test]
+fn every_operation_declares_exactly_the_statuses_it_returns() {
+    let document = campus_agora_api::openapi_document();
+    let json: Value = serde_json::to_value(document).unwrap();
+
+    // (path, method, expected status set). Derived by reading each handler and
+    // the shared `application_error_response` mapping, not by copying the
+    // document — a table copied from the document could never disagree with it.
+    let expectations: &[(&str, &str, &[&str])] = &[
+        (
+            "/api/v1/discussions",
+            "get",
+            &["200", "400", "401", "422", "500"],
+        ),
+        (
+            "/api/v1/discussions",
+            "post",
+            &["201", "400", "401", "403", "422", "500"],
+        ),
+        (
+            "/api/v1/knowledge-entries",
+            "get",
+            &["200", "400", "401", "422", "500"],
+        ),
+        (
+            "/api/v1/discussions/{id}/replies",
+            "post",
+            &["201", "400", "401", "403", "404", "409", "422", "500"],
+        ),
+        (
+            "/api/v1/discussions/{id}/promotions",
+            "post",
+            &["201", "400", "401", "403", "404", "409", "422", "500"],
+        ),
+        (
+            "/api/v1/discussions/{id}/status",
+            "post",
+            &["200", "400", "401", "403", "404", "409", "500"],
+        ),
+    ];
+
+    for (path, method, expected) in expectations {
+        let responses = json["paths"][path][method]["responses"]
+            .as_object()
+            .unwrap_or_else(|| panic!("{method} {path} must declare responses"));
+
+        let mut declared: Vec<&str> = responses.keys().map(String::as_str).collect();
+        declared.sort_unstable();
+
+        let mut wanted = expected.to_vec();
+        wanted.sort_unstable();
+
+        assert_eq!(
+            declared, wanted,
+            "{method} {path} declares the wrong status set"
+        );
+    }
+}

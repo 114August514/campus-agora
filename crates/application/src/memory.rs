@@ -803,11 +803,19 @@ impl ArchiveSourceRepository for InMemoryAuthStore {
             .map(|discussion| discussion.title.clone())
             .ok_or_else(|| ApplicationError::NotFound("source discussion not found".to_owned()))?;
 
+        let source_author_name = state
+            .users
+            .iter()
+            .find(|user| user.id == source.source_author_id)
+            .map(|user| user.display_name.clone())
+            .ok_or_else(|| ApplicationError::NotFound("source author not found".to_owned()))?;
+
         let record = ArchiveSourceRecord {
             entry_id: source.entry_id,
             source_post_id: source.source_post_id,
             source_comment_id: source.source_comment_id,
             source_author_id: source.source_author_id,
+            source_author_name,
             source_title,
             created_at: source.created_at,
         };

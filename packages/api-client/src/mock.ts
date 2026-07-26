@@ -21,8 +21,65 @@ export interface CampusAgoraMockFetchOptions {
 }
 
 const DEFAULT_SESSION_TTL_SECONDS = 86400;
-/// Mirrors campus_agora_domain::archive::COMMENT_BODY_MAX_CHARS.
-const COMMENT_BODY_MAX_CHARS = 5000;
+
+/// The content bounds from `crates/domain/src/archive.rs`, in one place. Each
+/// handler used to re-implement its own subset, which is how three milestones
+/// in a row shipped a rule the server enforced and the mock did not — and the
+/// mock is the only backend `apps/web` tests ever see.
+const LIMITS = {
+  title: 200,
+  summary: 500,
+  body: 50_000,
+  commentBody: 5_000,
+  tag: 32,
+  tags: 10,
+  /// `SEARCH_QUERY_MAX_CHARS` in the two list services.
+  searchQuery: 100,
+} as const;
+
+const COMMENT_BODY_MAX_CHARS = LIMITS.commentBody;
+
+/// Mirrors `bounded_text`: trims, rejects empty, and counts characters rather
+/// than bytes so a CJK value is not rejected at a third of its stated limit.
+function boundedText(
+  value: unknown,
+  max: number,
+  field: string,
+): { ok: true; value: string } | { ok: false; message: string } {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+
+  if (!trimmed) {
+    return { ok: false, message: `${field} must not be empty` };
+  }
+
+  if ([...trimmed].length > max) {
+    return { ok: false, message: `${field} is too long` };
+  }
+
+  return { ok: true, value: trimmed };
+}
+
+/// Mirrors `validate_summary`: absent and whitespace-only both normalize to
+/// undefined, so the store never holds a blank summary.
+function boundedSummary(
+  value: unknown,
+): { ok: true; value: string | undefined } | { ok: false; message: string } {
+  if (typeof value !== "string") {
+    return { ok: true, value: undefined };
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return { ok: true, value: undefined };
+  }
+
+  if ([...trimmed].length > LIMITS.summary) {
+    return { ok: false, message: "summary is too long" };
+  }
+
+  return { ok: true, value: trimmed };
+}
 
 // Stable ids so a login is reproducible across calls, but still UUID-shaped
 // like the real server's, so consumers that parse or shorten ids behave the
@@ -208,7 +265,7 @@ export function createCampusAgoraMockFetch(
         continue;
       }
 
-      if ([...tag].length > 32) {
+      if ([...tag].length > LIMITS.tag) {
         return "invalid";
       }
 
@@ -217,7 +274,7 @@ export function createCampusAgoraMockFetch(
       }
     }
 
-    return tags.length > 10 ? "invalid" : tags;
+    return tags.length > LIMITS.tags ? "invalid" : tags;
   }
 
   /// Mirrors the domain permission matrix for the two moderation actions.
@@ -468,7 +525,14 @@ export function createCampusAgoraMockFetch(
             );
           }
 
-          const q = url.searchParams.get("q")?.toLowerCase();
+          const rawQuery = url.searchParams.get("q");
+          if (rawQuery && [...rawQuery.trim()].length > LIMITS.searchQuery) {
+            return unprocessable(
+              `q must be at most ${LIMITS.searchQuery} characters`,
+            );
+          }
+
+          const q = rawQuery?.toLowerCase();
           const tag = url.searchParams.get("tag")?.toLowerCase();
           const category = url.searchParams.get("category");
           const matched = [...entries.values()]
@@ -530,28 +594,28 @@ export function createCampusAgoraMockFetch(
             return unprocessable("tags are invalid");
           }
 
-          if (body.title.trim().length === 0) {
-            return unprocessable("title must not be empty");
+          const title = boundedText(body.title, LIMITS.title, "title");
+          if (!title.ok) {
+            return unprocessable(title.message);
           }
 
-          if ([...body.title.trim()].length > 200) {
-            return unprocessable("title is too long");
+          const text = boundedText(body.body, LIMITS.body, "body");
+          if (!text.ok) {
+            return unprocessable(text.message);
           }
 
-          if (body.body.trim().length === 0) {
-            return unprocessable("body must not be empty");
+          const summary = boundedSummary(body.summary);
+          if (!summary.ok) {
+            return unprocessable(summary.message);
           }
 
           const timestamp = new Date().toISOString();
           const entry: KnowledgeEntry = {
             id: mockUuid(),
             authorId: viewer.id,
-            title: body.title.trim(),
-            body: body.body,
-            summary:
-              typeof body.summary === "string"
-                ? body.summary.trim() || undefined
-                : undefined,
+            title: title.value,
+            body: text.value,
+            summary: summary.value,
             tags,
             category: body.category as KnowledgeEntry["category"],
             applicableAudience:
@@ -937,7 +1001,8 @@ export function createCampusAgoraMockFetch(
       if (!discussionId) {
         if (request.method === "GET") {
           const url = new URL(request.url);
-          const q = url.searchParams.get("q")?.toLowerCase();
+          const rawQuery = url.searchParams.get("q");
+          const q = rawQuery?.toLowerCase();
           const tag = url.searchParams.get("tag")?.toLowerCase();
           const page = Number(url.searchParams.get("page") ?? "1");
           const pageSize = Number(url.searchParams.get("pageSize") ?? "20");
@@ -953,6 +1018,12 @@ export function createCampusAgoraMockFetch(
 
           if (page < 1 || pageSize < 1 || pageSize > 100) {
             return unprocessable("page and pageSize are out of range");
+          }
+
+          if (rawQuery && [...rawQuery.trim()].length > LIMITS.searchQuery) {
+            return unprocessable(
+              `q must be at most ${LIMITS.searchQuery} characters`,
+            );
           }
 
           const matched = [...discussions.values()]
@@ -996,22 +1067,28 @@ export function createCampusAgoraMockFetch(
             return badBody();
           }
 
-          const title = body.title.trim();
-          const text = body.body.trim();
+          const title = boundedText(body.title, LIMITS.title, "title");
+          if (!title.ok) {
+            return unprocessable(title.message);
+          }
 
-          if (!title || !text) {
-            return unprocessable("title and body must not be empty");
+          const text = boundedText(body.body, LIMITS.body, "body");
+          if (!text.ok) {
+            return unprocessable(text.message);
+          }
+
+          const tags = normalizeTags(body.tags);
+          if (tags === "invalid") {
+            return unprocessable("tags are invalid");
           }
 
           const now = new Date().toISOString();
           const discussion: Discussion = {
             id: mockUuid(),
             authorId: viewer.id,
-            title,
-            body: text,
-            tags: Array.isArray(body.tags)
-              ? (body.tags as string[]).map((tag) => tag.trim().toLowerCase())
-              : [],
+            title: title.value,
+            body: text.value,
+            tags,
             moderationStatus: "draft",
             acceptedCommentId: null,
             replyCount: 0,
@@ -1233,16 +1310,49 @@ export function createCampusAgoraMockFetch(
           return badBody();
         }
 
+        // Overrides go through the same bounds as any other write. Promoting a
+        // reply builds its title from the thread's, so a legal thread title
+        // plus a suffix can exceed the entry limit — the server rejects that
+        // and the mock has to as well, or the web tests assert a navigation
+        // that never happens in production.
+        const title = boundedText(
+          typeof body.title === "string" ? body.title : discussion.title,
+          LIMITS.title,
+          "title",
+        );
+        if (!title.ok) {
+          return unprocessable(title.message);
+        }
+
+        const text = boundedText(
+          typeof body.body === "string" ? body.body : sourceBody,
+          LIMITS.body,
+          "body",
+        );
+        if (!text.ok) {
+          return unprocessable(text.message);
+        }
+
+        const summary = boundedSummary(body.summary);
+        if (!summary.ok) {
+          return unprocessable(summary.message);
+        }
+
+        const tags = Array.isArray(body.tags)
+          ? normalizeTags(body.tags)
+          : discussion.tags;
+        if (tags === "invalid") {
+          return unprocessable("tags are invalid");
+        }
+
         const now = new Date().toISOString();
         const entry: KnowledgeEntry = {
           id: mockUuid(),
           authorId: viewer.id,
-          title: typeof body.title === "string" ? body.title.trim() : discussion.title,
-          body: typeof body.body === "string" ? body.body.trim() : sourceBody,
-          summary: typeof body.summary === "string" ? body.summary.trim() : undefined,
-          tags: Array.isArray(body.tags)
-            ? (body.tags as string[]).map((tag) => tag.trim().toLowerCase())
-            : discussion.tags,
+          title: title.value,
+          body: text.value,
+          summary: summary.value,
+          tags,
           category: (typeof body.category === "string"
             ? body.category
             : "other") as KnowledgeEntry["category"],
@@ -1255,10 +1365,6 @@ export function createCampusAgoraMockFetch(
           createdAt: now,
           updatedAt: now,
         };
-
-        if (!entry.title || !entry.body) {
-          return unprocessable("title and body must not be empty");
-        }
 
         entries.set(entry.id, entry);
         revisions.set(entry.id, [
@@ -1280,6 +1386,9 @@ export function createCampusAgoraMockFetch(
           sourcePostId: discussion.id,
           sourceCommentId: (body.commentId as string | undefined) ?? null,
           sourceAuthorId,
+          sourceAuthorName:
+            Object.values(users).find((user) => user.id === sourceAuthorId)
+              ?.displayName ?? "未知用户",
           sourceTitle: discussion.title,
           createdAt: now,
         };

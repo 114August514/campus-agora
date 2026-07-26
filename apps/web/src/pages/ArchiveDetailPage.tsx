@@ -147,10 +147,11 @@ export function ArchiveDetailPage({ session }: { session: SessionController }) {
                     ? "整理自该讨论的一条回复"
                     : "整理自该讨论的主帖"}
                   {" · "}
-                  内容作者{" "}
-                  {source.sourceAuthorId === entry.authorId
-                    ? "同本条目作者"
-                    : source.sourceAuthorId}
+                  {/* The name, not the id. Recording `sourceAuthorId` exists to
+                      preserve attribution, and a UUID attributes nothing to a
+                      reader. */}
+                  内容作者 {source.sourceAuthorName}
+                  {source.sourceAuthorId === entry.authorId && "（同本条目作者）"}
                   {" · "}
                   整理于 {formatDateTime(source.createdAt)}
                 </p>

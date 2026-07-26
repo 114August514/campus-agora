@@ -415,6 +415,7 @@ async fn promoting_a_reply_creates_a_draft_entry_owned_by_the_promoter() {
 
     // The reply's author keeps their attribution through the source record.
     assert_eq!(promoted.source.source_author_id, helper.id);
+    assert_eq!(promoted.source.source_author_name, helper.display_name);
     assert_eq!(promoted.source.source_post_id, id);
     assert_eq!(promoted.source.source_comment_id, Some(comment));
 }
@@ -618,6 +619,7 @@ async fn an_entry_lists_the_discussion_it_came_from() {
     assert_eq!(sources.len(), 1);
     assert_eq!(sources[0].source_post_id, id);
     assert_eq!(sources[0].source_title, "来源讨论");
+    assert_eq!(sources[0].source_author_name, author.display_name);
 }
 
 /// The backlink must not become a way to enumerate drafts: a derived entry

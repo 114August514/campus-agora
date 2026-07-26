@@ -137,6 +137,7 @@ pub struct ArchiveSourceDto {
     /// Who wrote the quoted text. Not the entry's author when a reply was
     /// promoted, which is exactly why it is carried through.
     pub source_author_id: String,
+    pub source_author_name: String,
     pub source_title: String,
     pub created_at: String,
 }
@@ -148,6 +149,7 @@ impl From<ArchiveSourceRecord> for ArchiveSourceDto {
             source_post_id: record.source_post_id.to_string(),
             source_comment_id: record.source_comment_id.map(|id| id.to_string()),
             source_author_id: record.source_author_id.to_string(),
+            source_author_name: record.source_author_name,
             source_title: record.source_title,
             created_at: timestamp(record.created_at),
         }
