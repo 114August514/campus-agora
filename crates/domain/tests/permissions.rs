@@ -195,6 +195,88 @@ fn maintain_organization_content_requires_membership_or_assignment() {
 }
 
 #[test]
+fn view_archive_entry_is_open_because_visibility_is_a_repository_concern() {
+    // The matrix allows the read action for everyone; whether a specific entry
+    // is visible is decided by the repository predicate (published, or owned /
+    // maintained / moderated by the caller). Encoding visibility here too
+    // would put the same rule in two places.
+    assert_eq!(
+        decide(Action::ViewArchiveEntry, &Actor::Guest),
+        PermissionDecision::Allow
+    );
+    assert_eq!(
+        decide(
+            Action::ViewArchiveEntry,
+            &authenticated(actor(SystemRole::Student))
+        ),
+        PermissionDecision::Allow
+    );
+}
+
+#[test]
+fn filing_a_correction_requires_authentication() {
+    assert_eq!(
+        decide(Action::FileCorrection, &Actor::Guest),
+        PermissionDecision::Deny
+    );
+
+    for system_role in [
+        SystemRole::Student,
+        SystemRole::OrganizationMember,
+        SystemRole::Moderator,
+        SystemRole::Admin,
+    ] {
+        assert_eq!(
+            decide(Action::FileCorrection, &authenticated(actor(system_role))),
+            PermissionDecision::Allow
+        );
+    }
+}
+
+#[test]
+fn resolving_a_correction_requires_a_stake_in_the_entry() {
+    assert_eq!(
+        decide(Action::ResolveCorrection, &Actor::Guest),
+        PermissionDecision::Deny
+    );
+    assert_eq!(
+        decide(
+            Action::ResolveCorrection,
+            &authenticated(actor(SystemRole::Student))
+        ),
+        PermissionDecision::Deny
+    );
+
+    let author = AuthenticatedActor {
+        is_resource_author: true,
+        ..actor(SystemRole::Student)
+    };
+    assert_eq!(
+        decide(Action::ResolveCorrection, &authenticated(author)),
+        PermissionDecision::Allow
+    );
+
+    let maintainer = AuthenticatedActor {
+        is_assigned_maintainer: true,
+        ..actor(SystemRole::Student)
+    };
+    assert_eq!(
+        decide(Action::ResolveCorrection, &authenticated(maintainer)),
+        PermissionDecision::Allow
+    );
+
+    for system_role in [SystemRole::Moderator, SystemRole::Admin] {
+        assert_eq!(
+            decide(
+                Action::ResolveCorrection,
+                &authenticated(actor(system_role))
+            ),
+            PermissionDecision::Allow
+        );
+    }
+}
+
+#[test]
 fn publish_archive_entry_is_conditional_for_members_and_authors() {
     assert_eq!(
         decide(Action::PublishArchiveEntry, &Actor::Guest),
@@ -220,13 +302,15 @@ fn publish_archive_entry_is_conditional_for_members_and_authors() {
         PermissionDecision::Conditional
     );
 
+    // M2.1 resolves the Author condition: an author may publish their own
+    // draft. The state machine still decides whether the transition is legal.
     let author = AuthenticatedActor {
         is_resource_author: true,
         ..actor(SystemRole::Student)
     };
     assert_eq!(
         decide(Action::PublishArchiveEntry, &authenticated(author)),
-        PermissionDecision::Conditional
+        PermissionDecision::Allow
     );
 
     let assigned_maintainer = AuthenticatedActor {
@@ -259,18 +343,23 @@ fn publish_archive_entry_is_conditional_for_members_and_authors() {
 
 #[test]
 fn conditional_decisions_are_denied_at_runtime() {
-    let author = AuthenticatedActor {
-        is_resource_author: true,
-        ..actor(SystemRole::Student)
+    // Organization-scoped publishing still depends on resource state that no
+    // milestone has modelled yet, so it stays Conditional and is denied.
+    let organization_member = AuthenticatedActor {
+        is_organization_member: true,
+        ..actor(SystemRole::OrganizationMember)
     };
 
     assert_eq!(
-        decide(Action::PublishArchiveEntry, &authenticated(author.clone())),
+        decide(
+            Action::PublishArchiveEntry,
+            &authenticated(organization_member.clone())
+        ),
         PermissionDecision::Conditional
     );
     assert!(!is_allowed(
         Action::PublishArchiveEntry,
-        &authenticated(author)
+        &authenticated(organization_member)
     ));
 }
 

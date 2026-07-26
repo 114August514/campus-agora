@@ -12,10 +12,12 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use campus_agora_application::archive::ArchiveService;
 use campus_agora_application::auth::{AuthConfig, AuthService, MockCampusAuthProvider};
 use campus_agora_application::memory::InMemoryAuthStore;
 use campus_agora_application::ports::{
-    AuditEventRepository, OrganizationRepository, SessionRepository, UserRepository,
+    ArchiveRepository, AuditEventRepository, CorrectionRepository, OrganizationRepository,
+    SessionRepository, UserRepository,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -23,6 +25,7 @@ use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 
+mod archive;
 mod auth;
 
 pub const API_BOUNDARY: &str = "campus-agora-api";
@@ -39,6 +42,7 @@ pub struct ApiState {
     readiness: ReadinessProbe,
     pub(crate) capabilities: CapabilityFlags,
     pub(crate) auth: Arc<AuthService>,
+    pub(crate) archive: Arc<ArchiveService>,
 }
 
 impl fmt::Debug for ApiState {
@@ -54,7 +58,7 @@ impl ApiState {
     pub fn from_env() -> Self {
         let session_ttl_seconds = session_ttl_seconds_from_env();
 
-        let (readiness, auth) = match std::env::var("DATABASE_URL") {
+        let (readiness, auth, archive) = match std::env::var("DATABASE_URL") {
             Ok(database_url) if !database_url.trim().is_empty() => {
                 let pool = campus_agora_db::connect_lazy(&database_url).unwrap_or_else(|_| {
                     panic!("DATABASE_URL is not a valid PostgreSQL connection string")
@@ -63,7 +67,8 @@ impl ApiState {
 
                 (
                     ReadinessProbe::Postgres { database_url },
-                    auth_service_with_store(store, session_ttl_seconds),
+                    auth_service_with_store(store.clone(), session_ttl_seconds),
+                    archive_service_with_store(store),
                 )
             }
             // The in-memory store holds real sessions in volatile per-process
@@ -77,12 +82,12 @@ impl ApiState {
                      store. This is for local development and tests only."
                 );
 
+                let store = Arc::new(InMemoryAuthStore::default());
+
                 (
                     ReadinessProbe::Unavailable,
-                    auth_service_with_store(
-                        Arc::new(InMemoryAuthStore::default()),
-                        session_ttl_seconds,
-                    ),
+                    auth_service_with_store(store.clone(), session_ttl_seconds),
+                    archive_service_with_store(store),
                 )
             }
             _ => panic!(
@@ -100,10 +105,15 @@ impl ApiState {
                 attachments_enabled: bool_env("ATTACHMENTS_ENABLED", false),
             },
             auth,
+            archive,
         }
     }
 
     pub fn for_tests(readiness: ReadinessStatus) -> Self {
+        // One store backs both services so a session created through the auth
+        // endpoints can act on entries created through the archive endpoints.
+        let store = Arc::new(InMemoryAuthStore::default());
+
         Self {
             readiness: match readiness {
                 ReadinessStatus::Ready => ReadinessProbe::Ready,
@@ -115,10 +125,8 @@ impl ApiState {
                 ai_archive_enabled: false,
                 attachments_enabled: false,
             },
-            auth: auth_service_with_store(
-                Arc::new(InMemoryAuthStore::default()),
-                DEFAULT_SESSION_TTL_SECONDS,
-            ),
+            auth: auth_service_with_store(store.clone(), DEFAULT_SESSION_TTL_SECONDS),
+            archive: archive_service_with_store(store),
         }
     }
 
@@ -142,6 +150,13 @@ where
             session_ttl: chrono::Duration::seconds(session_ttl_seconds),
         },
     ))
+}
+
+fn archive_service_with_store<S>(store: Arc<S>) -> Arc<ArchiveService>
+where
+    S: ArchiveRepository + CorrectionRepository + AuditEventRepository + 'static,
+{
+    Arc::new(ArchiveService::new(store.clone(), store.clone(), store))
 }
 
 #[derive(Clone, Debug)]
@@ -280,6 +295,30 @@ pub fn build_router_with_state_and_config(state: ApiState, config: ApiRuntimeCon
         .route("/api/v1/auth/mock-login", post(auth::mock_login))
         .route("/api/v1/auth/session", get(auth::auth_session))
         .route("/api/v1/auth/logout", post(auth::logout))
+        .route(
+            "/api/v1/knowledge-entries",
+            get(archive::list_entries).post(archive::create_entry),
+        )
+        .route(
+            "/api/v1/knowledge-entries/:id",
+            get(archive::get_entry).patch(archive::update_entry),
+        )
+        .route(
+            "/api/v1/knowledge-entries/:id/status",
+            post(archive::change_status),
+        )
+        .route(
+            "/api/v1/knowledge-entries/:id/revisions",
+            get(archive::list_revisions),
+        )
+        .route(
+            "/api/v1/knowledge-entries/:id/corrections",
+            get(archive::list_corrections).post(archive::file_correction),
+        )
+        .route(
+            "/api/v1/knowledge-entries/:id/corrections/:correction_id/resolve",
+            post(archive::resolve_correction),
+        )
         .fallback(not_found)
         .with_state(state)
         .layer(cors_layer(&config))
@@ -517,6 +556,594 @@ pub fn openapi_document() -> Value {
                     }
                 }
             }
+            ,
+            "/api/v1/knowledge-entries": {
+                "get": {
+                    "operationId": "listKnowledgeEntries",
+                    "summary": "List visible knowledge entries",
+                    "description": "Guests see published entries. An authenticated caller also sees entries they authored or maintain; moderators and admins see all.",
+                    "security": [],
+                    "parameters": [
+                        { "name": "q", "in": "query", "required": false, "schema": { "type": "string" }, "description": "Case-insensitive match over title and summary." },
+                        { "name": "tag", "in": "query", "required": false, "schema": { "type": "string" } },
+                        { "name": "category", "in": "query", "required": false, "schema": { "$ref": "#/components/schemas/ArchiveCategory" } },
+                        { "name": "page", "in": "query", "required": false, "schema": { "type": "integer" }, "description": "1-based page number." },
+                        { "name": "pageSize", "in": "query", "required": false, "schema": { "type": "integer" }, "description": "Defaults to 20, maximum 100." }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "A page of knowledge entries",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/PaginatedKnowledgeEntries" }
+                                }
+                            }
+                        },
+                        "400": {
+                            "description": "Malformed query parameters",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "401": {
+                            "description": "Invalid or expired session token",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "422": {
+                            "description": "Page or pageSize out of range",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "500": {
+                            "description": "Unexpected server error",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        }
+                    }
+                },
+                "post": {
+                    "operationId": "createKnowledgeEntry",
+                    "summary": "Create a knowledge entry draft",
+                    "security": [{ "bearerAuth": [] }],
+                    "requestBody": {
+                        "required": true,
+                        "content": {
+                            "application/json": {
+                                "schema": { "$ref": "#/components/schemas/CreateKnowledgeEntryRequest" }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "201": {
+                            "description": "The knowledge entry",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/KnowledgeEntry" }
+                                }
+                            }
+                        },
+                        "400": {
+                            "description": "Malformed body or unknown enum value",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "401": {
+                            "description": "Authentication required",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "403": {
+                            "description": "Not allowed to create entries",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "422": {
+                            "description": "Field validation failed",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "500": {
+                            "description": "Unexpected server error",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "/api/v1/knowledge-entries/{id}": {
+                "parameters": [{
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" },
+                        "description": "Knowledge entry id (UUID)."
+                    }],
+                "get": {
+                    "operationId": "getKnowledgeEntry",
+                    "summary": "Read one knowledge entry",
+                    "description": "An entry the caller may not see returns 404 rather than 403, so a private draft does not leak its existence.",
+                    "security": [],
+                    "responses": {
+                        "200": {
+                            "description": "The knowledge entry",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/KnowledgeEntry" }
+                                }
+                            }
+                        },
+                        "400": {
+                            "description": "Entry id is not a UUID",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "401": {
+                            "description": "Invalid or expired session token",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Entry missing or not visible to the caller",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "500": {
+                            "description": "Unexpected server error",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        }
+                    }
+                },
+                "patch": {
+                    "operationId": "updateKnowledgeEntry",
+                    "summary": "Update a knowledge entry",
+                    "description": "Editing a published entry writes a new revision and bumps currentRevision. Editing a draft updates in place.",
+                    "security": [{ "bearerAuth": [] }],
+                    "requestBody": {
+                        "required": true,
+                        "content": {
+                            "application/json": {
+                                "schema": { "$ref": "#/components/schemas/UpdateKnowledgeEntryRequest" }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "The knowledge entry",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/KnowledgeEntry" }
+                                }
+                            }
+                        },
+                        "400": {
+                            "description": "Malformed body, unknown enum value, or bad id",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "401": {
+                            "description": "Authentication required",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "403": {
+                            "description": "Not allowed to edit this entry",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Entry missing or not visible to the caller",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "422": {
+                            "description": "Field validation failed",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "500": {
+                            "description": "Unexpected server error",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "/api/v1/knowledge-entries/{id}/status": {
+                "parameters": [{
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" },
+                        "description": "Knowledge entry id (UUID)."
+                    }],
+                "post": {
+                    "operationId": "changeKnowledgeEntryStatus",
+                    "summary": "Move a knowledge entry through the moderation state machine",
+                    "security": [{ "bearerAuth": [] }],
+                    "requestBody": {
+                        "required": true,
+                        "content": {
+                            "application/json": {
+                                "schema": { "$ref": "#/components/schemas/ChangeStatusRequest" }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "The knowledge entry",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/KnowledgeEntry" }
+                                }
+                            }
+                        },
+                        "400": {
+                            "description": "Malformed body or bad id",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "401": {
+                            "description": "Authentication required",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "403": {
+                            "description": "Not allowed to change this entry's state",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Entry missing or not visible to the caller",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "409": {
+                            "description": "Transition is not allowed from the current status",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "500": {
+                            "description": "Unexpected server error",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "/api/v1/knowledge-entries/{id}/revisions": {
+                "parameters": [{
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" },
+                        "description": "Knowledge entry id (UUID)."
+                    }],
+                "get": {
+                    "operationId": "listKnowledgeEntryRevisions",
+                    "summary": "Read the version history of an entry",
+                    "security": [],
+                    "responses": {
+                        "200": {
+                            "description": "Revisions ordered oldest first",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/RevisionCollection" }
+                                }
+                            }
+                        },
+                        "400": {
+                            "description": "Entry id is not a UUID",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "401": {
+                            "description": "Invalid or expired session token",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Entry missing or not visible to the caller",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "500": {
+                            "description": "Unexpected server error",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "/api/v1/knowledge-entries/{id}/corrections": {
+                "parameters": [{
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" },
+                        "description": "Knowledge entry id (UUID)."
+                    }],
+                "get": {
+                    "operationId": "listKnowledgeEntryCorrections",
+                    "summary": "List corrections filed against an entry",
+                    "security": [],
+                    "responses": {
+                        "200": {
+                            "description": "Corrections ordered oldest first",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/CorrectionCollection" }
+                                }
+                            }
+                        },
+                        "400": {
+                            "description": "Entry id is not a UUID",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "401": {
+                            "description": "Invalid or expired session token",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Entry missing or not visible to the caller",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "500": {
+                            "description": "Unexpected server error",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        }
+                    }
+                },
+                "post": {
+                    "operationId": "fileKnowledgeEntryCorrection",
+                    "summary": "Report that an entry is out of date or wrong",
+                    "description": "A correction is a report, not an edit; resolving it stays an explicit maintainer action.",
+                    "security": [{ "bearerAuth": [] }],
+                    "requestBody": {
+                        "required": true,
+                        "content": {
+                            "application/json": {
+                                "schema": { "$ref": "#/components/schemas/FileCorrectionRequest" }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "201": {
+                            "description": "The filed correction",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/Correction" }
+                                }
+                            }
+                        },
+                        "400": {
+                            "description": "Malformed body or bad id",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "401": {
+                            "description": "Authentication required",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "403": {
+                            "description": "Not allowed to file corrections",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Entry missing or not visible to the caller",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "422": {
+                            "description": "Message empty or too long",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "500": {
+                            "description": "Unexpected server error",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "/api/v1/knowledge-entries/{id}/corrections/{correctionId}/resolve": {
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" },
+                        "description": "Knowledge entry id (UUID)."
+                    },
+                    {
+                        "name": "correctionId",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" },
+                        "description": "Correction id (UUID)."
+                    }
+                ],
+                "post": {
+                    "operationId": "resolveKnowledgeEntryCorrection",
+                    "summary": "Close a correction",
+                    "description": "Idempotent: the first resolution wins, so a repeat call returns the stored record.",
+                    "security": [{ "bearerAuth": [] }],
+                    "responses": {
+                        "200": {
+                            "description": "The resolved correction",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/Correction" }
+                                }
+                            }
+                        },
+                        "400": {
+                            "description": "Path ids are not UUIDs",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "401": {
+                            "description": "Authentication required",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "403": {
+                            "description": "Not allowed to resolve corrections on this entry",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Entry or correction missing",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "500": {
+                            "description": "Unexpected server error",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         },
         "components": {
             "securitySchemes": {
@@ -667,6 +1294,149 @@ pub fn openapi_document() -> Value {
                             "type": "string",
                             "description": "UTC ISO 8601 session expiry."
                         }
+                    }
+                },
+                "ArchiveCategory": {
+                    "type": "string",
+                    "enum": ["onboarding", "campus_life", "academics", "organizations", "procedures", "other"]
+                },
+                "ApplicableAudience": {
+                    "type": "string",
+                    "enum": ["all_students", "new_students", "undergraduate", "graduate", "organization_members"]
+                },
+                "SourceKind": {
+                    "type": "string",
+                    "enum": ["firsthand_experience", "official_announcement", "group_chat", "discussion", "unspecified"]
+                },
+                "ModerationStatus": {
+                    "type": "string",
+                    "enum": ["draft", "published", "hidden", "rejected"]
+                },
+                "KnowledgeEntry": {
+                    "type": "object",
+                    "required": [
+                        "id", "authorId", "title", "body", "tags", "category",
+                        "applicableAudience", "sourceKind", "moderationStatus",
+                        "currentRevision", "createdAt", "updatedAt"
+                    ],
+                    "properties": {
+                        "id": { "type": "string" },
+                        "authorId": { "type": "string" },
+                        "title": { "type": "string" },
+                        "body": { "type": "string" },
+                        "summary": { "type": "string" },
+                        "tags": { "type": "array", "items": { "type": "string" } },
+                        "category": { "$ref": "#/components/schemas/ArchiveCategory" },
+                        "applicableAudience": { "$ref": "#/components/schemas/ApplicableAudience" },
+                        "sourceKind": { "$ref": "#/components/schemas/SourceKind" },
+                        "sourceReference": { "type": "string" },
+                        "moderationStatus": { "$ref": "#/components/schemas/ModerationStatus" },
+                        "currentRevision": { "type": "integer" },
+                        "createdAt": { "type": "string" },
+                        "updatedAt": { "type": "string" }
+                    }
+                },
+                "PaginatedKnowledgeEntries": {
+                    "type": "object",
+                    "required": ["items", "page", "pageSize", "totalItems", "totalPages"],
+                    "properties": {
+                        "items": {
+                            "type": "array",
+                            "items": { "$ref": "#/components/schemas/KnowledgeEntry" }
+                        },
+                        "page": { "type": "integer" },
+                        "pageSize": { "type": "integer" },
+                        "totalItems": { "type": "integer" },
+                        "totalPages": { "type": "integer" }
+                    }
+                },
+                "CreateKnowledgeEntryRequest": {
+                    "type": "object",
+                    "required": ["title", "body", "category", "applicableAudience", "sourceKind"],
+                    "properties": {
+                        "title": { "type": "string" },
+                        "body": { "type": "string" },
+                        "summary": { "type": "string" },
+                        "tags": { "type": "array", "items": { "type": "string" } },
+                        "category": { "$ref": "#/components/schemas/ArchiveCategory" },
+                        "applicableAudience": { "$ref": "#/components/schemas/ApplicableAudience" },
+                        "sourceKind": { "$ref": "#/components/schemas/SourceKind" },
+                        "sourceReference": { "type": "string" }
+                    }
+                },
+                "UpdateKnowledgeEntryRequest": {
+                    "type": "object",
+                    "description": "Every field is optional; omitted fields keep their stored value.",
+                    "properties": {
+                        "title": { "type": "string" },
+                        "body": { "type": "string" },
+                        "summary": { "type": "string" },
+                        "tags": { "type": "array", "items": { "type": "string" } },
+                        "category": { "$ref": "#/components/schemas/ArchiveCategory" },
+                        "applicableAudience": { "$ref": "#/components/schemas/ApplicableAudience" },
+                        "sourceKind": { "$ref": "#/components/schemas/SourceKind" },
+                        "sourceReference": { "type": "string" }
+                    }
+                },
+                "ChangeStatusRequest": {
+                    "type": "object",
+                    "required": ["status"],
+                    "properties": {
+                        "status": { "$ref": "#/components/schemas/ModerationStatus" }
+                    }
+                },
+                "Revision": {
+                    "type": "object",
+                    "required": ["id", "revision", "editorId", "title", "body", "tags", "createdAt"],
+                    "properties": {
+                        "id": { "type": "string" },
+                        "revision": { "type": "integer" },
+                        "editorId": { "type": "string" },
+                        "title": { "type": "string" },
+                        "body": { "type": "string" },
+                        "summary": { "type": "string" },
+                        "tags": { "type": "array", "items": { "type": "string" } },
+                        "createdAt": { "type": "string" }
+                    }
+                },
+                "RevisionCollection": {
+                    "type": "object",
+                    "required": ["items"],
+                    "properties": {
+                        "items": {
+                            "type": "array",
+                            "items": { "$ref": "#/components/schemas/Revision" }
+                        }
+                    }
+                },
+                "Correction": {
+                    "type": "object",
+                    "required": ["id", "postId", "reporterId", "message", "createdAt"],
+                    "properties": {
+                        "id": { "type": "string" },
+                        "postId": { "type": "string" },
+                        "reporterId": { "type": "string" },
+                        "message": { "type": "string" },
+                        "createdAt": { "type": "string" },
+                        "resolvedAt": { "type": "string" },
+                        "resolvedBy": { "type": "string" }
+                    }
+                },
+                "CorrectionCollection": {
+                    "type": "object",
+                    "required": ["items"],
+                    "properties": {
+                        "items": {
+                            "type": "array",
+                            "items": { "$ref": "#/components/schemas/Correction" }
+                        }
+                    }
+                },
+                "FileCorrectionRequest": {
+                    "type": "object",
+                    "required": ["message"],
+                    "properties": {
+                        "message": { "type": "string" }
                     }
                 }
             }

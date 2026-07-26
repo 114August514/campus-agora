@@ -28,3 +28,6 @@ macro_rules! define_id {
 define_id!(UserId);
 define_id!(OrganizationId);
 define_id!(SessionId);
+define_id!(PostId);
+define_id!(RevisionId);
+define_id!(CorrectionId);

@@ -161,7 +161,7 @@ pub(crate) async fn logout(State(state): State<ApiState>, headers: HeaderMap) ->
 
 /// RFC 7235 makes the auth scheme case-insensitive, so `bearer <token>` and
 /// `Bearer <token>` are the same credential.
-fn bearer_token(headers: &HeaderMap) -> Option<String> {
+pub(crate) fn bearer_token(headers: &HeaderMap) -> Option<String> {
     let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
     let (scheme, token) = value.split_once(char::is_whitespace)?;
 
@@ -178,7 +178,7 @@ fn bearer_token(headers: &HeaderMap) -> Option<String> {
     Some(token.to_owned())
 }
 
-fn unauthorized_response(request_id: String) -> Response {
+pub(crate) fn unauthorized_response(request_id: String) -> Response {
     api_error_response(
         StatusCode::UNAUTHORIZED,
         "unauthorized",
@@ -189,7 +189,9 @@ fn unauthorized_response(request_id: String) -> Response {
     .into_response()
 }
 
-fn application_error_response(error: ApplicationError, request_id: String) -> Response {
+/// Shared by every resource so one `ApplicationError` variant always maps to
+/// the same HTTP status and error code.
+pub(crate) fn application_error_response(error: ApplicationError, request_id: String) -> Response {
     let (status, code, message) = match error {
         ApplicationError::Unauthorized => (
             StatusCode::UNAUTHORIZED,

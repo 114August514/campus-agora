@@ -8,10 +8,13 @@ use crate::roles::SystemRole;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Action {
     ReadPublicContent,
+    ViewArchiveEntry,
     CreateOwnDraft,
     EditOwnDraft,
     MaintainOrganizationContent,
     PublishArchiveEntry,
+    FileCorrection,
+    ResolveCorrection,
     ChangeModerationState,
     ChangeRoles,
     ExportData,
@@ -116,7 +119,9 @@ fn cell(
     use PermissionDecision::*;
 
     match action {
-        Action::ReadPublicContent => Allow,
+        // Visibility of a specific entry is enforced by the repository query,
+        // not here, so the read action itself is open.
+        Action::ReadPublicContent | Action::ViewArchiveEntry => Allow,
         Action::CreateOwnDraft => match column {
             Guest => Deny,
             _ => Allow,
@@ -130,9 +135,20 @@ fn cell(
             Maintainer | Moderator | Admin => Allow,
             _ => Deny,
         },
+        // An author may publish their own draft (resolved in M2.1). Publishing
+        // organization-scoped content still depends on resource state no
+        // milestone has modelled, so that column stays Conditional.
         Action::PublishArchiveEntry => match column {
-            OrganizationMember | Author => Conditional,
-            Maintainer | Moderator | Admin => Allow,
+            OrganizationMember => Conditional,
+            Author | Maintainer | Moderator | Admin => Allow,
+            _ => Deny,
+        },
+        Action::FileCorrection => match column {
+            Guest => Deny,
+            _ => Allow,
+        },
+        Action::ResolveCorrection => match column {
+            Author | Maintainer | Moderator | Admin => Allow,
             _ => Deny,
         },
         Action::ChangeModerationState => match column {

@@ -1,6 +1,6 @@
 # Campus Agora
 
-Campus Agora is a campus discussion and knowledge archive platform. This repository is currently in the M1 Identity, Permissions And Auth Shell stage.
+Campus Agora is a campus discussion and knowledge archive platform. This repository is currently in the M2 Knowledge Archive Core stage.
 
 ## Requirements
 
@@ -57,3 +57,8 @@ The API exposes:
 - `POST /api/v1/auth/mock-login`
 - `GET /api/v1/auth/session`
 - `POST /api/v1/auth/logout`
+- `GET|POST /api/v1/knowledge-entries`
+- `GET|PATCH /api/v1/knowledge-entries/{id}`
+- `POST /api/v1/knowledge-entries/{id}/status`
+- `GET /api/v1/knowledge-entries/{id}/revisions`
+- `GET|POST /api/v1/knowledge-entries/{id}/corrections`
