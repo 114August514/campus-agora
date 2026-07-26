@@ -84,3 +84,51 @@ fn m2_migration_defines_archive_metadata_maintainers_and_corrections() {
     assert!(normalized.contains("using gin"));
     assert!(normalized.contains("create index post_corrections_post_idx"));
 }
+
+#[test]
+fn m3_migration_defines_the_discussion_loop() {
+    let migration = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("migrations/20260728000000_m3_discussion_loop.sql"),
+    )
+    .expect("m3 discussion migration must exist");
+    let normalized = migration.to_lowercase();
+
+    assert!(normalized.contains("create table comments"));
+    assert!(normalized.contains("create table archive_sources"));
+
+    // Replies are soft-deletable like every other piece of user content, so a
+    // removed reply stays recoverable and auditable.
+    assert!(normalized.contains("deleted_at timestamptz"));
+    assert!(normalized.contains("deleted_by uuid"));
+
+    // The accepted answer is a column on the discussion, so "exactly one" is a
+    // property of the schema rather than something the service has to maintain.
+    assert!(normalized.contains("accepted_comment_id"));
+
+    // The link is what makes the loop traceable, and it is queried from both
+    // ends, so both ends are indexed.
+    assert!(normalized.contains("archive_sources_entry_idx"));
+    assert!(normalized.contains("archive_sources_source_idx"));
+    assert!(normalized.contains("comments_post_idx"));
+
+    // One source may be recorded once per entry; promoting the same reply
+    // twice into one entry is a duplicate, not a second provenance record.
+    assert!(normalized.contains("unique"));
+}
+
+/// `archived` is rejected by the initial CHECK constraint, so the migration has
+/// to widen it. Without this the status exists in Rust and fails at the
+/// database — the sort of split-brain that only shows up in production.
+#[test]
+fn m3_migration_admits_the_archived_status() {
+    let migration = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("migrations/20260728000000_m3_discussion_loop.sql"),
+    )
+    .expect("m3 discussion migration must exist");
+    let normalized = migration.to_lowercase();
+
+    assert!(normalized.contains("drop constraint"));
+    assert!(normalized.contains("'archived'"));
+}

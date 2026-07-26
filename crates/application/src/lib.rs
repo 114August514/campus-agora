@@ -1,5 +1,6 @@
 pub mod archive;
 pub mod auth;
+pub mod discussion;
 pub mod errors;
 pub mod memory;
 pub mod ports;

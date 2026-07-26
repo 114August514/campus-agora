@@ -12,7 +12,7 @@ export interface NavigationItem {
 
 export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
   { label: "资料库", to: ROUTES.archiveList },
-  { label: "讨论", to: ROUTES.home },
+  { label: "讨论", to: ROUTES.discussionList },
   { label: "归档助手", to: ROUTES.home, requiresAuth: true },
   { label: "审核", to: ROUTES.home, allowedRoles: ["moderator", "admin"] },
 ];

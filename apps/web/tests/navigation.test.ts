@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { CurrentUser } from "@campus-agora/api-client";
+import { ROUTES, ROUTE_PATHS, discussionDetailPath } from "../src/app/routes";
 import { allowedTransitions } from "../src/features/archive/labels";
 import {
   visibleNavigationItems,
@@ -50,25 +51,70 @@ describe("archive status transitions offered in the UI", () => {
   const stranger = { systemRole: "student" as const, isAuthor: false };
   const moderator = { systemRole: "moderator" as const, isAuthor: false };
 
-  test("an author is offered only publishing their own draft", () => {
-    // The backend maps every other transition to ChangeModerationState, which
-    // a student never holds, so showing those buttons guarantees a 403.
+  test("an author may publish, retire, and restore their own work", () => {
+    // Mirrors the backend matrix: publishing a draft and archiving or
+    // restoring one's own content are author privileges. Hiding is not, and
+    // showing a button the server refuses guarantees a 403.
     expect(allowedTransitions("draft", student)).toEqual(["published"]);
-    expect(allowedTransitions("published", student)).toEqual([]);
+    expect(allowedTransitions("published", student)).toEqual(["archived"]);
+    expect(allowedTransitions("archived", student)).toEqual(["published"]);
     expect(allowedTransitions("hidden", student)).toEqual([]);
     expect(allowedTransitions("rejected", student)).toEqual([]);
   });
 
   test("a non-author student is offered nothing", () => {
-    for (const status of ["draft", "published", "hidden", "rejected"] as const) {
+    for (const status of [
+      "draft",
+      "published",
+      "hidden",
+      "rejected",
+      "archived",
+    ] as const) {
       expect(allowedTransitions(status, stranger)).toEqual([]);
     }
   });
 
   test("a moderator gets the full state machine", () => {
     expect(allowedTransitions("draft", moderator)).toEqual(["published", "rejected"]);
-    expect(allowedTransitions("published", moderator)).toEqual(["hidden"]);
+    expect(allowedTransitions("published", moderator)).toEqual(["hidden", "archived"]);
     expect(allowedTransitions("hidden", moderator)).toEqual(["published"]);
     expect(allowedTransitions("rejected", moderator)).toEqual(["draft"]);
+    // Archiving must not put content beyond moderation reach.
+    expect(allowedTransitions("archived", moderator)).toEqual(["published", "hidden"]);
+  });
+});
+
+describe("discussion routes", () => {
+  test("the route table carries the discussion namespace", () => {
+    expect(ROUTE_PATHS).toContain("/discussions");
+    expect(ROUTE_PATHS).toContain("/discussions/new");
+    expect(ROUTE_PATHS).toContain("/discussions/:id");
+  });
+
+  /**
+   * Separate namespaces are the structural half of M3's "the UI distinguishes
+   * discussion content from durable archive content": a discussion is never
+   * reachable through an archive URL, so the two never blur into one surface.
+   */
+  test("discussion and archive paths do not overlap", () => {
+    const archive = ROUTE_PATHS.filter((path) => path.startsWith("/archive"));
+    const discussion = ROUTE_PATHS.filter((path) => path.startsWith("/discussions"));
+
+    expect(archive.length).toBeGreaterThan(0);
+    expect(discussion.length).toBeGreaterThan(0);
+    expect(archive.filter((path) => discussion.includes(path))).toEqual([]);
+  });
+
+  test("path builders match the declared routes", () => {
+    expect(discussionDetailPath("abc")).toBe("/discussions/abc");
+    expect(ROUTES.discussionDetail).toBe("/discussions/:id");
+  });
+
+  test("the discussion nav entry points at the discussion list", () => {
+    const item = visibleNavigationItems(undefined).find(
+      (entry) => entry.label === "讨论",
+    );
+
+    expect(item?.to).toBe(ROUTES.discussionList);
   });
 });

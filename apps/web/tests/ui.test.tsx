@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, test } from "bun:test";
+import { cleanup, render, screen } from "@testing-library/react";
 import { Badge } from "../src/components/ui/Badge";
 import { Button } from "../src/components/ui/Button";
 import { EmptyState } from "../src/components/ui/EmptyState";
@@ -9,6 +9,11 @@ import { LoadingState } from "../src/components/ui/LoadingState";
 import { Pagination } from "../src/components/ui/Pagination";
 import { Select } from "../src/components/ui/Select";
 import { Textarea } from "../src/components/ui/Textarea";
+
+// Every test file shares one `document`, so a component left mounted here
+// makes an unrelated file's query ambiguous. This passed by luck of ordering
+// until a new file changed it.
+afterEach(cleanup);
 
 describe("Button", () => {
   test("renders every variant the product uses", () => {

@@ -1,4 +1,5 @@
 import {
+  type ArchiveSource,
   CampusAgoraApiError,
   type Correction,
   type KnowledgeEntry,
@@ -15,6 +16,10 @@ export type ArchiveEntryState =
       entry: KnowledgeEntry;
       revisions: Revision[];
       corrections: Correction[];
+      /** Where this entry's content came from, filtered to sources the reader
+       * may see — a link into a hidden discussion is omitted rather than
+       * disclosing its title. */
+      sources: ArchiveSource[];
     }
   /** A missing entry and an entry the caller may not see are the same state:
    * the API answers 404 for both so a private draft does not leak. */
@@ -50,14 +55,16 @@ export function useArchiveEntry(id: string): ArchiveEntryController {
       apiClient.getKnowledgeEntry(id),
       apiClient.listKnowledgeEntryRevisions(id),
       apiClient.listKnowledgeEntryCorrections(id),
+      apiClient.listKnowledgeEntrySources(id),
     ])
-      .then(([entry, revisions, corrections]) => {
+      .then(([entry, revisions, corrections, sources]) => {
         if (requestId === latestRequest.current) {
           setState({
             status: "ready",
             entry,
             revisions: revisions.items,
             corrections: corrections.items,
+            sources: sources.items,
           });
         }
       })

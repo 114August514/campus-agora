@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { discussionDetailPath } from "../app/routes";
 import { ArrowLeft, ICON_DEFAULTS } from "../components/icons";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
+import { ButtonLink } from "../components/ui/ButtonLink";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { ErrorState } from "../components/ui/ErrorState";
@@ -37,11 +39,7 @@ export function ArchiveDetailPage({ session }: { session: SessionController }) {
         <EmptyState
           title="资料不存在或不可见"
           description="它可能尚未发布、已被隐藏，或者你没有查看权限。"
-          action={
-            <Link to="/archive">
-              <Button>返回资料库</Button>
-            </Link>
-          }
+          action={<ButtonLink to="/archive">返回资料库</ButtonLink>}
         />
       </section>
     );
@@ -55,7 +53,7 @@ export function ArchiveDetailPage({ session }: { session: SessionController }) {
     );
   }
 
-  const { entry, revisions, corrections } = state;
+  const { entry, revisions, corrections, sources } = state;
   // Frontend permission is an affordance only; the backend still decides.
   const canEdit =
     viewer !== undefined &&
@@ -90,11 +88,7 @@ export function ArchiveDetailPage({ session }: { session: SessionController }) {
             {formatDateTime(entry.updatedAt)}
           </p>
         </div>
-        {canEdit && (
-          <Link to={`/archive/${entry.id}/edit`}>
-            <Button>编辑</Button>
-          </Link>
-        )}
+        {canEdit && <ButtonLink to={`/archive/${entry.id}/edit`}>编辑</ButtonLink>}
       </header>
 
       {controller.actionError && (
@@ -125,6 +119,46 @@ export function ArchiveDetailPage({ session }: { session: SessionController }) {
             </Button>
           ))}
         </div>
+      )}
+
+      {/* The archive half of the loop. The discussion shows what it produced;
+          this shows where the content came from, and names whoever wrote the
+          quoted text — that is not the entry's author when a reply was
+          promoted, and losing the attribution would be the actual harm. */}
+      {sources.length > 0 && (
+        <section className="detailSection">
+          <h2>内容来源</h2>
+          <ul className="entryList">
+            {sources.map((source) => (
+              <Card
+                as="li"
+                key={`${source.sourcePostId}-${source.sourceCommentId ?? "post"}`}
+              >
+                <div className="entryHead">
+                  <Link
+                    className="entryTitle"
+                    to={discussionDetailPath(source.sourcePostId)}
+                  >
+                    {source.sourceTitle}
+                  </Link>
+                </div>
+                <p className="entryMeta">
+                  {source.sourceCommentId
+                    ? "整理自该讨论的一条回复"
+                    : "整理自该讨论的主帖"}
+                  {" · "}
+                  {/* The name, not the id. Recording `sourceAuthorId` exists to
+                      preserve attribution, and a UUID attributes nothing to a
+                      reader. */}
+                  内容作者 {source.sourceAuthorName}
+                  {source.sourceAuthorId === entry.authorId && "（同本条目作者）"}
+                  {" · "}
+                  整理于 {formatDateTime(source.createdAt)}
+                </p>
+              </Card>
+            ))}
+          </ul>
+        </section>
       )}
 
       <section className="detailSection">

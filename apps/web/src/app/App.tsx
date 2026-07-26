@@ -7,6 +7,9 @@ import { ArchiveDetailPage } from "../pages/ArchiveDetailPage";
 import { ArchiveEditorPage } from "../pages/ArchiveEditorPage";
 import { ArchiveListPage } from "../pages/ArchiveListPage";
 import { DesignSystemPage } from "../pages/DesignSystemPage";
+import { DiscussionDetailPage } from "../pages/DiscussionDetailPage";
+import { DiscussionEditorPage } from "../pages/DiscussionEditorPage";
+import { DiscussionListPage } from "../pages/DiscussionListPage";
 import { HomePage } from "../pages/HomePage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { ROUTES } from "./routes";
@@ -34,6 +37,15 @@ export function App() {
           element={<ArchiveDetailPage session={session} />}
         />
         <Route path={ROUTES.archiveEdit} element={<ArchiveEditorPage />} />
+        <Route
+          path={ROUTES.discussionList}
+          element={<DiscussionListPage session={session} />}
+        />
+        <Route path={ROUTES.discussionNew} element={<DiscussionEditorPage />} />
+        <Route
+          path={ROUTES.discussionDetail}
+          element={<DiscussionDetailPage session={session} />}
+        />
         <Route path={ROUTES.designSystem} element={<DesignSystemPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

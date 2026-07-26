@@ -758,3 +758,428 @@ describe("archive mock matches the server's rules", () => {
     ).rejects.toMatchObject({ status: 404 });
   });
 });
+
+describe("discussion client and the loop into the archive", () => {
+  async function harness() {
+    const fetchImpl = createCampusAgoraMockFetch();
+    const holder: { token?: string } = {};
+    const client = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder.token,
+    });
+    const login = await client.mockLogin("student");
+    holder.token = login.token;
+
+    const guest = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+    });
+
+    async function other(persona: "organization_member" | "moderator") {
+      const holder2: { token?: string } = {};
+      const c = createCampusAgoraApiClient({
+        baseUrl: "http://api.test",
+        fetchImpl,
+        authToken: () => holder2.token,
+      });
+      const l = await c.mockLogin(persona);
+      holder2.token = l.token;
+      return { client: c, user: l.user };
+    }
+
+    return { client, guest, user: login.user, other };
+  }
+
+  async function publishedDiscussion(
+    client: CampusAgoraApiClient,
+    title = "场地申请流程",
+  ) {
+    const created = await client.createDiscussion({
+      title,
+      body: "有人知道流程吗？",
+      tags: ["办事流程"],
+    });
+
+    return client.changeDiscussionStatus(created.id, "published");
+  }
+
+  test("a new discussion is a private draft", async () => {
+    const { client, guest } = await harness();
+
+    const created = await client.createDiscussion({
+      title: "草稿",
+      body: "正文",
+      tags: [],
+    });
+
+    expect(created.moderationStatus).toBe("draft");
+    expect(created.replyCount).toBe(0);
+    expect(created.acceptedCommentId ?? null).toBeNull();
+
+    // 404 rather than 403: the mock must not admit a draft exists either.
+    await expect(guest.getDiscussion(created.id)).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+
+  test("replies are created, listed oldest first, and counted", async () => {
+    const { client } = await harness();
+    const discussion = await publishedDiscussion(client);
+
+    const first = await client.replyToDiscussion(discussion.id, "先去团委登记");
+    const second = await client.replyToDiscussion(discussion.id, "再去盖章");
+
+    const replies = await client.listDiscussionReplies(discussion.id);
+    expect(replies.items.map((item) => item.id)).toEqual([first.id, second.id]);
+
+    const reloaded = await client.getDiscussion(discussion.id);
+    expect(reloaded.replyCount).toBe(2);
+  });
+
+  test("the accepted answer can be set, replaced, and cleared", async () => {
+    const { client } = await harness();
+    const discussion = await publishedDiscussion(client);
+    const first = await client.replyToDiscussion(discussion.id, "方案一");
+    const second = await client.replyToDiscussion(discussion.id, "方案二");
+
+    let updated = await client.acceptDiscussionAnswer(discussion.id, first.id);
+    expect(updated.acceptedCommentId).toBe(first.id);
+
+    updated = await client.acceptDiscussionAnswer(discussion.id, second.id);
+    expect(updated.acceptedCommentId).toBe(second.id);
+
+    updated = await client.acceptDiscussionAnswer(discussion.id, null);
+    expect(updated.acceptedCommentId ?? null).toBeNull();
+  });
+
+  test("promoting records the entry and its source in one response", async () => {
+    const { client, other } = await harness();
+    const discussion = await publishedDiscussion(client);
+    const reply = await client.replyToDiscussion(
+      discussion.id,
+      "先去团委登记，再到场馆办公室盖章。",
+    );
+
+    const curator = await other("organization_member");
+    const promoted = await curator.client.promoteDiscussion(discussion.id, {
+      commentId: reply.id,
+      title: "场地申请流程指南",
+      category: "procedures",
+    });
+
+    expect(promoted.entry.moderationStatus).toBe("draft");
+    expect(promoted.entry.title).toBe("场地申请流程指南");
+    expect(promoted.entry.body).toBe("先去团委登记，再到场馆办公室盖章。");
+    expect(promoted.entry.sourceKind).toBe("discussion");
+    // The reply's author, not the promoter: attribution has to survive.
+    expect(promoted.source.sourceAuthorId).toBe(reply.authorId);
+    expect(promoted.source.sourcePostId).toBe(discussion.id);
+
+    const sources = await curator.client.listKnowledgeEntrySources(
+      promoted.entry.id,
+    );
+    expect(sources.items[0]?.sourceTitle).toBe("场地申请流程");
+  });
+
+  test("derived entries follow the reader's visibility", async () => {
+    const { client, guest, other } = await harness();
+    const discussion = await publishedDiscussion(client);
+    const curator = await other("organization_member");
+    const promoted = await curator.client.promoteDiscussion(discussion.id, {});
+
+    expect(
+      (await guest.listDiscussionDerivedEntries(discussion.id)).items,
+    ).toHaveLength(0);
+    expect(
+      (await curator.client.listDiscussionDerivedEntries(discussion.id)).items,
+    ).toHaveLength(1);
+
+    await curator.client.changeKnowledgeEntryStatus(
+      promoted.entry.id,
+      "published",
+    );
+
+    expect(
+      (await guest.listDiscussionDerivedEntries(discussion.id)).items,
+    ).toHaveLength(1);
+  });
+});
+
+/// The mock is the only backend the frontend tests ever see. Every rule the
+/// server enforces has to be enforced here too, or a page can pass its tests
+/// against behaviour the server does not have. M1 and M2 each shipped a
+/// divergence of exactly this kind.
+describe("discussion mock matches the server's rules", () => {
+  async function harness() {
+    const fetchImpl = createCampusAgoraMockFetch();
+    const holder: { token?: string } = {};
+    const client = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder.token,
+    });
+    const login = await client.mockLogin("student");
+    holder.token = login.token;
+
+    const guest = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+    });
+
+    async function other(persona: "organization_member" | "moderator") {
+      const holder2: { token?: string } = {};
+      const c = createCampusAgoraApiClient({
+        baseUrl: "http://api.test",
+        fetchImpl,
+        authToken: () => holder2.token,
+      });
+      const l = await c.mockLogin(persona);
+      holder2.token = l.token;
+      return c;
+    }
+
+    const discussion = await client
+      .createDiscussion({ title: "讨论", body: "正文", tags: [] })
+      .then((created) => client.changeDiscussionStatus(created.id, "published"));
+
+    return { client, guest, discussion, other };
+  }
+
+  test("a guest cannot create, reply, or promote", async () => {
+    const { guest, discussion } = await harness();
+
+    await expect(
+      guest.createDiscussion({ title: "标题", body: "正文", tags: [] }),
+    ).rejects.toMatchObject({ status: 401 });
+    await expect(
+      guest.replyToDiscussion(discussion.id, "我也想知道"),
+    ).rejects.toMatchObject({ status: 401 });
+    await expect(
+      guest.promoteDiscussion(discussion.id, {}),
+    ).rejects.toMatchObject({ status: 401 });
+  });
+
+  test("an archived discussion stays readable but takes no replies", async () => {
+    const { client, guest, discussion } = await harness();
+
+    const archived = await client.changeDiscussionStatus(
+      discussion.id,
+      "archived",
+    );
+    expect(archived.moderationStatus).toBe("archived");
+
+    // Readable by a guest, because an entry links back to it.
+    await expect(guest.getDiscussion(discussion.id)).resolves.toMatchObject({
+      moderationStatus: "archived",
+    });
+
+    await expect(
+      client.replyToDiscussion(discussion.id, "还能回吗"),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  test("illegal transitions are refused", async () => {
+    const { client } = await harness();
+    const draft = await client.createDiscussion({
+      title: "草稿",
+      body: "正文",
+      tags: [],
+    });
+
+    await expect(
+      client.changeDiscussionStatus(draft.id, "archived"),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  test("a stranger cannot accept an answer", async () => {
+    const { client, discussion, other } = await harness();
+    const reply = await client.replyToDiscussion(discussion.id, "自答");
+    const stranger = await other("organization_member");
+
+    await expect(
+      stranger.acceptDiscussionAnswer(discussion.id, reply.id),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  test("a comment from another discussion cannot be accepted", async () => {
+    const { client, discussion, other } = await harness();
+    const stranger = await other("organization_member");
+
+    const theirs = await stranger
+      .createDiscussion({ title: "别人的", body: "正文", tags: [] })
+      .then((created) => stranger.changeDiscussionStatus(created.id, "published"));
+    const theirReply = await stranger.replyToDiscussion(theirs.id, "别人的回复");
+
+    await expect(
+      client.acceptDiscussionAnswer(discussion.id, theirReply.id),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  test("only a publicly readable discussion can be promoted", async () => {
+    const { client } = await harness();
+    const draft = await client.createDiscussion({
+      title: "私密草稿",
+      body: "正文",
+      tags: [],
+    });
+
+    // Its own author can see it and still cannot sediment it.
+    await expect(client.promoteDiscussion(draft.id, {})).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+
+  test("reply bodies are validated the way the server validates them", async () => {
+    const { client, discussion } = await harness();
+
+    await expect(
+      client.replyToDiscussion(discussion.id, "   "),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(
+      client.replyToDiscussion(discussion.id, "x".repeat(5001)),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+
+  test("an invisible discussion is 404 on every one of its endpoints", async () => {
+    const { client, guest } = await harness();
+    const draft = await client.createDiscussion({
+      title: "草稿",
+      body: "正文",
+      tags: [],
+    });
+
+    await expect(guest.getDiscussion(draft.id)).rejects.toMatchObject({
+      status: 404,
+    });
+    await expect(guest.listDiscussionReplies(draft.id)).rejects.toMatchObject({
+      status: 404,
+    });
+    await expect(
+      guest.listDiscussionDerivedEntries(draft.id),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+/**
+ * The mock is the only backend apps/web tests ever see, so a bound the server
+ * enforces and the mock does not is a hole in the web suite rather than a
+ * cosmetic gap. Three milestones in a row have shipped a divergence of this
+ * shape; these assert the whole set at once so the next handler cannot skip
+ * one quietly.
+ */
+describe("mock enforces the server's content bounds", () => {
+  async function authed() {
+    const fetchImpl = createCampusAgoraMockFetch();
+    const holder: { token?: string } = {};
+    const client = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder.token,
+    });
+    holder.token = (await client.mockLogin("student")).token;
+    return client;
+  }
+
+  async function published(client: CampusAgoraApiClient, title = "可晋升的讨论") {
+    const created = await client.createDiscussion({ title, body: "正文", tags: [] });
+    return client.changeDiscussionStatus(created.id, "published");
+  }
+
+  test("a discussion cannot carry more than ten tags", async () => {
+    const client = await authed();
+
+    await expect(
+      client.createDiscussion({
+        title: "多标签",
+        body: "正文",
+        tags: Array.from({ length: 11 }, (_, i) => `t${i}`),
+      }),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+
+  test("a discussion tag cannot exceed thirty-two characters", async () => {
+    const client = await authed();
+
+    await expect(
+      client.createDiscussion({ title: "长标签", body: "正文", tags: ["x".repeat(33)] }),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+
+  test("discussion tags are lowercased and deduped the way the server stores them", async () => {
+    const client = await authed();
+
+    const created = await client.createDiscussion({
+      title: "重复标签",
+      body: "正文",
+      tags: ["Onboarding", "onboarding", " 新生 "],
+    });
+
+    expect(created.tags).toEqual(["onboarding", "新生"]);
+  });
+
+  test("a discussion title and body are bounded", async () => {
+    const client = await authed();
+
+    await expect(
+      client.createDiscussion({ title: "t".repeat(201), body: "正文", tags: [] }),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(
+      client.createDiscussion({ title: "标题", body: "b".repeat(50001), tags: [] }),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+
+  /**
+   * The concrete path: promoting a reply builds its title from the thread's,
+   * so a legal thread title plus a suffix can exceed the entry limit. Without
+   * this bound the web tests happily assert a navigation the server refuses.
+   */
+  test("a promotion's overridden fields are bounded", async () => {
+    const client = await authed();
+    const discussion = await published(client);
+
+    await expect(
+      client.promoteDiscussion(discussion.id, { title: "t".repeat(201) }),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(
+      client.promoteDiscussion(discussion.id, { summary: "s".repeat(501) }),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(
+      client.promoteDiscussion(discussion.id, { body: "b".repeat(50001) }),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(
+      client.promoteDiscussion(discussion.id, {
+        tags: Array.from({ length: 11 }, (_, i) => `t${i}`),
+      }),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+
+  test("an over-long search term is rejected on both list endpoints", async () => {
+    const client = await authed();
+
+    await expect(
+      client.listDiscussions({ q: "z".repeat(101) }),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(
+      client.listKnowledgeEntries({ q: "z".repeat(101) }),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+
+  test("an archive entry's body and summary are bounded too", async () => {
+    const client = await authed();
+    const base = {
+      title: "标题",
+      tags: [],
+      category: "other" as const,
+      applicableAudience: "all_students" as const,
+      sourceKind: "unspecified" as const,
+    };
+
+    await expect(
+      client.createKnowledgeEntry({ ...base, body: "b".repeat(50001) }),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(
+      client.createKnowledgeEntry({ ...base, body: "正文", summary: "s".repeat(501) }),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+});

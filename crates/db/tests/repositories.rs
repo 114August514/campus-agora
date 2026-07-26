@@ -2,10 +2,11 @@ use std::path::Path;
 use std::sync::Arc;
 
 use campus_agora_application::ports::{
-    ArchiveEntryUpdate, ArchiveListQuery, ArchiveRepository, AuditEventRepository,
-    CorrectionRepository, NewArchiveEntry, NewAuditEvent, NewCorrection, NewRevision, NewSession,
-    NewUser, OrganizationRepository, RevisionWrite, SessionRepository, UserRepository,
-    VisibilityScope,
+    ArchiveEntryUpdate, ArchiveListQuery, ArchiveRepository, ArchiveSourceRepository,
+    AuditEventRepository, CommentRepository, CorrectionRepository, DiscussionRepository,
+    NewArchiveEntry, NewArchiveSource, NewAuditEvent, NewComment, NewCorrection, NewDiscussion,
+    NewRevision, NewSession, NewUser, OrganizationRepository, RevisionWrite, SessionRepository,
+    UserRepository, VisibilityScope,
 };
 use campus_agora_application::ApplicationError;
 use campus_agora_db::{PgAuthStore, MIGRATIONS_DIR};
@@ -466,4 +467,316 @@ async fn pg_archive_repository_enforces_visibility_and_versioning() {
         .await
         .unwrap();
     assert_eq!(corrections.len(), 1);
+}
+
+/// The M3 loop against a real database. The in-memory store answers the same
+/// questions, but only PostgreSQL can prove the CHECK constraint admits
+/// `archived`, that the accepted-answer guard lives in the statement, and that
+/// the visibility joins actually filter.
+#[tokio::test]
+async fn pg_repositories_cover_the_m3_discussion_loop() {
+    let Ok(database_url) = std::env::var("DATABASE_URL") else {
+        eprintln!("skipping pg discussion test: DATABASE_URL is not set");
+        return;
+    };
+
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(2)
+        .connect(&database_url)
+        .await
+        .expect("connect to test database");
+
+    let migrations = Path::new(env!("CARGO_MANIFEST_DIR")).join(MIGRATIONS_DIR);
+    sqlx::migrate::Migrator::new(migrations)
+        .await
+        .expect("load migrations")
+        .run(&pool)
+        .await
+        .expect("run migrations");
+
+    let store = Arc::new(PgAuthStore::new(pool.clone()));
+    let unique = Uuid::new_v4().simple().to_string();
+    let now = Utc::now();
+
+    let author = store
+        .upsert(NewUser {
+            auth_provider: AuthProviderKind::MockCampus,
+            provider_subject_hash: format!("m3-author-{unique}"),
+            display_name: "提问者".to_owned(),
+            system_role: SystemRole::Student,
+        })
+        .await
+        .expect("author");
+    let helper = store
+        .upsert(NewUser {
+            auth_provider: AuthProviderKind::MockCampus,
+            provider_subject_hash: format!("m3-helper-{unique}"),
+            display_name: "回答者".to_owned(),
+            system_role: SystemRole::Student,
+        })
+        .await
+        .expect("helper");
+
+    let discussion = DiscussionRepository::insert(
+        store.as_ref(),
+        NewDiscussion {
+            author_id: author.id,
+            title: format!("场地申请-{unique}"),
+            body: "有人知道流程吗".to_owned(),
+            tags: vec!["办事流程".to_owned()],
+            created_at: now,
+        },
+    )
+    .await
+    .expect("insert discussion");
+
+    assert_eq!(discussion.moderation_status, ModerationStatus::Draft);
+    assert_eq!(discussion.reply_count, 0);
+
+    // A draft is invisible publicly and visible to its author.
+    assert!(DiscussionRepository::find_visible(
+        store.as_ref(),
+        discussion.id,
+        VisibilityScope::Public
+    )
+    .await
+    .expect("public read")
+    .is_none());
+    assert!(DiscussionRepository::find_visible(
+        store.as_ref(),
+        discussion.id,
+        VisibilityScope::Owner(author.id)
+    )
+    .await
+    .expect("owner read")
+    .is_some());
+
+    let published = DiscussionRepository::set_status(
+        store.as_ref(),
+        discussion.id,
+        ModerationStatus::Draft,
+        ModerationStatus::Published,
+        now,
+    )
+    .await
+    .expect("publish");
+    assert_eq!(published.moderation_status, ModerationStatus::Published);
+
+    // A stale expected-status is a conflict, not a silent overwrite.
+    assert!(matches!(
+        DiscussionRepository::set_status(
+            store.as_ref(),
+            discussion.id,
+            ModerationStatus::Draft,
+            ModerationStatus::Hidden,
+            now,
+        )
+        .await,
+        Err(ApplicationError::Conflict(_))
+    ));
+
+    let first = CommentRepository::insert(
+        store.as_ref(),
+        NewComment {
+            post_id: discussion.id,
+            author_id: helper.id,
+            body: "先去团委登记".to_owned(),
+            created_at: now,
+        },
+    )
+    .await
+    .expect("first reply");
+    let second = CommentRepository::insert(
+        store.as_ref(),
+        NewComment {
+            post_id: discussion.id,
+            author_id: helper.id,
+            body: "再去场馆盖章".to_owned(),
+            created_at: now + Duration::seconds(1),
+        },
+    )
+    .await
+    .expect("second reply");
+
+    let replies = CommentRepository::list_for_post(store.as_ref(), discussion.id)
+        .await
+        .expect("list replies");
+    assert_eq!(
+        replies.iter().map(|c| c.id).collect::<Vec<_>>(),
+        vec![first.id, second.id]
+    );
+
+    // `reply_count` is computed by the query, so it tracks the comments.
+    let reloaded =
+        DiscussionRepository::find_visible(store.as_ref(), discussion.id, VisibilityScope::Public)
+            .await
+            .expect("reload")
+            .expect("visible");
+    assert_eq!(reloaded.reply_count, 2);
+
+    // A comment is only ever found inside its own discussion.
+    let other = DiscussionRepository::insert(
+        store.as_ref(),
+        NewDiscussion {
+            author_id: helper.id,
+            title: format!("另一个讨论-{unique}"),
+            body: "无关内容".to_owned(),
+            tags: vec![],
+            created_at: now,
+        },
+    )
+    .await
+    .expect("other discussion");
+
+    assert!(
+        CommentRepository::find_in_post(store.as_ref(), other.id, first.id)
+            .await
+            .expect("cross lookup")
+            .is_none()
+    );
+
+    let accepted = DiscussionRepository::set_accepted_comment(
+        store.as_ref(),
+        discussion.id,
+        Some(second.id),
+        now,
+    )
+    .await
+    .expect("accept");
+    assert_eq!(accepted.accepted_comment_id, Some(second.id));
+
+    // The guard is in the statement: accepting a foreign comment fails even
+    // when the service layer is bypassed entirely.
+    assert!(matches!(
+        DiscussionRepository::set_accepted_comment(store.as_ref(), other.id, Some(first.id), now)
+            .await,
+        Err(ApplicationError::NotFound(_))
+    ));
+
+    let cleared =
+        DiscussionRepository::set_accepted_comment(store.as_ref(), discussion.id, None, now)
+            .await
+            .expect("clear");
+    assert_eq!(cleared.accepted_comment_id, None);
+
+    // `archived` must survive the CHECK constraint and stay publicly readable.
+    let archived = DiscussionRepository::set_status(
+        store.as_ref(),
+        discussion.id,
+        ModerationStatus::Published,
+        ModerationStatus::Archived,
+        now,
+    )
+    .await
+    .expect("archive");
+    assert_eq!(archived.moderation_status, ModerationStatus::Archived);
+    assert!(DiscussionRepository::find_visible(
+        store.as_ref(),
+        discussion.id,
+        VisibilityScope::Public
+    )
+    .await
+    .expect("public read of archived")
+    .is_some());
+
+    // Provenance, and both directions of the link.
+    let entry = ArchiveRepository::insert(
+        store.as_ref(),
+        NewArchiveEntry {
+            author_id: helper.id,
+            title: format!("场地申请指南-{unique}"),
+            body: "整理自讨论".to_owned(),
+            summary: None,
+            tags: vec![],
+            category: ArchiveCategory::Procedures,
+            applicable_audience: ApplicableAudience::AllStudents,
+            source_kind: SourceKind::Discussion,
+            source_reference: None,
+            created_at: now,
+        },
+    )
+    .await
+    .expect("entry");
+
+    let source = ArchiveSourceRepository::insert(
+        store.as_ref(),
+        NewArchiveSource {
+            entry_id: entry.id,
+            source_post_id: discussion.id,
+            source_comment_id: Some(second.id),
+            source_author_id: helper.id,
+            created_at: now,
+        },
+    )
+    .await
+    .expect("source");
+    assert_eq!(source.source_title, discussion.title);
+    assert_eq!(source.source_author_id, helper.id);
+    // The join, not just the column: attribution is the reason the id is
+    // recorded, and a reader cannot be attributed to by a UUID.
+    assert_eq!(source.source_author_name, helper.display_name);
+
+    // The same source recorded twice for one entry is a duplicate.
+    assert!(matches!(
+        ArchiveSourceRepository::insert(
+            store.as_ref(),
+            NewArchiveSource {
+                entry_id: entry.id,
+                source_post_id: discussion.id,
+                source_comment_id: Some(second.id),
+                source_author_id: helper.id,
+                created_at: now,
+            },
+        )
+        .await,
+        Err(ApplicationError::Conflict(_))
+    ));
+
+    let sources =
+        ArchiveSourceRepository::list_for_entry(store.as_ref(), entry.id, VisibilityScope::Public)
+            .await
+            .expect("sources");
+    assert_eq!(sources.len(), 1);
+    assert_eq!(sources[0].source_post_id, discussion.id);
+
+    // The derived entry is still a draft, so only its owner sees it.
+    assert!(ArchiveSourceRepository::list_derived_entries(
+        store.as_ref(),
+        discussion.id,
+        VisibilityScope::Public
+    )
+    .await
+    .expect("public derived")
+    .is_empty());
+
+    let owned = ArchiveSourceRepository::list_derived_entries(
+        store.as_ref(),
+        discussion.id,
+        VisibilityScope::Owner(helper.id),
+    )
+    .await
+    .expect("owner derived");
+    assert_eq!(owned.len(), 1);
+    assert_eq!(owned[0].entry_id, entry.id);
+
+    // Hiding the source discussion drops it from the entry's backlink, so the
+    // listing cannot be used to read a hidden title.
+    DiscussionRepository::set_status(
+        store.as_ref(),
+        discussion.id,
+        ModerationStatus::Archived,
+        ModerationStatus::Hidden,
+        now,
+    )
+    .await
+    .expect("hide source");
+
+    assert!(ArchiveSourceRepository::list_for_entry(
+        store.as_ref(),
+        entry.id,
+        VisibilityScope::Public
+    )
+    .await
+    .expect("sources after hide")
+    .is_empty());
 }

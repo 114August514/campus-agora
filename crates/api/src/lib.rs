@@ -14,10 +14,12 @@ use axum::{
 };
 use campus_agora_application::archive::ArchiveService;
 use campus_agora_application::auth::{AuthConfig, AuthService, MockCampusAuthProvider};
+use campus_agora_application::discussion::DiscussionService;
 use campus_agora_application::memory::InMemoryAuthStore;
 use campus_agora_application::ports::{
-    ArchiveRepository, AuditEventRepository, CorrectionRepository, OrganizationRepository,
-    SessionRepository, UserRepository,
+    ArchiveRepository, ArchiveSourceRepository, AuditEventRepository, CommentRepository,
+    CorrectionRepository, DiscussionRepository, OrganizationRepository, SessionRepository,
+    UserRepository,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -27,6 +29,8 @@ use tower_http::trace::TraceLayer;
 
 mod archive;
 mod auth;
+mod discussion;
+mod openapi_m3;
 
 pub const API_BOUNDARY: &str = "campus-agora-api";
 const DEFAULT_REQUEST_BODY_LIMIT_BYTES: usize = 1024 * 1024;
@@ -43,6 +47,7 @@ pub struct ApiState {
     pub(crate) capabilities: CapabilityFlags,
     pub(crate) auth: Arc<AuthService>,
     pub(crate) archive: Arc<ArchiveService>,
+    pub(crate) discussions: Arc<DiscussionService>,
 }
 
 impl fmt::Debug for ApiState {
@@ -58,7 +63,7 @@ impl ApiState {
     pub fn from_env() -> Self {
         let session_ttl_seconds = session_ttl_seconds_from_env();
 
-        let (readiness, auth, archive) = match std::env::var("DATABASE_URL") {
+        let (readiness, auth, archive, discussions) = match std::env::var("DATABASE_URL") {
             Ok(database_url) if !database_url.trim().is_empty() => {
                 let pool = campus_agora_db::connect_lazy(&database_url).unwrap_or_else(|_| {
                     panic!("DATABASE_URL is not a valid PostgreSQL connection string")
@@ -68,7 +73,8 @@ impl ApiState {
                 (
                     ReadinessProbe::Postgres { database_url },
                     auth_service_with_store(store.clone(), session_ttl_seconds),
-                    archive_service_with_store(store),
+                    archive_service_with_store(store.clone()),
+                    discussion_service_with_store(store),
                 )
             }
             // The in-memory store holds real sessions in volatile per-process
@@ -87,7 +93,8 @@ impl ApiState {
                 (
                     ReadinessProbe::Unavailable,
                     auth_service_with_store(store.clone(), session_ttl_seconds),
-                    archive_service_with_store(store),
+                    archive_service_with_store(store.clone()),
+                    discussion_service_with_store(store),
                 )
             }
             _ => panic!(
@@ -106,6 +113,7 @@ impl ApiState {
             },
             auth,
             archive,
+            discussions,
         }
     }
 
@@ -126,7 +134,8 @@ impl ApiState {
                 attachments_enabled: false,
             },
             auth: auth_service_with_store(store.clone(), DEFAULT_SESSION_TTL_SECONDS),
-            archive: archive_service_with_store(store),
+            archive: archive_service_with_store(store.clone()),
+            discussions: discussion_service_with_store(store),
         }
     }
 
@@ -154,9 +163,36 @@ where
 
 fn archive_service_with_store<S>(store: Arc<S>) -> Arc<ArchiveService>
 where
-    S: ArchiveRepository + CorrectionRepository + AuditEventRepository + 'static,
+    S: ArchiveRepository
+        + CorrectionRepository
+        + ArchiveSourceRepository
+        + AuditEventRepository
+        + 'static,
 {
-    Arc::new(ArchiveService::new(store.clone(), store.clone(), store))
+    Arc::new(ArchiveService::new(
+        store.clone(),
+        store.clone(),
+        store.clone(),
+        store,
+    ))
+}
+
+fn discussion_service_with_store<S>(store: Arc<S>) -> Arc<DiscussionService>
+where
+    S: DiscussionRepository
+        + CommentRepository
+        + ArchiveRepository
+        + ArchiveSourceRepository
+        + AuditEventRepository
+        + 'static,
+{
+    Arc::new(DiscussionService::new(
+        store.clone(),
+        store.clone(),
+        store.clone(),
+        store.clone(),
+        store,
+    ))
 }
 
 #[derive(Clone, Debug)]
@@ -319,6 +355,35 @@ pub fn build_router_with_state_and_config(state: ApiState, config: ApiRuntimeCon
             "/api/v1/knowledge-entries/:id/corrections/:correction_id/resolve",
             post(archive::resolve_correction),
         )
+        .route(
+            "/api/v1/knowledge-entries/:id/sources",
+            get(discussion::list_entry_sources),
+        )
+        .route(
+            "/api/v1/discussions",
+            get(discussion::list_discussions).post(discussion::create_discussion),
+        )
+        .route("/api/v1/discussions/:id", get(discussion::get_discussion))
+        .route(
+            "/api/v1/discussions/:id/status",
+            post(discussion::change_discussion_status),
+        )
+        .route(
+            "/api/v1/discussions/:id/replies",
+            get(discussion::list_replies).post(discussion::create_reply),
+        )
+        .route(
+            "/api/v1/discussions/:id/accepted-answer",
+            post(discussion::accept_answer),
+        )
+        .route(
+            "/api/v1/discussions/:id/promotions",
+            post(discussion::promote),
+        )
+        .route(
+            "/api/v1/discussions/:id/derived-entries",
+            get(discussion::list_derived_entries),
+        )
         .fallback(not_found)
         .with_state(state)
         .layer(cors_layer(&config))
@@ -330,7 +395,7 @@ pub fn build_router_with_state_and_config(state: ApiState, config: ApiRuntimeCon
 }
 
 pub fn openapi_document() -> Value {
-    json!({
+    let mut document = json!({
         "openapi": "3.1.0",
         "info": {
             "title": "Campus Agora API",
@@ -1312,7 +1377,7 @@ pub fn openapi_document() -> Value {
                 },
                 "ModerationStatus": {
                     "type": "string",
-                    "enum": ["draft", "published", "hidden", "rejected"]
+                    "enum": ["draft", "published", "hidden", "rejected", "archived"]
                 },
                 "KnowledgeEntry": {
                     "type": "object",
@@ -1443,7 +1508,34 @@ pub fn openapi_document() -> Value {
                 }
             }
         }
-    })
+    });
+
+    // Each milestone contributes its own block. `serde_json::json!` cannot
+    // expand the whole document as one literal, and splitting it also keeps a
+    // milestone's contract diff readable.
+    merge_object(&mut document["paths"], openapi_m3::paths());
+    merge_object(
+        &mut document["components"]["schemas"],
+        openapi_m3::schemas(),
+    );
+
+    document
+}
+
+/// Moves every key of `extra` into `target`. Both are known-good object
+/// literals from this crate, so a non-object or a duplicate key is a
+/// programming error rather than something to recover from at runtime.
+fn merge_object(target: &mut Value, extra: Value) {
+    let (Some(target), Value::Object(extra)) = (target.as_object_mut(), extra) else {
+        panic!("openapi document fragments must be objects");
+    };
+
+    for (key, value) in extra {
+        assert!(
+            target.insert(key.clone(), value).is_none(),
+            "duplicate OpenAPI key: {key}"
+        );
+    }
 }
 
 async fn healthz() -> &'static str {

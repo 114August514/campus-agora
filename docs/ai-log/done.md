@@ -17,6 +17,148 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-27 - Resolve M3 review findings
+
+- Result: Five independent review lenses over the M3 diff produced 25 findings;
+  20 were refuted by an adversarial pass, 5 survived, and 2 refutations were
+  overridden on my own judgement. All are fixed. M3 stays 评审中.
+- Changed:
+  - Mock parity. The mock skipped every text and tag bound the server enforces:
+    verified that 11 tags, a 300-character title, a 250-character promoted
+    title and a 101-character search term all returned 201/200 where the server
+    returns 422, and that duplicate tags were stored undeduped. The bounds now
+    live in one `LIMITS` table with `boundedText`/`boundedSummary` helpers that
+    every branch calls.
+  - Reply promotion truncates the derived title. A thread titled at or near the
+    200-character limit produced an over-long entry title and a 422 the reader
+    could not act on, so the promote button was permanently dead for it.
+  - The contract declares 422 on `listDiscussions`, and the OpenAPI test now
+    pins the exact status set per operation instead of only asserting 500.
+  - The provenance card names the quoted author instead of printing their UUID;
+    the name is carried through the ports, both stores, the DTO, the contract
+    and the mock, and asserted against a real database.
+  - Added the failed-reply test the M3.2 plan ticked without writing.
+- Verification: full gate set with a disposable PostgreSQL 16 container. Rust
+  166, apps/web 65, api-client 59. Every finding was reproduced before it was
+  fixed — the mock divergences with a probe against both implementations, the
+  contract gap with a throwaway integration test, and the new failed-reply test
+  was mutation-checked by inverting the guard it covers.
+- Decisions:
+  - The mock/server divergence is a recurring class, not a bug: three
+    milestones, three occurrences, each time because a new handler
+    re-implemented validation by hand. The fix is the shared table, not the
+    five individual bounds.
+  - Overrode the refutation of "the provenance card prints a raw UUID". The
+    refuter was right that it is not a privacy leak — the id is already in the
+    same payload — and right that the review brief excluded style. But
+    `docs/product/privacy.md` makes preserving the quoted author's identity a
+    requirement, and a UUID satisfies it in the database while satisfying
+    nothing for a reader. The feature did not do what it existed to do.
+  - Overrode the refutation of "M3.2 Task 3 ticks a test that does not exist".
+    The refuter downgraded it because the code is correct. The code being
+    correct is not the point: an unwritten test ticked as written is exactly
+    what made M2 walk back its completion claim, and Task 3 carried no
+    "Not covered" clause.
+  - Accepted 20 refutations, including the promotion race (an attacker gains no
+    capability they do not already have through `create_draft`), the missing
+    ceiling on derived entries (bounded by the unique constraint), and the
+    absence of a transaction around promotion (the failure modes are a
+    recoverable orphan draft, not a disclosure).
+- Follow-up: none new. The pre-existing todo entries stand.
+
+### 2026-07-26 - Deliver M3.2 discussion frontend and close the loop in the UI
+
+- Result: The discussion-to-archive loop has a face. M3's three exit criteria
+  are met; the milestone is 评审中 rather than 已完成 because the claim should
+  follow review, not precede it.
+- Changed:
+  - Routes and navigation. A `/discussions` namespace, path builders, and the
+    讨论 nav entry pointing at a real page instead of home.
+  - `features/discussion`: `useDiscussionList` and `useDiscussion` (both on the
+    request-sequence-number pattern), plus labels that word each moderation
+    state for a *thread* rather than reusing the archive's wording.
+  - Pages: discussion list, detail, and create. The detail page carries the
+    reply box, the accept-answer control, the status transitions, the promote
+    actions, and the derived-entry list.
+  - `ArchiveDetailPage` gained the 内容来源 section, and `useArchiveEntry` now
+    loads sources with the entry.
+  - `ButtonLink`, replacing `Button`-inside-`Link` in eight existing places
+    plus the four this milestone would have added.
+  - `ui.test.tsx` gained `afterEach(cleanup)`.
+- Verification: `cargo fmt --all --check`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, `cargo test --workspace` against a disposable
+  PostgreSQL 16 container, `bun run api:check`, `typecheck`, `lint`,
+  `lint:styles`, `test` (apps/web 63, api-client 52), `build`, `ci:docs`,
+  `git diff --check`.
+- Decisions:
+  - The distinction between the two content kinds is structural, not
+    decorative: separate route namespaces, separate pages, and different
+    information. A discussion shows reply count, accepted answer, and last
+    activity; an entry shows version, audience, provenance, and corrections.
+  - Promotion lands in the archive editor. It creates a draft the promoter
+    owns, so the useful next step is finishing it, not reading it.
+  - The UI offers only what the server will accept: no reply box on a draft or
+    archived thread, no promote control on a non-public one. A button that
+    guarantees a 409 is worse than no button.
+  - `ButtonLink` was built rather than deferred. The alternative was growing a
+    known-invalid pattern from eight places to twelve and filing another todo.
+- Follow-up: the frontend test gaps carried over from M2.2 (list error-retry,
+  page reset on filter change, editor server-422 and in-flight blocking), and
+  filter debouncing, both still open in `todo.md`.
+
+### 2026-07-26 - Deliver M3.1 discussion-to-archive backend
+
+- Result: Discussions, replies, an accepted-answer flow, and a traceable path
+  from a discussion into an archive entry, through domain, application,
+  database, HTTP, contract, and mock. M3 is 进行中, not 已完成: the exit
+  criterion "UI distinguishes discussion content from durable archive content"
+  belongs to M3.2.
+- Changed:
+  - Domain. `ModerationStatus::Archived`, the transitions around it, comment
+    validation, and `ReplyToDiscussion` / `AcceptAnswer` / `PromoteToArchive` /
+    `ArchiveContent` in the permission matrix.
+  - Application. `DiscussionService`, discussion/comment/source ports, their
+    in-memory implementations, and `ArchiveService::list_sources`. Status
+    transitions now resolve to an action through one shared function so
+    entries and discussions answer the same question the same way.
+  - Database. `20260728000000_m3_discussion_loop.sql` adds `comments`,
+    `archive_sources`, `posts.accepted_comment_id`, and widens the moderation
+    CHECK constraint. The visibility predicate became a function taking the
+    post kind, and derives its public-status list from the domain.
+  - API. `/api/v1/discussions` with status, replies, accepted-answer,
+    promotions, and derived-entries sub-resources, plus
+    `/api/v1/knowledge-entries/{id}/sources`. The OpenAPI document is now
+    assembled from per-milestone fragments.
+  - Client. `packages/api-client/src/discussion.ts`, the generator's support
+    for OpenAPI 3.1 nullable unions, and the mock's discussion routes.
+  - Frontend. The places TypeScript's exhaustive `Record<ModerationStatus, T>`
+    maps flagged: badge label and tone, status labels, transition table, plus a
+    `badge-info` rule and a test for composed variant classes.
+- Verification: `cargo fmt --all --check`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, `cargo test --workspace` (165 passing against
+  a disposable PostgreSQL 16 container), `bun run api:check`, `typecheck`,
+  `lint`, `lint:styles`, `test` (apps/web 39, api-client 52), `build`,
+  `ci:docs`, `git diff --check`. Every authorization and disclosure rule was
+  proven with a failing test before it was implemented.
+- Decisions:
+  - `archived` is publicly readable. An archive entry links back to the
+    discussion it came from and that link has to resolve; hiding content is
+    what `hidden` does. `archived → hidden` exists so archiving cannot put
+    content beyond moderation reach.
+  - `deleted` stays a soft delete rather than becoming a status, because the
+    data-governance rules require recoverable deletion with an audit event and
+    an accountable actor.
+  - Promotion accepts only publicly readable sources. Being *able to see* a
+    draft or hidden thread is not enough — otherwise publishing the entry would
+    republish content that was deliberately not public, which is the M2
+    revision-1 disclosure shape.
+  - Both directions of the source link are visibility-scoped, so a backlink
+    cannot disclose a title or enumerate other people's drafts.
+  - Comment ids resolve only inside their own discussion, in the service and
+    again in the SQL statement — the M2 IDOR shape, closed up front.
+- Follow-up: M3.2. The `Conditional` cell on `Publish archive entry` for
+  `OrganizationMember` is still unresolved (M4+).
+
 ### 2026-07-26 - Resolve M2 review findings
 
 - Result: Fixed the defects three independent reviews found in M2 (general

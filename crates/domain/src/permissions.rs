@@ -15,6 +15,10 @@ pub enum Action {
     PublishArchiveEntry,
     FileCorrection,
     ResolveCorrection,
+    ReplyToDiscussion,
+    AcceptAnswer,
+    PromoteToArchive,
+    ArchiveContent,
     ChangeModerationState,
     ChangeRoles,
     ExportData,
@@ -148,6 +152,32 @@ fn cell(
             _ => Allow,
         },
         Action::ResolveCorrection => match column {
+            Author | Maintainer | Moderator | Admin => Allow,
+            _ => Deny,
+        },
+        // Anyone with a session may join a discussion. Whether the discussion
+        // is visible and still open is resolved before this point.
+        Action::ReplyToDiscussion => match column {
+            Guest => Deny,
+            _ => Allow,
+        },
+        // The asker plus the people who curate the thread. Not a moderation
+        // power, so a bare Student or OrganizationMember column is Deny and
+        // only the Author/Maintainer resource columns grant it.
+        Action::AcceptAnswer => match column {
+            Author | Maintainer | Moderator | Admin => Allow,
+            _ => Deny,
+        },
+        // Promotion creates the promoter's own draft and never mutates the
+        // source, so it carries the same bar as any other draft creation.
+        // Reading the source is gated by visibility, not by this action.
+        Action::PromoteToArchive => match column {
+            Guest => Deny,
+            _ => Allow,
+        },
+        // Retiring content leaves it readable and is reversible, so it sits
+        // with the people who own or curate it rather than with moderation.
+        Action::ArchiveContent => match column {
             Author | Maintainer | Moderator | Admin => Allow,
             _ => Deny,
         },

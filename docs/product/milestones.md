@@ -16,7 +16,7 @@ Last updated: 2026-07-26
 
 ## 当前阶段
 
-仓库已完成 M0、M0.1 与 M0.2。M1（身份、权限与认证外壳）与 M2（知识归档核心）已实现并在评审中，两者的退出条件均已满足，待评审通过后标记为已完成。下一个里程碑是 M3：讨论到归档闭环。运行时产品功能不应在未更新本文的情况下超出当前里程碑。
+仓库已完成 M0、M0.1 与 M0.2。M1（身份、权限与认证外壳）与 M2（知识归档核心）已实现并在评审中，两者的退出条件均已满足，待评审通过后标记为已完成。M3（讨论到归档闭环）两个阶段均已实现并在评审中，退出条件已满足。运行时产品功能不应在未更新本文的情况下超出当前里程碑。
 
 ## 汇总
 
@@ -27,7 +27,7 @@ Last updated: 2026-07-26
 | M0.2 | 治理文档与风险边界 | 已完成 |
 | M1 | 身份、权限与认证外壳 | 评审中 |
 | M2 | 知识归档核心 | 评审中 |
-| M3 | 讨论到归档闭环 | 计划中 |
+| M3 | 讨论到归档闭环 | 评审中 |
 | M4 | 审核与 AI 草稿 | 计划中 |
 | M5 | 搜索与演示可用性 | 计划中 |
 | M6 | 真实校园身份接入 | 计划中 |
@@ -240,6 +240,45 @@ M2 的后端闭环与前端流程按两个阶段交付，沿用 M0 拆成 M0/M0.
 - [Content Boundary Reference](../constraints/content-boundary-reference.md)
 - [Archive Community Reference](../constraints/archive-community-reference.md)
 - [Advanced Engineering Reference](../constraints/advanced-engineering-reference.md)
+
+### 交付阶段
+
+沿用 M0 与 M2 的先例，M3 按两个阶段交付；里程碑本身不拆分，只有两个阶段都
+完成 M3 才算达成退出条件。
+
+- M3.1（已交付）：讨论后端闭环。`archived` 状态与状态机、讨论权限动作、
+  讨论与回复的 ports/用例/迁移/仓库、晋升与来源链接、
+  `/api/v1/discussions` 与 `/api/v1/knowledge-entries/{id}/sources` 契约、
+  api-client 方法与 mock 对齐。计划见
+  `docs/superpowers/plans/2026-07-26-m3-1-discussion-archive-backend.md`。
+- M3.2（已交付）：`/discussions` 命名空间下的列表/详情/发起流程、回复与采纳
+  回答、晋升入口，以及来源链接与反向链接的双向展示。计划见
+  `docs/superpowers/plans/2026-07-26-m3-2-discussion-frontend.md`。
+
+退出条件核对：
+
+1. **有价值回复可转换为归档条目，或以可追踪 source context 被引用** —— 讨论
+   详情页对主帖和每条回复都提供「整理为资料」，创建的是晋升者自己的草稿并落
+   在归档编辑器；`archive_sources` 记录来源并保留被引用者的作者身份。
+2. **Content-state transitions 明确且有测试覆盖** —— 状态机在
+   `crates/domain` 中定义，前后端各有一份按角色计算可用转换的表，三者由测试
+   钉住；`archived` 的引入由 domain、db 谓词、mock、前端四处测试共同约束。
+3. **UI 区分 discussion content 与 durable archive content** —— 两者使用彼此
+   独立的路由命名空间与页面，展示的信号不同（讨论看回复数、采纳回答、最后活动；
+   资料看版本、适用对象、来源、纠错），状态文案也按内容类型分别措辞。
+
+状态仍为**评审中**而非已完成：退出条件已满足，但这个声明应当在评审之后。
+
+### M3.1 已实现的关键决策
+
+- `archived` 公开可读。归档条目要反向链接到来源讨论，链接必须能解析；
+  移出视线是 `hidden` 的职责。详见
+  [权限与授权](../architecture/auth-permissions.md)。
+- `deleted` 不是 `moderation_status` 值，仍是 `deleted_at` 软删除——数据治理
+  要求可恢复删除并留审计与责任人，状态值表达不了这些。
+- 晋升只接受公开可读的来源，且创建的是晋升者自己的草稿，不修改来源；
+  被引用回复的作者身份通过 `source_author_id` 保留。
+- 来源链接两个方向都按读者可见性过滤。
 
 ## M4 审核与 AI 草稿
 

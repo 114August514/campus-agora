@@ -14,8 +14,10 @@ before real identity integration, attachments, or AI assistance are added.
 | Session records | Keep authenticated sessions alive; stored as SHA-256 token hash with expiry and revocation timestamps, never the raw token | PostgreSQL | Auth service, admins |
 | Organization memberships | Prove a user acts within a verified organization context | PostgreSQL | User, organization tooling, moderators, admins |
 | Discussion content | Community discussion and later archive source | PostgreSQL | Readers based on visibility |
+| Discussion replies | Answers and follow-ups on a discussion, with their author's identity | PostgreSQL | Readers based on the parent discussion's visibility |
 | Archive content | Durable knowledge entries, including their revision history | PostgreSQL | Readers based on visibility |
 | Archive source references | Free-form provenance for an entry, which may contain third-party URLs | PostgreSQL | Readers based on visibility |
+| Discussion-to-archive links | Structured provenance: which discussion or reply an entry was drawn from, and who wrote the quoted text | PostgreSQL | Readers who can see both ends of the link |
 | Corrections | Reports that an entry is out of date or wrong, with the reporter's identity | PostgreSQL | Entry author, maintainers, moderators, admins |
 | Moderation state | Review status and safety decisions | PostgreSQL | Moderators, admins |
 | Audit events | Accountability for high-risk actions | PostgreSQL | Admins, security reviewers |
@@ -43,6 +45,21 @@ keyed construction (HMAC-SHA256 with a rotatable server-side pepper held in the
 secret manager, or a memory-hard KDF), and this section must be updated with
 the rotation story. Session tokens keep plain SHA-256, which is correct there:
 they are 256 bits of CSPRNG output, so enumeration is infeasible.
+
+### Promoted Content Keeps Its Author
+
+Promoting a reply into an archive entry copies that person's words into an
+artifact someone else owns. The link records `source_author_id` — the reply's
+author, not the promoter — so attribution is not lost the moment the entry is
+saved. The reply is already public in its discussion, so naming its author on
+the entry discloses nothing new; omitting the attribution would be the actual
+harm.
+
+Only publicly readable discussions can be promoted, so promotion can never
+republish content that was deliberately not public. Both directions of the link
+are filtered by the reader's own visibility: a source pointing at a discussion
+they cannot see is omitted rather than exposing its title, and an entry still in
+draft is not listed on the discussion it came from.
 
 ## Retention
 

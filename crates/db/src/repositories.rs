@@ -5,14 +5,17 @@ use async_trait::async_trait;
 use campus_agora_application::errors::ApplicationError;
 use campus_agora_application::ports::{
     ArchiveEntryRecord, ArchiveEntryUpdate, ArchiveListQuery, ArchiveRepository,
-    AuditEventRepository, CorrectionRecord, CorrectionRepository, MembershipSummary,
-    NewArchiveEntry, NewAuditEvent, NewCorrection, NewSession, NewUser, OrganizationRecord,
-    OrganizationRepository, Page, RevisionRecord, RevisionWrite, SessionRecord, SessionRepository,
-    UserRecord, UserRepository, VisibilityScope,
+    ArchiveSourceRecord, ArchiveSourceRepository, AuditEventRepository, CommentRecord,
+    CommentRepository, CorrectionRecord, CorrectionRepository, DerivedEntryRecord,
+    DiscussionListQuery, DiscussionRecord, DiscussionRepository, MembershipSummary,
+    NewArchiveEntry, NewArchiveSource, NewAuditEvent, NewComment, NewCorrection, NewDiscussion,
+    NewSession, NewUser, OrganizationRecord, OrganizationRepository, Page, RevisionRecord,
+    RevisionWrite, SessionRecord, SessionRepository, UserRecord, UserRepository, VisibilityScope,
 };
 use campus_agora_domain::{
-    ApplicableAudience, ArchiveCategory, AuthProviderKind, CorrectionId, ModerationStatus,
-    OrganizationId, PostId, RevisionId, SessionId, SourceKind, SystemRole, UserId,
+    ApplicableAudience, ArchiveCategory, AuthProviderKind, CommentId, CorrectionId,
+    ModerationStatus, OrganizationId, PostId, PostKind, RevisionId, SessionId, SourceKind,
+    SystemRole, UserId,
 };
 use chrono::{DateTime, Utc};
 use sqlx::postgres::PgRow;
@@ -364,15 +367,28 @@ fn correction_from_row(row: &PgRow) -> Result<CorrectionRecord, ApplicationError
     })
 }
 
-/// The visibility predicate, expressed once and reused by every archive read.
+/// The visibility predicate, expressed once and reused by every post read.
 /// `$1` is the viewer id and is NULL for public and moderation scopes; the
 /// `full` flag short-circuits it for moderators. Keeping this in SQL rather
-/// than filtering in Rust means an unpublished entry is never fetched at all.
-const VISIBILITY_PREDICATE: &str = "
+/// than filtering in Rust means an invisible post is never fetched at all.
+///
+/// The list of publicly readable statuses is derived from the domain rather
+/// than written out here. Two hand-maintained copies of one rule is how a
+/// status can become readable in one code path and not the other.
+fn visibility_predicate(kind: PostKind) -> String {
+    let public = ModerationStatus::ALL
+        .iter()
+        .filter(|status| status.is_publicly_visible())
+        .map(|status| format!("'{}'", status.as_str()))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    format!(
+        "
     p.deleted_at is null
-    and p.post_type = 'knowledge'
+    and p.post_type = '{kind}'
     and (
-        p.moderation_status = 'published'
+        p.moderation_status in ({public})
         or $2
         or (
             $1::uuid is not null
@@ -385,7 +401,15 @@ const VISIBILITY_PREDICATE: &str = "
             )
         )
     )
-";
+",
+        kind = kind.as_str()
+    )
+}
+
+/// The archive half of the predicate, which every M2 read already uses.
+fn archive_visibility_predicate() -> String {
+    visibility_predicate(PostKind::Knowledge)
+}
 
 fn scope_bindings(scope: VisibilityScope) -> (Option<Uuid>, bool) {
     match scope {
@@ -463,9 +487,8 @@ impl ArchiveRepository for PgAuthStore {
         scope: VisibilityScope,
     ) -> Result<Option<ArchiveEntryRecord>, ApplicationError> {
         let (viewer, full) = scope_bindings(scope);
-        let sql = format!(
-            "select {ARCHIVE_COLUMNS} from posts p where p.id = $3 and {VISIBILITY_PREDICATE}"
-        );
+        let visibility = archive_visibility_predicate();
+        let sql = format!("select {ARCHIVE_COLUMNS} from posts p where p.id = $3 and {visibility}");
 
         let row = sqlx::query(&sql)
             .bind(viewer)
@@ -483,6 +506,7 @@ impl ArchiveRepository for PgAuthStore {
         query: ArchiveListQuery,
     ) -> Result<Page<ArchiveEntryRecord>, ApplicationError> {
         let (viewer, full) = scope_bindings(query.scope);
+        let visibility = archive_visibility_predicate();
         // $3 q, $4 tag, $5 category; NULL means "no filter" so one statement
         // serves every combination without string-building user input in.
         let filters = "
@@ -493,8 +517,7 @@ impl ArchiveRepository for PgAuthStore {
             and ($5::text is null or p.category = $5)
         ";
 
-        let count_sql =
-            format!("select count(*) from posts p where {VISIBILITY_PREDICATE} {filters}");
+        let count_sql = format!("select count(*) from posts p where {visibility} {filters}");
         let (total_items,): (i64,) = sqlx::query_as(&count_sql)
             .bind(viewer)
             .bind(full)
@@ -508,7 +531,7 @@ impl ArchiveRepository for PgAuthStore {
         let page_size = query.page_size.max(1);
         let offset = i64::from(query.page.saturating_sub(1)) * i64::from(page_size);
         let list_sql = format!(
-            "select {ARCHIVE_COLUMNS} from posts p where {VISIBILITY_PREDICATE} {filters} \
+            "select {ARCHIVE_COLUMNS} from posts p where {visibility} {filters} \
              order by p.updated_at desc, p.id desc limit $6 offset $7"
         );
 
@@ -792,5 +815,489 @@ impl CorrectionRepository for PgAuthStore {
         .ok_or_else(|| ApplicationError::NotFound("correction not found".to_owned()))?;
 
         correction_from_row(&row)
+    }
+}
+
+const DISCUSSION_COLUMNS: &str = "p.id, p.author_id, p.title, p.body, p.tags, \
+     p.moderation_status, p.accepted_comment_id, p.created_at, p.updated_at, \
+     (select count(*) from comments c where c.post_id = p.id and c.deleted_at is null) \
+     as reply_count";
+
+fn discussion_from_row(row: &PgRow) -> Result<DiscussionRecord, ApplicationError> {
+    let moderation_status: String = row.try_get("moderation_status").map_err(internal)?;
+
+    Ok(DiscussionRecord {
+        id: PostId::from_uuid(row.try_get::<Uuid, _>("id").map_err(internal)?),
+        author_id: UserId::from_uuid(row.try_get::<Uuid, _>("author_id").map_err(internal)?),
+        title: row.try_get("title").map_err(internal)?,
+        body: row.try_get("body").map_err(internal)?,
+        tags: row.try_get("tags").map_err(internal)?,
+        moderation_status: ModerationStatus::parse(&moderation_status).ok_or_else(|| {
+            ApplicationError::Internal(format!("unknown moderation status: {moderation_status}"))
+        })?,
+        accepted_comment_id: row
+            .try_get::<Option<Uuid>, _>("accepted_comment_id")
+            .map_err(internal)?
+            .map(CommentId::from_uuid),
+        reply_count: row.try_get::<i64, _>("reply_count").map_err(internal)?,
+        created_at: row.try_get("created_at").map_err(internal)?,
+        updated_at: row.try_get("updated_at").map_err(internal)?,
+    })
+}
+
+fn comment_from_row(row: &PgRow) -> Result<CommentRecord, ApplicationError> {
+    Ok(CommentRecord {
+        id: CommentId::from_uuid(row.try_get::<Uuid, _>("id").map_err(internal)?),
+        post_id: PostId::from_uuid(row.try_get::<Uuid, _>("post_id").map_err(internal)?),
+        author_id: UserId::from_uuid(row.try_get::<Uuid, _>("author_id").map_err(internal)?),
+        body: row.try_get("body").map_err(internal)?,
+        created_at: row.try_get("created_at").map_err(internal)?,
+        updated_at: row.try_get("updated_at").map_err(internal)?,
+    })
+}
+
+fn discussion_visibility_predicate() -> String {
+    visibility_predicate(PostKind::Discussion)
+}
+
+#[async_trait]
+impl DiscussionRepository for PgAuthStore {
+    async fn insert(
+        &self,
+        discussion: NewDiscussion,
+    ) -> Result<DiscussionRecord, ApplicationError> {
+        let row = sqlx::query(
+            r#"
+            with inserted as (
+                insert into posts (
+                    author_id, post_type, moderation_status, title, body, tags,
+                    created_at, updated_at
+                )
+                values ($1, 'discussion', 'draft', $2, $3, $4, $5, $5)
+                returning id, author_id, title, body, tags, moderation_status,
+                    accepted_comment_id, created_at, updated_at
+            )
+            select *, 0::bigint as reply_count from inserted
+            "#,
+        )
+        .bind(discussion.author_id.into_uuid())
+        .bind(&discussion.title)
+        .bind(&discussion.body)
+        .bind(&discussion.tags)
+        .bind(discussion.created_at)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(internal)?;
+
+        discussion_from_row(&row)
+    }
+
+    async fn find_visible(
+        &self,
+        id: PostId,
+        scope: VisibilityScope,
+    ) -> Result<Option<DiscussionRecord>, ApplicationError> {
+        let (viewer, full) = scope_bindings(scope);
+        let visibility = discussion_visibility_predicate();
+        let sql =
+            format!("select {DISCUSSION_COLUMNS} from posts p where p.id = $3 and {visibility}");
+
+        let row = sqlx::query(&sql)
+            .bind(viewer)
+            .bind(full)
+            .bind(id.into_uuid())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(internal)?;
+
+        row.as_ref().map(discussion_from_row).transpose()
+    }
+
+    async fn list(
+        &self,
+        query: DiscussionListQuery,
+    ) -> Result<Page<DiscussionRecord>, ApplicationError> {
+        let (viewer, full) = scope_bindings(query.scope);
+        let visibility = discussion_visibility_predicate();
+        let filters = "
+            and ($3::text is null
+                 or p.title ilike '%' || $3 || '%' escape '\\'
+                 or p.body ilike '%' || $3 || '%' escape '\\')
+            and ($4::text is null or $4 = any(p.tags))
+        ";
+
+        let count_sql = format!("select count(*) from posts p where {visibility} {filters}");
+        let (total_items,): (i64,) = sqlx::query_as(&count_sql)
+            .bind(viewer)
+            .bind(full)
+            .bind(&query.q)
+            .bind(&query.tag)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(internal)?;
+
+        let page_size = query.page_size.max(1);
+        let offset = i64::from(query.page.saturating_sub(1)) * i64::from(page_size);
+        let list_sql = format!(
+            "select {DISCUSSION_COLUMNS} from posts p where {visibility} {filters} \
+             order by p.updated_at desc, p.id desc limit $5 offset $6"
+        );
+
+        let rows = sqlx::query(&list_sql)
+            .bind(viewer)
+            .bind(full)
+            .bind(&query.q)
+            .bind(&query.tag)
+            .bind(i64::from(page_size))
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(internal)?;
+
+        let total_items = total_items.max(0) as u64;
+
+        Ok(Page {
+            items: rows
+                .iter()
+                .map(discussion_from_row)
+                .collect::<Result<Vec<_>, _>>()?,
+            page: query.page,
+            page_size,
+            total_items,
+            total_pages: total_items.div_ceil(u64::from(page_size)) as u32,
+        })
+    }
+
+    async fn set_status(
+        &self,
+        id: PostId,
+        expected: ModerationStatus,
+        status: ModerationStatus,
+        updated_at: DateTime<Utc>,
+    ) -> Result<DiscussionRecord, ApplicationError> {
+        // Compare-and-swap for the same reason as the archive store: the
+        // caller authorized the transition against the status they read.
+        let row = sqlx::query(
+            r#"
+            with updated as (
+                update posts p
+                set moderation_status = $2, updated_at = $3
+                where p.id = $1 and p.deleted_at is null and p.post_type = 'discussion'
+                  and p.moderation_status = $4
+                returning p.id, p.author_id, p.title, p.body, p.tags, p.moderation_status,
+                    p.accepted_comment_id, p.created_at, p.updated_at
+            )
+            select u.*,
+                (select count(*) from comments c
+                 where c.post_id = u.id and c.deleted_at is null) as reply_count
+            from updated u
+            "#,
+        )
+        .bind(id.into_uuid())
+        .bind(status.as_str())
+        .bind(updated_at)
+        .bind(expected.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| {
+            ApplicationError::Conflict(
+                "the discussion changed state concurrently; reload and retry".to_owned(),
+            )
+        })?;
+
+        discussion_from_row(&row)
+    }
+
+    async fn set_accepted_comment(
+        &self,
+        id: PostId,
+        comment_id: Option<CommentId>,
+        updated_at: DateTime<Utc>,
+    ) -> Result<DiscussionRecord, ApplicationError> {
+        // The `exists` guard ties the comment to this discussion inside the
+        // same statement. A caller authorized against one discussion cannot
+        // mark an answer on another, whatever the service layer did first.
+        let row = sqlx::query(
+            r#"
+            with updated as (
+                update posts p
+                set accepted_comment_id = $2, updated_at = $3
+                where p.id = $1 and p.deleted_at is null and p.post_type = 'discussion'
+                  and (
+                    $2::uuid is null
+                    or exists (
+                        select 1 from comments c
+                        where c.id = $2 and c.post_id = $1 and c.deleted_at is null
+                    )
+                  )
+                returning p.id, p.author_id, p.title, p.body, p.tags, p.moderation_status,
+                    p.accepted_comment_id, p.created_at, p.updated_at
+            )
+            select u.*,
+                (select count(*) from comments c
+                 where c.post_id = u.id and c.deleted_at is null) as reply_count
+            from updated u
+            "#,
+        )
+        .bind(id.into_uuid())
+        .bind(comment_id.map(|value| value.into_uuid()))
+        .bind(updated_at)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| ApplicationError::NotFound("reply not found".to_owned()))?;
+
+        discussion_from_row(&row)
+    }
+
+    async fn is_maintainer(&self, id: PostId, user_id: UserId) -> Result<bool, ApplicationError> {
+        let (exists,): (bool,) = sqlx::query_as(
+            "select exists (select 1 from post_maintainers where post_id = $1 and user_id = $2)",
+        )
+        .bind(id.into_uuid())
+        .bind(user_id.into_uuid())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(internal)?;
+
+        Ok(exists)
+    }
+}
+
+#[async_trait]
+impl CommentRepository for PgAuthStore {
+    async fn insert(&self, comment: NewComment) -> Result<CommentRecord, ApplicationError> {
+        let row = sqlx::query(
+            r#"
+            insert into comments (post_id, author_id, body, created_at, updated_at)
+            values ($1, $2, $3, $4, $4)
+            returning id, post_id, author_id, body, created_at, updated_at
+            "#,
+        )
+        .bind(comment.post_id.into_uuid())
+        .bind(comment.author_id.into_uuid())
+        .bind(&comment.body)
+        .bind(comment.created_at)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(internal)?;
+
+        comment_from_row(&row)
+    }
+
+    async fn list_for_post(&self, post_id: PostId) -> Result<Vec<CommentRecord>, ApplicationError> {
+        let rows = sqlx::query(
+            r#"
+            select id, post_id, author_id, body, created_at, updated_at
+            from comments
+            where post_id = $1 and deleted_at is null
+            order by created_at, id
+            "#,
+        )
+        .bind(post_id.into_uuid())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(internal)?;
+
+        rows.iter().map(comment_from_row).collect()
+    }
+
+    async fn find_in_post(
+        &self,
+        post_id: PostId,
+        id: CommentId,
+    ) -> Result<Option<CommentRecord>, ApplicationError> {
+        let row = sqlx::query(
+            r#"
+            select id, post_id, author_id, body, created_at, updated_at
+            from comments
+            where id = $1 and post_id = $2 and deleted_at is null
+            "#,
+        )
+        .bind(id.into_uuid())
+        .bind(post_id.into_uuid())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(internal)?;
+
+        row.as_ref().map(comment_from_row).transpose()
+    }
+}
+
+fn archive_source_from_row(row: &PgRow) -> Result<ArchiveSourceRecord, ApplicationError> {
+    Ok(ArchiveSourceRecord {
+        entry_id: PostId::from_uuid(row.try_get::<Uuid, _>("entry_id").map_err(internal)?),
+        source_post_id: PostId::from_uuid(
+            row.try_get::<Uuid, _>("source_post_id").map_err(internal)?,
+        ),
+        source_comment_id: row
+            .try_get::<Option<Uuid>, _>("source_comment_id")
+            .map_err(internal)?
+            .map(CommentId::from_uuid),
+        source_author_id: UserId::from_uuid(
+            row.try_get::<Uuid, _>("source_author_id")
+                .map_err(internal)?,
+        ),
+        source_author_name: row.try_get("source_author_name").map_err(internal)?,
+        source_title: row.try_get("source_title").map_err(internal)?,
+        created_at: row.try_get("created_at").map_err(internal)?,
+    })
+}
+
+#[async_trait]
+impl ArchiveSourceRepository for PgAuthStore {
+    async fn insert(
+        &self,
+        source: NewArchiveSource,
+    ) -> Result<ArchiveSourceRecord, ApplicationError> {
+        let row = sqlx::query(
+            r#"
+            with inserted as (
+                insert into archive_sources (
+                    entry_id, source_post_id, source_comment_id, source_author_id, created_at
+                )
+                values ($1, $2, $3, $4, $5)
+                returning entry_id, source_post_id, source_comment_id, source_author_id, created_at
+            )
+            select i.*, p.title as source_title, u.display_name as source_author_name
+            from inserted i
+            join posts p on p.id = i.source_post_id
+            join users u on u.id = i.source_author_id
+            "#,
+        )
+        .bind(source.entry_id.into_uuid())
+        .bind(source.source_post_id.into_uuid())
+        .bind(source.source_comment_id.map(|value| value.into_uuid()))
+        .bind(source.source_author_id.into_uuid())
+        .bind(source.created_at)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|error| match &error {
+            sqlx::Error::Database(db_error) if db_error.is_unique_violation() => {
+                ApplicationError::Conflict(
+                    "this source is already recorded for the entry".to_owned(),
+                )
+            }
+            _ => internal(error),
+        })?;
+
+        archive_source_from_row(&row)
+    }
+
+    async fn list_for_entry(
+        &self,
+        entry_id: PostId,
+        scope: VisibilityScope,
+    ) -> Result<Vec<ArchiveSourceRecord>, ApplicationError> {
+        let (viewer, full) = scope_bindings(scope);
+        // The join carries the discussion visibility predicate, so a source
+        // pointing at content the reader cannot see is dropped by the query
+        // rather than filtered afterwards.
+        let visibility = discussion_visibility_predicate();
+        let sql = format!(
+            "select s.entry_id, s.source_post_id, s.source_comment_id, s.source_author_id, \
+             s.created_at, p.title as source_title, u.display_name as source_author_name \
+             from archive_sources s \
+             join posts p on p.id = s.source_post_id \
+             join users u on u.id = s.source_author_id \
+             where s.entry_id = $3 and {visibility} order by s.created_at, s.source_post_id"
+        );
+
+        let rows = sqlx::query(&sql)
+            .bind(viewer)
+            .bind(full)
+            .bind(entry_id.into_uuid())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(internal)?;
+
+        rows.iter().map(archive_source_from_row).collect()
+    }
+
+    async fn list_derived_entries(
+        &self,
+        source_post_id: PostId,
+        scope: VisibilityScope,
+    ) -> Result<Vec<DerivedEntryRecord>, ApplicationError> {
+        let (viewer, full) = scope_bindings(scope);
+        // Mirror of the above: an entry the reader cannot see is not listed,
+        // so the backlink cannot be used to enumerate other people's drafts.
+        let visibility = archive_visibility_predicate();
+        let sql = format!(
+            "select p.id as entry_id, p.title, p.moderation_status, s.created_at \
+             from archive_sources s join posts p on p.id = s.entry_id \
+             where s.source_post_id = $3 and {visibility} order by s.created_at, p.id"
+        );
+
+        let rows = sqlx::query(&sql)
+            .bind(viewer)
+            .bind(full)
+            .bind(source_post_id.into_uuid())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(internal)?;
+
+        rows.iter()
+            .map(|row| {
+                let moderation_status: String =
+                    row.try_get("moderation_status").map_err(internal)?;
+
+                Ok(DerivedEntryRecord {
+                    entry_id: PostId::from_uuid(
+                        row.try_get::<Uuid, _>("entry_id").map_err(internal)?,
+                    ),
+                    title: row.try_get("title").map_err(internal)?,
+                    moderation_status: ModerationStatus::parse(&moderation_status).ok_or_else(
+                        || {
+                            ApplicationError::Internal(format!(
+                                "unknown moderation status: {moderation_status}"
+                            ))
+                        },
+                    )?,
+                    created_at: row.try_get("created_at").map_err(internal)?,
+                })
+            })
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod visibility_tests {
+    use super::*;
+
+    /// The predicate is the single gate every read passes through, and it is
+    /// built by string formatting, so nothing else would catch it drifting from
+    /// the domain rule it is supposed to express.
+    #[test]
+    fn predicate_admits_exactly_the_publicly_visible_statuses() {
+        let sql = archive_visibility_predicate();
+
+        for status in ModerationStatus::ALL {
+            let listed = sql.contains(&format!("'{}'", status.as_str()));
+
+            assert_eq!(
+                listed,
+                status.is_publicly_visible(),
+                "{} is publicly visible = {} but {} in the predicate",
+                status.as_str(),
+                status.is_publicly_visible(),
+                if listed { "listed" } else { "absent" }
+            );
+        }
+    }
+
+    #[test]
+    fn predicate_scopes_to_the_requested_post_kind() {
+        assert!(archive_visibility_predicate().contains("p.post_type = 'knowledge'"));
+        assert!(visibility_predicate(PostKind::Discussion).contains("p.post_type = 'discussion'"));
+    }
+
+    /// Soft-deleted rows must never surface, whatever the viewer's scope.
+    #[test]
+    fn predicate_always_excludes_soft_deleted_rows() {
+        for kind in [PostKind::Knowledge, PostKind::Discussion] {
+            assert!(visibility_predicate(kind).contains("p.deleted_at is null"));
+        }
     }
 }

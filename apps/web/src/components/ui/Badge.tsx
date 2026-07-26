@@ -5,6 +5,7 @@ const STATUS_LABELS: Record<ModerationStatus, string> = {
   published: "已发布",
   hidden: "已隐藏",
   rejected: "已退回",
+  archived: "已归档",
 };
 
 const STATUS_TONES: Record<ModerationStatus, string> = {
@@ -12,6 +13,9 @@ const STATUS_TONES: Record<ModerationStatus, string> = {
   published: "success",
   hidden: "warning",
   rejected: "danger",
+  // Retired, not wrong: archived content is still readable, so it reads as
+  // informational rather than as a warning.
+  archived: "info",
 };
 
 /**

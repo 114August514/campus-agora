@@ -536,7 +536,7 @@ pub(crate) async fn resolve_correction(
 /// access, which read endpoints allow; an invalid token is still an error, so
 /// an expired session does not silently downgrade a reader to a guest and hide
 /// their own drafts.
-async fn resolve_optional_user(
+pub(crate) async fn resolve_optional_user(
     state: &ApiState,
     headers: &HeaderMap,
 ) -> Result<Option<CurrentUser>, Response> {
@@ -553,7 +553,10 @@ async fn resolve_optional_user(
     }
 }
 
-async fn require_user(state: &ApiState, headers: &HeaderMap) -> Result<CurrentUser, Response> {
+pub(crate) async fn require_user(
+    state: &ApiState,
+    headers: &HeaderMap,
+) -> Result<CurrentUser, Response> {
     match resolve_optional_user(state, headers).await? {
         Some(user) => Ok(user),
         None => Err(unauthorized_response(request_id_from_headers(headers))),
@@ -579,17 +582,17 @@ fn optional_enum<T>(value: Option<&str>, parse: fn(&str) -> Option<T>) -> Result
     }
 }
 
-fn parse_post_id(value: &str) -> Option<PostId> {
+pub(crate) fn parse_post_id(value: &str) -> Option<PostId> {
     Uuid::parse_str(value).ok().map(PostId::from_uuid)
 }
 
-fn audit(request_id: &str) -> AuditContext {
+pub(crate) fn audit(request_id: &str) -> AuditContext {
     AuditContext {
         request_id: Some(request_id.to_owned()),
     }
 }
 
-fn bad_request(code: &'static str, message: &str, request_id: String) -> Response {
+pub(crate) fn bad_request(code: &'static str, message: &str, request_id: String) -> Response {
     api_error_response(
         StatusCode::BAD_REQUEST,
         code,
@@ -600,7 +603,7 @@ fn bad_request(code: &'static str, message: &str, request_id: String) -> Respons
     .into_response()
 }
 
-fn invalid_body(request_id: String) -> Response {
+pub(crate) fn invalid_body(request_id: String) -> Response {
     bad_request(
         "invalid_request_body",
         "Request body is invalid",
@@ -608,6 +611,6 @@ fn invalid_body(request_id: String) -> Response {
     )
 }
 
-fn timestamp(value: DateTime<Utc>) -> String {
+pub(crate) fn timestamp(value: DateTime<Utc>) -> String {
     value.to_rfc3339_opts(SecondsFormat::Secs, true)
 }

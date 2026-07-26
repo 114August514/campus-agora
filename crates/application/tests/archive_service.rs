@@ -31,7 +31,8 @@ struct Fixture {
 impl Fixture {
     async fn new() -> Self {
         let store = Arc::new(InMemoryAuthStore::default());
-        let service = ArchiveService::new(store.clone(), store.clone(), store.clone());
+        let service =
+            ArchiveService::new(store.clone(), store.clone(), store.clone(), store.clone());
 
         Self { service, store }
     }
