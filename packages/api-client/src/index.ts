@@ -7,6 +7,16 @@ export type {
   ReadinessResponse,
 } from "./meta";
 export { createCampusAgoraApiClient } from "./meta";
+export type { MockPersona } from "./auth";
 export { createCampusAgoraMockFetch } from "./mock";
 export { CampusAgoraApiError, requestJson } from "./request";
-export type { ApiErrorResponse, ReadinessChecks } from "./generated";
+export type { RequestInitOptions, RequestOptions } from "./request";
+export type {
+  ApiErrorResponse,
+  CurrentUser,
+  LoginResponse,
+  MockLoginRequest,
+  OrganizationMembership,
+  ReadinessChecks,
+  SessionResponse,
+} from "./generated";

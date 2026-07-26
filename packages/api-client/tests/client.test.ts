@@ -180,3 +180,85 @@ describe("createCampusAgoraMockFetch", () => {
     });
   });
 });
+
+describe("auth requests", () => {
+  test("requestJson sends bearer tokens and JSON bodies", async () => {
+    const calls: Array<{ headers: Headers; body: unknown; method?: string }> = [];
+
+    await requestJson(
+      {
+        baseUrl: "http://api.test",
+        fetchImpl: async (url, init) => {
+          calls.push({
+            headers: new Headers(init?.headers),
+            body: init?.body ? JSON.parse(String(init.body)) : undefined,
+            method: init?.method,
+          });
+
+          return jsonResponse({ ok: true }, { status: 200 });
+        },
+        authToken: () => "session-token-1",
+      },
+      "/api/v1/example",
+      { method: "POST", body: { persona: "student" } },
+    );
+
+    expect(calls[0]?.method).toBe("POST");
+    expect(calls[0]?.headers.get("authorization")).toBe("Bearer session-token-1");
+    expect(calls[0]?.headers.get("content-type")).toBe("application/json");
+    expect(calls[0]?.body).toEqual({ persona: "student" });
+  });
+
+  test("requestJson resolves empty 204 responses", async () => {
+    const result = await requestJson<undefined>(
+      {
+        baseUrl: "http://api.test",
+        fetchImpl: async () => new Response(null, { status: 204 }),
+      },
+      "/api/v1/auth/logout",
+      { method: "POST" },
+    );
+
+    expect(result).toBeUndefined();
+  });
+
+  test("mock login, session, and logout round-trip through the mock fetch", async () => {
+    let token: string | undefined;
+    const client = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl: createCampusAgoraMockFetch(),
+      authToken: () => token,
+    });
+
+    const login = await client.mockLogin("organization_member");
+    expect(login.token.length).toBeGreaterThan(0);
+    expect(login.user.systemRole).toBe("organization_member");
+    expect(login.user.organizations[0]?.slug).toBe("demo-student-union");
+
+    token = login.token;
+
+    const session = await client.getAuthSession();
+    expect(session.user.id).toBe(login.user.id);
+    expect(session.expiresAt).toBe(login.expiresAt);
+
+    await client.logout();
+    token = login.token;
+
+    await expect(client.getAuthSession()).rejects.toMatchObject({
+      code: "unauthorized",
+      status: 401,
+    });
+  });
+
+  test("session requests without a token normalize to unauthorized", async () => {
+    const client = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl: createCampusAgoraMockFetch(),
+    });
+
+    await expect(client.getAuthSession()).rejects.toMatchObject({
+      code: "unauthorized",
+      status: 401,
+    });
+  });
+});
