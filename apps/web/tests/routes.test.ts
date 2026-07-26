@@ -9,13 +9,16 @@ import {
 } from "../src/app/routes";
 
 describe("route table", () => {
-  test("declares every archive flow plus the design system", () => {
+  test("declares every archive and discussion flow plus the design system", () => {
     expect(ROUTE_PATHS).toEqual([
       "/",
       "/archive",
       "/archive/new",
       "/archive/:id",
       "/archive/:id/edit",
+      "/discussions",
+      "/discussions/new",
+      "/discussions/:id",
       "/design-system",
     ]);
   });

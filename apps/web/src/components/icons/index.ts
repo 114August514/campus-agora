@@ -14,11 +14,13 @@ export {
   History,
   Inbox,
   Loader2,
+  MessageSquare,
   MessageSquareWarning,
   Pencil,
   Plus,
   Search,
   ShieldCheck,
+  Sprout,
 } from "lucide-react";
 
 /** Rounded outline at 2px, per docs/engineering/development.md. */

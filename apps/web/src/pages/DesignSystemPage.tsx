@@ -1,6 +1,7 @@
 import type { ModerationStatus } from "@campus-agora/api-client";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
+import { ButtonLink } from "../components/ui/ButtonLink";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { ErrorState } from "../components/ui/ErrorState";
@@ -11,7 +12,13 @@ import { Select } from "../components/ui/Select";
 import { Textarea } from "../components/ui/Textarea";
 import { CATEGORY_OPTIONS } from "../features/archive/labels";
 
-const STATUSES: ModerationStatus[] = ["draft", "published", "hidden", "rejected"];
+const STATUSES: ModerationStatus[] = [
+  "draft",
+  "published",
+  "hidden",
+  "rejected",
+  "archived",
+];
 
 /**
  * The manual visual-regression entry point. Every primitive and every product
@@ -37,6 +44,15 @@ export function DesignSystemPage() {
           <Button variant="danger">危险操作</Button>
           <Button loading>加载中</Button>
           <Button disabled>不可用</Button>
+        </div>
+        {/* Navigation that looks like a button. One `<a>`, not a `<button>`
+            inside a link — that nesting is invalid HTML and costs a keyboard
+            user two tab stops for one action. */}
+        <div className="actions">
+          <ButtonLink to="/archive" variant="primary">
+            主操作链接
+          </ButtonLink>
+          <ButtonLink to="/discussions">次操作链接</ButtonLink>
         </div>
       </section>
 

@@ -186,6 +186,12 @@ describe("design system page", () => {
       </MemoryRouter>,
     );
 
+    // Navigation-as-button renders as a link, never as a nested button.
+    const navControl = screen.getByRole("link", { name: "主操作链接" });
+    expect(navControl.tagName).toBe("A");
+    expect(navControl.className).toContain("button-primary");
+    expect(navControl.querySelector("button")).toBeNull();
+
     for (const heading of [
       "按钮",
       "表单",

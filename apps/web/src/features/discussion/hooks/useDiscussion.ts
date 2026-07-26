@@ -1,45 +1,47 @@
 import {
-  type ArchiveSource,
   CampusAgoraApiError,
-  type Correction,
-  type KnowledgeEntry,
+  type DerivedEntry,
+  type Discussion,
+  type DiscussionReply,
   type ModerationStatus,
-  type Revision,
+  type PromoteRequest,
+  type Promotion,
 } from "@campus-agora/api-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiClient } from "../../../lib/api";
 
-export type ArchiveEntryState =
+export type DiscussionState =
   | { status: "loading" }
   | {
       status: "ready";
-      entry: KnowledgeEntry;
-      revisions: Revision[];
-      corrections: Correction[];
-      /** Where this entry's content came from, filtered to sources the reader
-       * may see — a link into a hidden discussion is omitted rather than
-       * disclosing its title. */
-      sources: ArchiveSource[];
+      discussion: Discussion;
+      replies: DiscussionReply[];
+      /** The archive entries this thread produced, filtered to what the
+       * reader may see — a draft entry is listed only to its owner. */
+      derivedEntries: DerivedEntry[];
     }
-  /** A missing entry and an entry the caller may not see are the same state:
+  /** A missing discussion and one the caller may not see are the same state:
    * the API answers 404 for both so a private draft does not leak. */
   | { status: "notFound" }
   | { status: "error"; message: string };
 
-export interface ArchiveEntryController {
-  state: ArchiveEntryState;
+export interface DiscussionController {
+  state: DiscussionState;
   reload: () => void;
   /// Each resolves to whether the action succeeded, so callers can keep the
   /// user's input when it did not.
+  reply: (body: string) => Promise<boolean>;
+  acceptAnswer: (commentId: string | null) => Promise<boolean>;
   changeStatus: (status: ModerationStatus) => Promise<boolean>;
-  fileCorrection: (message: string) => Promise<boolean>;
-  resolveCorrection: (correctionId: string) => Promise<boolean>;
+  /// Resolves to the created promotion so the caller can navigate to the new
+  /// draft, or undefined when it failed.
+  promote: (body: PromoteRequest) => Promise<Promotion | undefined>;
   actionError: string | undefined;
   actionPending: boolean;
 }
 
-export function useArchiveEntry(id: string): ArchiveEntryController {
-  const [state, setState] = useState<ArchiveEntryState>({ status: "loading" });
+export function useDiscussion(id: string): DiscussionController {
+  const [state, setState] = useState<DiscussionState>({ status: "loading" });
   // A sequence number rather than a cancellation flag, so a stale response can
   // never overwrite a newer one after a reload.
   const latestRequest = useRef(0);
@@ -52,19 +54,17 @@ export function useArchiveEntry(id: string): ArchiveEntryController {
     setState({ status: "loading" });
 
     Promise.all([
-      apiClient.getKnowledgeEntry(id),
-      apiClient.listKnowledgeEntryRevisions(id),
-      apiClient.listKnowledgeEntryCorrections(id),
-      apiClient.listKnowledgeEntrySources(id),
+      apiClient.getDiscussion(id),
+      apiClient.listDiscussionReplies(id),
+      apiClient.listDiscussionDerivedEntries(id),
     ])
-      .then(([entry, revisions, corrections, sources]) => {
+      .then(([discussion, replies, derived]) => {
         if (requestId === latestRequest.current) {
           setState({
             status: "ready",
-            entry,
-            revisions: revisions.items,
-            corrections: corrections.items,
-            sources: sources.items,
+            discussion,
+            replies: replies.items,
+            derivedEntries: derived.items,
           });
         }
       })
@@ -85,7 +85,7 @@ export function useArchiveEntry(id: string): ArchiveEntryController {
           message:
             error instanceof CampusAgoraApiError && error.status === 401
               ? "登录状态已失效，请重新登录后重试。"
-              : "资料加载失败，请重试。",
+              : "讨论加载失败，请重试。",
         });
       });
   }, [id]);
@@ -95,21 +95,21 @@ export function useArchiveEntry(id: string): ArchiveEntryController {
   }, [load]);
 
   const runAction = useCallback(
-    async (action: () => Promise<unknown>, fallback: string): Promise<boolean> => {
+    async <T>(action: () => Promise<T>, fallback: string): Promise<T | undefined> => {
       setActionPending(true);
       setActionError(undefined);
 
       try {
-        await action();
+        const result = await action();
         load();
-        return true;
+        return result;
       } catch (error) {
         setActionError(
           error instanceof CampusAgoraApiError
             ? messageForActionError(error, fallback)
             : fallback,
         );
-        return false;
+        return undefined;
       } finally {
         setActionPending(false);
       }
@@ -122,27 +122,35 @@ export function useArchiveEntry(id: string): ArchiveEntryController {
     reload: load,
     actionError,
     actionPending,
+    reply: useCallback(
+      async (body: string) =>
+        (await runAction(
+          () => apiClient.replyToDiscussion(id, body),
+          "回复提交失败，请重试。",
+        )) !== undefined,
+      [id, runAction],
+    ),
+    acceptAnswer: useCallback(
+      async (commentId: string | null) =>
+        (await runAction(
+          () => apiClient.acceptDiscussionAnswer(id, commentId),
+          "标记最佳回答失败，请重试。",
+        )) !== undefined,
+      [id, runAction],
+    ),
     changeStatus: useCallback(
-      (status: ModerationStatus) =>
-        runAction(
-          () => apiClient.changeKnowledgeEntryStatus(id, status),
+      async (status: ModerationStatus) =>
+        (await runAction(
+          () => apiClient.changeDiscussionStatus(id, status),
           "状态更新失败，请重试。",
-        ),
+        )) !== undefined,
       [id, runAction],
     ),
-    fileCorrection: useCallback(
-      (message: string) =>
+    promote: useCallback(
+      (body: PromoteRequest) =>
         runAction(
-          () => apiClient.fileKnowledgeEntryCorrection(id, message),
-          "纠错提交失败，请重试。",
-        ),
-      [id, runAction],
-    ),
-    resolveCorrection: useCallback(
-      (correctionId: string) =>
-        runAction(
-          () => apiClient.resolveKnowledgeEntryCorrection(id, correctionId),
-          "纠错处理失败，请重试。",
+          () => apiClient.promoteDiscussion(id, body),
+          "整理为资料失败，请重试。",
         ),
       [id, runAction],
     ),
@@ -156,7 +164,9 @@ function messageForActionError(error: CampusAgoraApiError, fallback: string): st
     case "forbidden":
       return "你没有权限执行该操作。";
     case "conflict":
-      return "该状态变更不被允许，请刷新后重试。";
+      return "该操作在当前状态下不被允许，请刷新后重试。";
+    case "not_found":
+      return "目标内容已不存在，请刷新后重试。";
     case "validation_failed":
       return error.message;
     default:

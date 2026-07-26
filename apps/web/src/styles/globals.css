@@ -513,7 +513,40 @@ a.entryTitle:hover {
   color: var(--color-text);
 }
 
+/* Discussion metadata reads as separate facts rather than one run-on line,
+   because a reader scans for "is it answered" before anything else. */
+.metaFact {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--space-1);
+  margin-right: var(--space-3);
+}
+
+.metaFact-accepted {
+  color: var(--color-success);
+}
+
+/* What the current state means for this reader, in plain words. `archived` on
+   a thread means closed; on an entry it means superseded. */
+.statusHint {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  margin: var(--space-1) 0 0;
+}
+
+.acceptedMark {
+  align-items: center;
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-sm);
+  color: var(--color-success);
+  display: inline-flex;
+  font-size: var(--font-size-sm);
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+}
+
 .correctionForm,
+.replyForm,
 .editorForm {
   display: grid;
   gap: var(--space-4);

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "../components/ui/Button";
+import { ButtonLink } from "../components/ui/ButtonLink";
 import { Card } from "../components/ui/Card";
 import { roleLabel } from "../features/auth/labels";
 import type { SessionController } from "../features/auth/useSession";
@@ -41,12 +42,15 @@ export function HomePage({ session }: { session: SessionController }) {
       </Card>
 
       <div className="actions">
-        <Link to="/archive">
-          <Button variant="primary">浏览资料库</Button>
-        </Link>
-        <Link to="/design-system">
-          <Button variant="secondary">打开设计系统</Button>
-        </Link>
+        <ButtonLink to="/archive" variant="primary">
+          浏览资料库
+        </ButtonLink>
+        <ButtonLink to="/discussions" variant="secondary">
+          进入讨论区
+        </ButtonLink>
+        <ButtonLink to="/design-system" variant="ghost">
+          打开设计系统
+        </ButtonLink>
       </div>
     </section>
   );

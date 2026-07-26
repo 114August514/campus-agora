@@ -17,6 +17,46 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-26 - Deliver M3.2 discussion frontend and close the loop in the UI
+
+- Result: The discussion-to-archive loop has a face. M3's three exit criteria
+  are met; the milestone is 评审中 rather than 已完成 because the claim should
+  follow review, not precede it.
+- Changed:
+  - Routes and navigation. A `/discussions` namespace, path builders, and the
+    讨论 nav entry pointing at a real page instead of home.
+  - `features/discussion`: `useDiscussionList` and `useDiscussion` (both on the
+    request-sequence-number pattern), plus labels that word each moderation
+    state for a *thread* rather than reusing the archive's wording.
+  - Pages: discussion list, detail, and create. The detail page carries the
+    reply box, the accept-answer control, the status transitions, the promote
+    actions, and the derived-entry list.
+  - `ArchiveDetailPage` gained the 内容来源 section, and `useArchiveEntry` now
+    loads sources with the entry.
+  - `ButtonLink`, replacing `Button`-inside-`Link` in eight existing places
+    plus the four this milestone would have added.
+  - `ui.test.tsx` gained `afterEach(cleanup)`.
+- Verification: `cargo fmt --all --check`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, `cargo test --workspace` against a disposable
+  PostgreSQL 16 container, `bun run api:check`, `typecheck`, `lint`,
+  `lint:styles`, `test` (apps/web 63, api-client 52), `build`, `ci:docs`,
+  `git diff --check`.
+- Decisions:
+  - The distinction between the two content kinds is structural, not
+    decorative: separate route namespaces, separate pages, and different
+    information. A discussion shows reply count, accepted answer, and last
+    activity; an entry shows version, audience, provenance, and corrections.
+  - Promotion lands in the archive editor. It creates a draft the promoter
+    owns, so the useful next step is finishing it, not reading it.
+  - The UI offers only what the server will accept: no reply box on a draft or
+    archived thread, no promote control on a non-public one. A button that
+    guarantees a 409 is worse than no button.
+  - `ButtonLink` was built rather than deferred. The alternative was growing a
+    known-invalid pattern from eight places to twelve and filing another todo.
+- Follow-up: the frontend test gaps carried over from M2.2 (list error-retry,
+  page reset on filter change, editor server-422 and in-flight blocking), and
+  filter debouncing, both still open in `todo.md`.
+
 ### 2026-07-26 - Deliver M3.1 discussion-to-archive backend
 
 - Result: Discussions, replies, an accepted-answer flow, and a traceable path

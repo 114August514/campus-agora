@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { CurrentUser } from "@campus-agora/api-client";
+import { ROUTE_PATHS, ROUTES, discussionDetailPath } from "../src/app/routes";
 import { allowedTransitions } from "../src/features/archive/labels";
 import {
   visibleNavigationItems,
@@ -83,5 +84,40 @@ describe("archive status transitions offered in the UI", () => {
       "published",
       "hidden",
     ]);
+  });
+});
+
+describe("discussion routes", () => {
+  test("the route table carries the discussion namespace", () => {
+    expect(ROUTE_PATHS).toContain("/discussions");
+    expect(ROUTE_PATHS).toContain("/discussions/new");
+    expect(ROUTE_PATHS).toContain("/discussions/:id");
+  });
+
+  /**
+   * Separate namespaces are the structural half of M3's "the UI distinguishes
+   * discussion content from durable archive content": a discussion is never
+   * reachable through an archive URL, so the two never blur into one surface.
+   */
+  test("discussion and archive paths do not overlap", () => {
+    const archive = ROUTE_PATHS.filter((path) => path.startsWith("/archive"));
+    const discussion = ROUTE_PATHS.filter((path) => path.startsWith("/discussions"));
+
+    expect(archive.length).toBeGreaterThan(0);
+    expect(discussion.length).toBeGreaterThan(0);
+    expect(archive.filter((path) => discussion.includes(path))).toEqual([]);
+  });
+
+  test("path builders match the declared routes", () => {
+    expect(discussionDetailPath("abc")).toBe("/discussions/abc");
+    expect(ROUTES.discussionDetail).toBe("/discussions/:id");
+  });
+
+  test("the discussion nav entry points at the discussion list", () => {
+    const item = visibleNavigationItems(undefined).find(
+      (entry) => entry.label === "讨论",
+    );
+
+    expect(item?.to).toBe(ROUTES.discussionList);
   });
 });

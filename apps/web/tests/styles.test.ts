@@ -97,3 +97,19 @@ describe("composed variant classes", () => {
     expect(tones.filter((tone) => !defined.has(`badge-${tone}`))).toEqual([]);
   });
 });
+
+/**
+ * `<Link><Button/></Link>` renders an `<a>` wrapping a `<button>`. That is
+ * invalid HTML, and it costs a keyboard user two tab stops for one action
+ * where the inner control does nothing. Navigation that looks like a button
+ * uses `ButtonLink`, which renders one `<a>` styled as a button.
+ */
+describe("navigation controls", () => {
+  test("no page wraps a Button in a Link", () => {
+    const offenders = sourceFiles(srcDir).filter((file) =>
+      /<Link[^>]*>\s*(\{[^}]*\}\s*)?<Button/.test(readFileSync(file, "utf8")),
+    );
+
+    expect(offenders.map((file) => file.replace(srcDir, "src"))).toEqual([]);
+  });
+});

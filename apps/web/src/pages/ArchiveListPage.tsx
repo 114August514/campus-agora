@@ -2,6 +2,7 @@ import type { ArchiveCategory } from "@campus-agora/api-client";
 import { Link } from "react-router-dom";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
+import { ButtonLink } from "../components/ui/ButtonLink";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { ErrorState } from "../components/ui/ErrorState";
@@ -32,9 +33,9 @@ export function ArchiveListPage({ session }: { session: SessionController }) {
           </p>
         </div>
         {canCreate && (
-          <Link to="/archive/new">
-            <Button variant="primary">创建资料</Button>
-          </Link>
+          <ButtonLink to="/archive/new" variant="primary">
+            创建资料
+          </ButtonLink>
         )}
       </header>
 
@@ -80,9 +81,9 @@ export function ArchiveListPage({ session }: { session: SessionController }) {
           }
           action={
             canCreate ? (
-              <Link to="/archive/new">
-                <Button variant="primary">创建资料</Button>
-              </Link>
+              <ButtonLink to="/archive/new" variant="primary">
+                创建资料
+              </ButtonLink>
             ) : undefined
           }
         />

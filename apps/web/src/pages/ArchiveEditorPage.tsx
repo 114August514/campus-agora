@@ -7,6 +7,7 @@ import {
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "../components/ui/Button";
+import { ButtonLink } from "../components/ui/ButtonLink";
 import { ErrorState } from "../components/ui/ErrorState";
 import { Input } from "../components/ui/Input";
 import { LoadingState } from "../components/ui/LoadingState";
@@ -250,9 +251,9 @@ export function ArchiveEditorPage() {
           <Button type="submit" variant="primary" loading={submitting}>
             {isEdit ? "保存修改" : "创建草稿"}
           </Button>
-          <Link to={id ? `/archive/${id}` : "/archive"}>
-            <Button variant="ghost">取消</Button>
-          </Link>
+          <ButtonLink to={id ? `/archive/${id}` : "/archive"} variant="ghost">
+            取消
+          </ButtonLink>
         </div>
       </form>
     </section>
