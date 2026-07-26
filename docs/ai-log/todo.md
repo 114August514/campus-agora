@@ -18,20 +18,6 @@ Keep entries short, dated, and actionable.
 
 ## Pending
 
-### 2026-07-26 - Implement M2.2 archive frontend flows
-
-- Source: `docs/product/milestones.md` M2, second delivery phase.
-- Milestone: M2.
-- Status: open.
-- Acceptance: `components/ui` gains the primitives the archive flows need
-  (Input, Textarea, Select, Card, Badge, EmptyState, LoadingState), and the web
-  app gains archive list, detail, and editor flows built from them, with no
-  page-local one-off styling. M2 reaches its exit criteria only when this
-  lands alongside M2.1.
-- Dependencies: M2.1 backend (this branch).
-- Notes: `apps/web/src/components/ui` currently holds only `Button.tsx`, which
-  is why M2 was split.
-
 ### 2026-07-26 - Use a keyed digest for campus identity subjects before M6
 
 - Source: M1 security review. `hash_provider_subject` is unsalted SHA-256,

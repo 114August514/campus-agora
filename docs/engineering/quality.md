@@ -38,23 +38,35 @@ TypeScript types, then fails if the committed generated files are stale.
 
 ## Accessibility
 
-M0.2 uses review and component-level checks rather than a full automated a11y
-suite. New UI primitives must still provide:
+Review and component-level checks rather than a full automated a11y suite. New
+UI primitives must still provide:
 
 - Accessible names for buttons and icon buttons.
 - Visible focus states.
 - Text alternatives for non-decorative icons.
-- Error text associated with invalid fields.
+- Error text associated with invalid fields via `aria-describedby`, so a
+  failure is never signalled by colour alone.
 - Keyboard-reachable controls.
 
+The form primitives already carry these guarantees and have tests pinning
+them; a new primitive should arrive with the same coverage.
+
 ## UI Regression Boundary
+
+`/design-system` is the manual visual-regression entry point. It renders every
+primitive and every product state in one place, so a change that breaks one is
+visible without clicking through the app.
 
 Before screenshot regression exists, review UI changes against:
 
 - Token usage instead of one-off colors.
 - Shared primitives instead of duplicate hand-built controls.
 - Responsive layout at mobile and desktop widths.
+- Light and dark themes; every colour token needs a dark override.
 - Loading, empty, error, unauthorized, forbidden, and offline states.
+
+A new primitive or state component is not done until it appears on
+`/design-system` and has a test.
 
 ## Performance Budget
 

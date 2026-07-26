@@ -17,6 +17,41 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-26 - Implement M2.2 archive frontend flows and close M2
+
+- Result: Completed M2. Knowledge entries can now be created, updated,
+  versioned, and corrected through the UI as well as the API, on a shared
+  component system.
+- Changed: `apps/web/src/styles/{tokens,themes,globals}.css` for semantic
+  colour, elevation, z-index, spacing, and duration tokens; new
+  `components/icons` entry point; `components/ui/{Input,Textarea,Select,Card,
+  Badge,EmptyState,LoadingState,ErrorState,Pagination}.tsx` plus `Button`
+  variants and a loading state; `app/routes.ts` and a router in `app/App.tsx`
+  and `main.tsx`; `features/archive/{labels.ts,hooks/*}`;
+  `pages/{Home,ArchiveList,ArchiveDetail,ArchiveEditor,DesignSystem,NotFound}Page.tsx`;
+  `lib/api.ts` mock switch; `apps/web/tests/{tokens,ui,routes,archive}` and a
+  DOM test environment; `docs/engineering/{development,quality}.md` and
+  `docs/product/milestones.md`.
+- Verification: `bun --cwd apps/web test` (31 tests), `bun run typecheck`,
+  `bun run lint`, `bun run lint:styles`, `bun run test`, `bun run build`,
+  `cargo test --workspace` against a disposable PostgreSQL 16 container,
+  `bun run api:check`, `bun run ci:docs`, `git diff --check`.
+- Decisions: Added `react-router-dom` and `lucide-react`. The router is not
+  optional convenience: the product positions the archive as knowledge that can
+  be referenced, so an entry and a filtered list both have to be linkable, and
+  the canonical spec already anticipated `app/router.tsx`. Lucide was already
+  mandated by the design-system rules. List filters live in the query string
+  for the same linkability reason. Both archive hooks track requests by
+  sequence number rather than a cancellation flag, so a slow response from a
+  previous filter cannot overwrite a newer one. `LoadingState` uses `<output>`
+  rather than a hand-written `role="status"`.
+- Follow-up: Modal, Drawer, Dropdown, Tabs, and Toast are deliberately not
+  built, because no M2 flow uses them; add each with a `/design-system` section
+  and a test when a flow needs it. Two test-isolation bugs were fixed in
+  passing: the session test replaced the whole `window` object, stripping
+  happy-dom's DOM constructors for every later test file, and the archive tests
+  cleared `innerHTML` instead of unmounting, leaving React mid-render.
+
 ### 2026-07-26 - Implement M2.1 archive backend core
 
 - Result: Delivered the backend half of M2. Knowledge entries can be created,

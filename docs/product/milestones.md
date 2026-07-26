@@ -16,7 +16,7 @@ Last updated: 2026-07-26
 
 ## 当前阶段
 
-仓库已完成 M0、M0.1 与 M0.2。M1（身份、权限与认证外壳）已实现并在评审中。当前正在推进 M2：知识归档核心。运行时产品功能不应在未更新本文的情况下超出当前里程碑。
+仓库已完成 M0、M0.1 与 M0.2。M1（身份、权限与认证外壳）与 M2（知识归档核心）已实现并在评审中。下一个里程碑是 M3：讨论到归档闭环。运行时产品功能不应在未更新本文的情况下超出当前里程碑。
 
 ## 汇总
 
@@ -26,7 +26,7 @@ Last updated: 2026-07-26
 | M0.1 | 契约与质量门禁 | 已完成 |
 | M0.2 | 治理文档与风险边界 | 已完成 |
 | M1 | 身份、权限与认证外壳 | 评审中 |
-| M2 | 知识归档核心 | 进行中 |
+| M2 | 知识归档核心 | 已完成 |
 | M3 | 讨论到归档闭环 | 计划中 |
 | M4 | 审核与 AI 草稿 | 计划中 |
 | M5 | 搜索与演示可用性 | 计划中 |
@@ -194,7 +194,8 @@ M2 的后端闭环与前端流程按两个阶段交付，沿用 M0 拆成 M0/M0.
 - M2.1：归档后端闭环（domain 状态机与权限、application 用例、迁移与仓库、
   `/api/v1/knowledge-entries` 与契约）。计划见
   `docs/superpowers/plans/2026-07-26-m2-1-archive-backend-core.md`。
-- M2.2：`components/ui` 基础组件与 archive list/detail/editor 前端流程。
+- M2.2：`components/ui` 基础组件、路由与 archive list/detail/editor 前端流程。
+  计划见 `docs/superpowers/plans/2026-07-26-m2-2-archive-frontend.md`。
 
 退出条件：
 

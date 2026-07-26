@@ -59,15 +59,38 @@ build check.
 Frontend code should stay organized by responsibility:
 
 - `src/styles`: tokens, themes, and global CSS.
-- `src/components/ui`: reusable primitives such as Button, Input, Modal, Card,
-  Badge, Toast, and loading or empty states.
+- `src/app`: the route table and the application root.
+- `src/components/ui`: reusable primitives.
+- `src/components/icons`: the single Lucide entry point.
 - `src/components/layout`: AppShell, Sidebar, Topbar, and status surfaces.
+- `src/features`: business hooks, feature UI, and copy constants.
 - `src/pages`: route-level composition.
 - `src/hooks`: reusable client-side behavior.
 - `src/lib`: framework-safe utilities and API wiring.
 
 Pages should compose components. They should not hand-roll duplicate buttons,
 inputs, modals, loading states, or error states.
+
+Current primitives: `Button` (primary, secondary, ghost, danger, plus a
+loading state), `Input`, `Textarea`, `Select`, `Card`, `Badge`, `EmptyState`,
+`LoadingState`, `ErrorState`, `Pagination`. Modal, Drawer, Dropdown, Tabs, and
+Toast are not built yet; add them when a flow needs one, together with a
+`/design-system` section and a test.
+
+## Routing
+
+Routes live in `src/app/routes.ts` as data, so navigation and tests share one
+set of path strings instead of duplicating literals:
+
+- `/` home
+- `/archive` list, with `q`, `tag`, `category`, and `page` in the query string
+- `/archive/new` editor, create mode
+- `/archive/:id` detail
+- `/archive/:id/edit` editor, edit mode
+- `/design-system` the visual system reference
+
+Archive filters live in the URL on purpose. The product is about knowledge
+that can be referenced, so both an entry and a filtered list must be linkable.
 
 ## Design System Rules
 
@@ -76,8 +99,15 @@ inputs, modals, loading states, or error states.
 - Use Lucide rounded outline icons with 2px stroke where an icon is available.
 - Do not introduce one-off colors or arbitrary spacing without updating tokens.
 - Keep cards, modals, controls, and layout primitives consistent across pages.
-- Add or update a style guide page when a reusable primitive or state component
-  becomes part of the product surface.
+- Add or update `/design-system` when a reusable primitive or state component
+  becomes part of the product surface. It renders every primitive plus the
+  loading, empty, error, unauthorized, and forbidden states, and is the manual
+  visual-regression entry point.
+- Never hand-write an SVG icon in a page. Add it to `src/components/icons`
+  and import it from there.
+- Every colour token defined in `tokens.css` must have a dark-theme override in
+  `themes.css`; a test enforces this, because a missing override silently keeps
+  the light value.
 
 ## API And Mock Mode
 
@@ -85,8 +115,13 @@ Use `@campus-agora/api-client` for API access. Do not call `fetch` directly from
 deep page components.
 
 Local mock behavior should use typed API client mocks, currently
-`createCampusAgoraMockFetch()`. Mock data belongs in web app mock folders or
-test fixtures, not in production API client code.
+`createCampusAgoraMockFetch()`. Set `VITE_API_MOCK=true` to run the web app
+against it without a backend; `apps/web/tests/setup.ts` sets the same variable
+so component tests never reach a real server.
+
+App-specific fixture data belongs in web app mock folders or test fixtures.
+The mock transport accepts a `users` override for exactly that reason, so
+product fixtures do not have to live in the API client package.
 
 ## UI Copy
 

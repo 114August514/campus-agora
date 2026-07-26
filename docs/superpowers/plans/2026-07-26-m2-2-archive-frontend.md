@@ -48,60 +48,60 @@ Decisions:
 
 ### Task 1: Plan And AI Log
 
-- [ ] Save this plan and point the M2.2 todo entry at it.
-- [ ] Record the two new dependencies and why in the plan and later in the PR description.
+- [x] Save this plan and point the M2.2 todo entry at it.
+- [x] Record the two new dependencies and why in the plan and later in the PR description.
 
 ### Task 2: Tokens And Theme
 
-- [ ] Write a failing test asserting every token the components use is defined in `tokens.css`, and that `themes.css` overrides the same colour token names (a dark theme missing a token silently falls back to the light value).
-- [ ] Add semantic tokens: `--color-success`, `--color-warning`, `--color-info`, `--color-danger-hover`, `--color-hover`, `--color-selected`, `--color-border-strong`, `--shadow-overlay`, `--z-dropdown`, `--z-toast`, `--z-modal`, `--font-size-xxl`, `--space-12`, `--duration-medium`.
-- [ ] Mirror every colour token in the dark theme.
-- [ ] Run `bun --cwd apps/web test` green.
+- [x] Write a failing test asserting every token the components use is defined in `tokens.css`, and that `themes.css` overrides the same colour token names (a dark theme missing a token silently falls back to the light value).
+- [x] Add semantic tokens: `--color-success`, `--color-warning`, `--color-info`, `--color-danger-hover`, `--color-hover`, `--color-selected`, `--color-border-strong`, `--shadow-overlay`, `--z-dropdown`, `--z-toast`, `--z-modal`, `--font-size-xxl`, `--space-12`, `--duration-medium`.
+- [x] Mirror every colour token in the dark theme.
+- [x] Run `bun --cwd apps/web test` green.
 
 ### Task 3: Icons And UI Primitives
 
-- [ ] Add `react-router-dom` and `lucide-react`; commit the lockfile.
-- [ ] Create `components/icons/index.ts` re-exporting only the icons the flows use, with the documented `strokeWidth={2}` default.
-- [ ] Write failing tests for the primitives: `Button` renders `ghost`/`danger` and disables itself while `loading`; `Input`/`Textarea`/`Select` associate a label, expose `aria-invalid` and `aria-describedby` when given an error, and render the error as text; `Badge` maps a moderation status to its tone; `EmptyState`/`LoadingState`/`ErrorState` render a readable title and an actionable next step; `Pagination` disables the boundary controls and reports the page range.
-- [ ] Implement the primitives with token-only styling.
-- [ ] Run `bun --cwd apps/web test` green.
+- [x] Add `react-router-dom` and `lucide-react`; commit the lockfile.
+- [x] Create `components/icons/index.ts` re-exporting only the icons the flows use, with the documented `strokeWidth={2}` default.
+- [x] Write failing tests for the primitives: `Button` renders `ghost`/`danger` and disables itself while `loading`; `Input`/`Textarea`/`Select` associate a label, expose `aria-invalid` and `aria-describedby` when given an error, and render the error as text; `Badge` maps a moderation status to its tone; `EmptyState`/`LoadingState`/`ErrorState` render a readable title and an actionable next step; `Pagination` disables the boundary controls and reports the page range.
+- [x] Implement the primitives with token-only styling.
+- [x] Run `bun --cwd apps/web test` green.
 
 ### Task 4: Router And Page Shell
 
-- [ ] Write a failing test for the route table: `/`, `/archive`, `/archive/new`, `/archive/:id`, `/archive/:id/edit`, `/design-system`, and an unknown path resolving to a not-found view.
-- [ ] Implement `app/router.tsx`, wire it in `main.tsx`, and make `AppShell` navigation use router links so the active entry is marked.
-- [ ] Keep the guarded-shell rule: navigation entries stay filtered by session and role.
-- [ ] Run typecheck and tests green.
+- [x] Write a failing test for the route table: `/`, `/archive`, `/archive/new`, `/archive/:id`, `/archive/:id/edit`, `/design-system`, and an unknown path resolving to a not-found view.
+- [x] Implement `app/router.tsx`, wire it in `main.tsx`, and make `AppShell` navigation use router links so the active entry is marked.
+- [x] Keep the guarded-shell rule: navigation entries stay filtered by session and role.
+- [x] Run typecheck and tests green.
 
 ### Task 5: Archive List Flow
 
-- [ ] Write failing tests for `useArchiveList`: it starts in loading, exposes the paginated envelope, surfaces an error state with a retry, keeps `q`/`tag`/`category`/`page` in the URL query so a filtered list is linkable, and resets to page 1 when a filter changes.
-- [ ] Implement the hook and `ArchiveListPage` using `Card`, `Badge`, `Input`, `Select`, `Pagination`, `EmptyState`, `LoadingState`, `ErrorState`.
-- [ ] Show a "创建资料" action only when the session allows it.
-- [ ] Run tests green.
+- [x] Write failing tests for `useArchiveList`: it starts in loading, exposes the paginated envelope, surfaces an error state with a retry, keeps `q`/`tag`/`category`/`page` in the URL query so a filtered list is linkable, and resets to page 1 when a filter changes.
+- [x] Implement the hook and `ArchiveListPage` using `Card`, `Badge`, `Input`, `Select`, `Pagination`, `EmptyState`, `LoadingState`, `ErrorState`.
+- [x] Show a "创建资料" action only when the session allows it.
+- [x] Run tests green.
 
 ### Task 6: Archive Detail Flow
 
-- [ ] Write failing tests for `useArchiveEntry`: loads the entry, revisions, and corrections; maps 404 to a not-found view rather than an error; exposes status transitions valid from the current status only; files and resolves corrections and refreshes afterwards.
-- [ ] Implement `ArchiveDetailPage`: metadata block, body, revision history, correction list with a filing form, and the status actions the viewer may take.
-- [ ] Run tests green.
+- [x] Write failing tests for `useArchiveEntry`: loads the entry, revisions, and corrections; maps 404 to a not-found view rather than an error; exposes status transitions valid from the current status only; files and resolves corrections and refreshes afterwards.
+- [x] Implement `ArchiveDetailPage`: metadata block, body, revision history, correction list with a filing form, and the status actions the viewer may take.
+- [x] Run tests green.
 
 ### Task 7: Archive Editor Flow
 
-- [ ] Write failing tests: the editor validates title and body before submitting, surfaces a field-level 422 from the server, creates then navigates to the new entry, loads existing values when editing, and blocks submission while in flight.
-- [ ] Implement `ArchiveEditorPage` for both create and edit, reusing the form primitives.
-- [ ] Run tests green.
+- [x] Write failing tests: the editor validates title and body before submitting, surfaces a field-level 422 from the server, creates then navigates to the new entry, loads existing values when editing, and blocks submission while in flight.
+- [x] Implement `ArchiveEditorPage` for both create and edit, reusing the form primitives.
+- [x] Run tests green.
 
 ### Task 8: Design System Page And Mocks
 
-- [ ] Write a failing test asserting `/design-system` renders a section per primitive plus the loading, empty, error, and unauthorized states.
-- [ ] Implement `DesignSystemPage` and move the archive fixtures into `apps/web/src/mocks/archive.ts`.
-- [ ] Run tests green.
+- [x] Write a failing test asserting `/design-system` renders a section per primitive plus the loading, empty, error, and unauthorized states.
+- [x] Implement `DesignSystemPage` and move the archive fixtures into `apps/web/src/mocks/archive.ts`.
+- [x] Run tests green.
 
 ### Task 9: Docs And Verification
 
-- [ ] Update `docs/engineering/development.md` (component inventory, router, icon entry point, mock fixture location) and `docs/engineering/quality.md` (the `/design-system` review checklist).
-- [ ] Set M2 to 已完成 in `docs/product/milestones.md` once every exit criterion is met, and record both delivery phases.
-- [ ] Run the full gate set: `bun run typecheck`, `lint`, `lint:styles`, `test`, `build`, `cargo test --workspace`, `bun run api:check`, `bun run ci:docs`, `git diff --check`.
-- [ ] Move M2.2 facts into `docs/ai-log/done.md` and close the todo.
-- [ ] Commit in reviewable increments.
+- [x] Update `docs/engineering/development.md` (component inventory, router, icon entry point, mock fixture location) and `docs/engineering/quality.md` (the `/design-system` review checklist).
+- [x] Set M2 to 已完成 in `docs/product/milestones.md` once every exit criterion is met, and record both delivery phases.
+- [x] Run the full gate set: `bun run typecheck`, `lint`, `lint:styles`, `test`, `build`, `cargo test --workspace`, `bun run api:check`, `bun run ci:docs`, `git diff --check`.
+- [x] Move M2.2 facts into `docs/ai-log/done.md` and close the todo.
+- [x] Commit in reviewable increments.
