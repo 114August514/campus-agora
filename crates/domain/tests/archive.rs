@@ -13,6 +13,8 @@ fn moderation_status_round_trips_through_stable_strings() {
         (ModerationStatus::Rejected, "rejected"),
         // Added by M3; its transitions and visibility live in tests/discussion.rs.
         (ModerationStatus::Archived, "archived"),
+        // Added by M4; see tests/moderation.rs.
+        (ModerationStatus::PendingReview, "pending_review"),
     ];
 
     for (status, value) in cases {

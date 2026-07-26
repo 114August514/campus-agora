@@ -110,3 +110,15 @@ Keep entries short, dated, and actionable.
 - Dependencies: none.
 - Notes: fixing one without the other would leave two list pages that behave
   differently for no reason a reader could infer.
+
+### 2026-07-27 - Deliver M4 moderation and AI drafting
+
+- Source: M4 milestone, split into a backend and a frontend phase.
+- Milestone: M4.
+- Status: in progress — M4.1 backend under way, M4.2 frontend not started.
+- Acceptance: AI output is traceable, editable, reviewable, and cannot reach
+  publication without a human action; every moderation action writes an audit
+  event; no third-party provider is contacted, and the boundary is documented.
+- Dependencies: M3, delivered.
+- Notes: the three shaping decisions are recorded in `docs/product/milestones.md`
+  rather than only in the plan, because they change product behaviour.

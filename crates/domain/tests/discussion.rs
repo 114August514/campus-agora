@@ -118,7 +118,8 @@ fn every_status_is_listed_in_all() {
             | ModerationStatus::Published
             | ModerationStatus::Hidden
             | ModerationStatus::Rejected
-            | ModerationStatus::Archived => {}
+            | ModerationStatus::Archived
+            | ModerationStatus::PendingReview => {}
         }
     }
 
@@ -127,5 +128,5 @@ fn every_status_is_listed_in_all() {
     seen.dedup();
 
     assert_eq!(seen.len(), ModerationStatus::ALL.len());
-    assert_eq!(ModerationStatus::ALL.len(), 5);
+    assert_eq!(ModerationStatus::ALL.len(), 6);
 }

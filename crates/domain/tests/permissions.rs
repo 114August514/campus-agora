@@ -672,3 +672,71 @@ fn archiving_does_not_confer_moderation() {
         &authenticated(author)
     ));
 }
+
+/// Anyone with a session may report. The person best placed to notice a
+/// privacy leak is usually the person it exposes, who has no special role.
+#[test]
+fn reporting_content_requires_only_a_session() {
+    assert!(!is_allowed(Action::ReportContent, &Actor::Guest));
+
+    for system_role in [
+        SystemRole::Student,
+        SystemRole::OrganizationMember,
+        SystemRole::Moderator,
+        SystemRole::Admin,
+    ] {
+        assert!(is_allowed(
+            Action::ReportContent,
+            &authenticated(actor(system_role))
+        ));
+    }
+}
+
+/// Reviewing reports is moderation, and deliberately NOT an author or
+/// maintainer privilege: a report may be about the author, so letting them
+/// review it would let the accused close the case. This is the one place a
+/// resource role must not widen the decision.
+#[test]
+fn reviewing_reports_is_moderation_only_and_never_the_author() {
+    for system_role in [SystemRole::Moderator, SystemRole::Admin] {
+        assert!(is_allowed(
+            Action::ReviewReports,
+            &authenticated(actor(system_role))
+        ));
+    }
+
+    let mut author = actor(SystemRole::Student);
+    author.is_resource_author = true;
+    assert!(!is_allowed(Action::ReviewReports, &authenticated(author)));
+
+    let mut maintainer = actor(SystemRole::Student);
+    maintainer.is_assigned_maintainer = true;
+    assert!(!is_allowed(
+        Action::ReviewReports,
+        &authenticated(maintainer)
+    ));
+
+    for system_role in [SystemRole::Student, SystemRole::OrganizationMember] {
+        assert!(!is_allowed(
+            Action::ReviewReports,
+            &authenticated(actor(system_role))
+        ));
+    }
+
+    assert!(!is_allowed(Action::ReviewReports, &Actor::Guest));
+}
+
+/// The union-of-grants rule means a Deny cell cannot revoke a capability
+/// another column grants. `ReviewReports` therefore has to be Deny in *every*
+/// non-moderation column rather than relying on Author being denied — a point
+/// the matrix documentation calls out explicitly.
+#[test]
+fn a_moderator_who_authored_the_content_still_reviews_by_role_not_by_authorship() {
+    let mut moderator_author = actor(SystemRole::Moderator);
+    moderator_author.is_resource_author = true;
+
+    assert!(is_allowed(
+        Action::ReviewReports,
+        &authenticated(moderator_author)
+    ));
+}

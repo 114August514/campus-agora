@@ -19,6 +19,8 @@ pub enum Action {
     AcceptAnswer,
     PromoteToArchive,
     ArchiveContent,
+    ReportContent,
+    ReviewReports,
     ChangeModerationState,
     ChangeRoles,
     ExportData,
@@ -181,7 +183,17 @@ fn cell(
             Author | Maintainer | Moderator | Admin => Allow,
             _ => Deny,
         },
-        Action::ChangeModerationState => match column {
+        // Whoever is affected must be able to raise it, so this needs only a
+        // session — including from a moderator, who is also a campus member.
+        Action::ReportContent => match column {
+            Guest => Deny,
+            _ => Allow,
+        },
+        // Moderation only, and pointedly not Author or Maintainer: a report
+        // may be *about* the author, and the accused must not close the case.
+        // Because columns combine as a union of grants, every other column has
+        // to be Deny rather than relying on one of them being absent.
+        Action::ReviewReports | Action::ChangeModerationState => match column {
             Moderator | Admin => Allow,
             _ => Deny,
         },
