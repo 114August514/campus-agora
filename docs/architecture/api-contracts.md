@@ -56,8 +56,15 @@ regenerate the contract and review the diff before committing.
   archive adds two more: `POST /api/v1/knowledge-entries/{id}/status` is a
   state transition rather than a sub-resource, and
   `.../corrections/{correctionId}/resolve` is an explicit close action that
-  deliberately is not a `PATCH` of the correction. New exceptions must be
-  recorded here.
+  deliberately is not a `PATCH` of the correction. M3 adds two more:
+  `POST /api/v1/discussions/{id}/status` for the same reason as the archive
+  one, and `POST /api/v1/discussions/{id}/accepted-answer`, which sets *or
+  clears* the accepted answer through one endpoint — sending `commentId: null`
+  clears it. Splitting that into a `DELETE` would make "clear" and "never set"
+  two different shapes for one state. New exceptions must be recorded here.
+- `POST /api/v1/discussions/{id}/promotions` is a plural collection because a
+  discussion can be promoted more than once; each promotion creates its own
+  entry and its own provenance record.
 - Frontend code imports API types through `@campus-agora/api-client`, not by
   reaching into generated internals.
 

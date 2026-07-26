@@ -16,7 +16,7 @@ Last updated: 2026-07-26
 
 ## 当前阶段
 
-仓库已完成 M0、M0.1 与 M0.2。M1（身份、权限与认证外壳）与 M2（知识归档核心）已实现并在评审中，两者的退出条件均已满足，待评审通过后标记为已完成。下一个里程碑是 M3：讨论到归档闭环。运行时产品功能不应在未更新本文的情况下超出当前里程碑。
+仓库已完成 M0、M0.1 与 M0.2。M1（身份、权限与认证外壳）与 M2（知识归档核心）已实现并在评审中，两者的退出条件均已满足，待评审通过后标记为已完成。M3（讨论到归档闭环）进行中：M3.1 后端已交付，M3.2 前端待做。运行时产品功能不应在未更新本文的情况下超出当前里程碑。
 
 ## 汇总
 
@@ -27,7 +27,7 @@ Last updated: 2026-07-26
 | M0.2 | 治理文档与风险边界 | 已完成 |
 | M1 | 身份、权限与认证外壳 | 评审中 |
 | M2 | 知识归档核心 | 评审中 |
-| M3 | 讨论到归档闭环 | 计划中 |
+| M3 | 讨论到归档闭环 | 进行中 |
 | M4 | 审核与 AI 草稿 | 计划中 |
 | M5 | 搜索与演示可用性 | 计划中 |
 | M6 | 真实校园身份接入 | 计划中 |
@@ -240,6 +240,34 @@ M2 的后端闭环与前端流程按两个阶段交付，沿用 M0 拆成 M0/M0.
 - [Content Boundary Reference](../constraints/content-boundary-reference.md)
 - [Archive Community Reference](../constraints/archive-community-reference.md)
 - [Advanced Engineering Reference](../constraints/advanced-engineering-reference.md)
+
+### 交付阶段
+
+沿用 M0 与 M2 的先例，M3 按两个阶段交付；里程碑本身不拆分，只有两个阶段都
+完成 M3 才算达成退出条件。
+
+- M3.1（已交付）：讨论后端闭环。`archived` 状态与状态机、讨论权限动作、
+  讨论与回复的 ports/用例/迁移/仓库、晋升与来源链接、
+  `/api/v1/discussions` 与 `/api/v1/knowledge-entries/{id}/sources` 契约、
+  api-client 方法与 mock 对齐。计划见
+  `docs/superpowers/plans/2026-07-26-m3-1-discussion-archive-backend.md`。
+- M3.2（待做）：讨论列表/详情/回复流程、晋升入口、来源链接与反向链接的
+  展示，以及 UI 上讨论内容与长期归档内容的区分。
+
+**M3 现在不能标记为已完成**：退出条件第三条「UI 区分 discussion content 与
+durable archive content」要到 M3.2 才满足。M2 曾在证据齐备前就被标为已完成，
+不重复。
+
+### M3.1 已实现的关键决策
+
+- `archived` 公开可读。归档条目要反向链接到来源讨论，链接必须能解析；
+  移出视线是 `hidden` 的职责。详见
+  [权限与授权](../architecture/auth-permissions.md)。
+- `deleted` 不是 `moderation_status` 值，仍是 `deleted_at` 软删除——数据治理
+  要求可恢复删除并留审计与责任人，状态值表达不了这些。
+- 晋升只接受公开可读的来源，且创建的是晋升者自己的草稿，不修改来源；
+  被引用回复的作者身份通过 `source_author_id` 保留。
+- 来源链接两个方向都按读者可见性过滤。
 
 ## M4 审核与 AI 草稿
 

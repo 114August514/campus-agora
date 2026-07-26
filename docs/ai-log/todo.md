@@ -84,3 +84,16 @@ Keep entries short, dated, and actionable.
   `docs/operations/security.md`.
 - Notes: `sessions_expires_at_idx` was added in the M1 migration to support the
   purge.
+
+### 2026-07-26 - Deliver M3.2 discussion frontend
+
+- Source: M3 is split into a backend and a frontend phase, following M0 and M2.
+- Milestone: M3.
+- Status: open.
+- Acceptance: discussion list, detail, and reply flows; a promote-to-archive
+  entry point; source links shown on an entry and derived entries shown on a
+  discussion; and a visible distinction between transient discussion content
+  and durable archive content, which is M3's third exit criterion.
+- Dependencies: M3.1, delivered.
+- Notes: the client methods and mock routes are in place, so the frontend can
+  be built and tested against behaviour the server actually has.

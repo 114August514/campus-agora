@@ -17,6 +17,59 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-26 - Deliver M3.1 discussion-to-archive backend
+
+- Result: Discussions, replies, an accepted-answer flow, and a traceable path
+  from a discussion into an archive entry, through domain, application,
+  database, HTTP, contract, and mock. M3 is 进行中, not 已完成: the exit
+  criterion "UI distinguishes discussion content from durable archive content"
+  belongs to M3.2.
+- Changed:
+  - Domain. `ModerationStatus::Archived`, the transitions around it, comment
+    validation, and `ReplyToDiscussion` / `AcceptAnswer` / `PromoteToArchive` /
+    `ArchiveContent` in the permission matrix.
+  - Application. `DiscussionService`, discussion/comment/source ports, their
+    in-memory implementations, and `ArchiveService::list_sources`. Status
+    transitions now resolve to an action through one shared function so
+    entries and discussions answer the same question the same way.
+  - Database. `20260728000000_m3_discussion_loop.sql` adds `comments`,
+    `archive_sources`, `posts.accepted_comment_id`, and widens the moderation
+    CHECK constraint. The visibility predicate became a function taking the
+    post kind, and derives its public-status list from the domain.
+  - API. `/api/v1/discussions` with status, replies, accepted-answer,
+    promotions, and derived-entries sub-resources, plus
+    `/api/v1/knowledge-entries/{id}/sources`. The OpenAPI document is now
+    assembled from per-milestone fragments.
+  - Client. `packages/api-client/src/discussion.ts`, the generator's support
+    for OpenAPI 3.1 nullable unions, and the mock's discussion routes.
+  - Frontend. The places TypeScript's exhaustive `Record<ModerationStatus, T>`
+    maps flagged: badge label and tone, status labels, transition table, plus a
+    `badge-info` rule and a test for composed variant classes.
+- Verification: `cargo fmt --all --check`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, `cargo test --workspace` (165 passing against
+  a disposable PostgreSQL 16 container), `bun run api:check`, `typecheck`,
+  `lint`, `lint:styles`, `test` (apps/web 39, api-client 52), `build`,
+  `ci:docs`, `git diff --check`. Every authorization and disclosure rule was
+  proven with a failing test before it was implemented.
+- Decisions:
+  - `archived` is publicly readable. An archive entry links back to the
+    discussion it came from and that link has to resolve; hiding content is
+    what `hidden` does. `archived → hidden` exists so archiving cannot put
+    content beyond moderation reach.
+  - `deleted` stays a soft delete rather than becoming a status, because the
+    data-governance rules require recoverable deletion with an audit event and
+    an accountable actor.
+  - Promotion accepts only publicly readable sources. Being *able to see* a
+    draft or hidden thread is not enough — otherwise publishing the entry would
+    republish content that was deliberately not public, which is the M2
+    revision-1 disclosure shape.
+  - Both directions of the source link are visibility-scoped, so a backlink
+    cannot disclose a title or enumerate other people's drafts.
+  - Comment ids resolve only inside their own discussion, in the service and
+    again in the SQL statement — the M2 IDOR shape, closed up front.
+- Follow-up: M3.2. The `Conditional` cell on `Publish archive entry` for
+  `OrganizationMember` is still unresolved (M4+).
+
 ### 2026-07-26 - Resolve M2 review findings
 
 - Result: Fixed the defects three independent reviews found in M2 (general
