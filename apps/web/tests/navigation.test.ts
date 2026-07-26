@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { CurrentUser } from "@campus-agora/api-client";
-import { visibleNavigationItems } from "../src/features/auth/navigation";
+import { allowedTransitions } from "../src/features/archive/labels";
+import {
+  visibleNavigationItems,
+  visibleNavigationLabels,
+} from "../src/features/auth/navigation";
 
 function user(systemRole: CurrentUser["systemRole"]): CurrentUser {
   return {
@@ -13,11 +17,11 @@ function user(systemRole: CurrentUser["systemRole"]): CurrentUser {
 
 describe("shell navigation visibility", () => {
   test("guests only see public entries", () => {
-    expect(visibleNavigationItems(undefined)).toEqual(["资料库", "讨论"]);
+    expect(visibleNavigationLabels(undefined)).toEqual(["资料库", "讨论"]);
   });
 
   test("authenticated students gain the archive assistant but not moderation", () => {
-    expect(visibleNavigationItems(user("student"))).toEqual([
+    expect(visibleNavigationLabels(user("student"))).toEqual([
       "资料库",
       "讨论",
       "归档助手",
@@ -25,14 +29,46 @@ describe("shell navigation visibility", () => {
   });
 
   test("organization members do not gain moderation access", () => {
-    expect(visibleNavigationItems(user("organization_member"))).not.toContain(
-      "审核",
-    );
+    expect(visibleNavigationLabels(user("organization_member"))).not.toContain("审核");
   });
 
   test("moderators and admins see the moderation entry", () => {
     for (const role of ["moderator", "admin"] as const) {
-      expect(visibleNavigationItems(user(role))).toContain("审核");
+      expect(visibleNavigationLabels(user(role))).toContain("审核");
     }
+  });
+
+  test("every visible entry carries a route the shell can link to", () => {
+    for (const item of visibleNavigationItems(user("admin"))) {
+      expect(item.to.startsWith("/")).toBe(true);
+    }
+  });
+});
+
+describe("archive status transitions offered in the UI", () => {
+  const student = { systemRole: "student" as const, isAuthor: true };
+  const stranger = { systemRole: "student" as const, isAuthor: false };
+  const moderator = { systemRole: "moderator" as const, isAuthor: false };
+
+  test("an author is offered only publishing their own draft", () => {
+    // The backend maps every other transition to ChangeModerationState, which
+    // a student never holds, so showing those buttons guarantees a 403.
+    expect(allowedTransitions("draft", student)).toEqual(["published"]);
+    expect(allowedTransitions("published", student)).toEqual([]);
+    expect(allowedTransitions("hidden", student)).toEqual([]);
+    expect(allowedTransitions("rejected", student)).toEqual([]);
+  });
+
+  test("a non-author student is offered nothing", () => {
+    for (const status of ["draft", "published", "hidden", "rejected"] as const) {
+      expect(allowedTransitions(status, stranger)).toEqual([]);
+    }
+  });
+
+  test("a moderator gets the full state machine", () => {
+    expect(allowedTransitions("draft", moderator)).toEqual(["published", "rejected"]);
+    expect(allowedTransitions("published", moderator)).toEqual(["hidden"]);
+    expect(allowedTransitions("hidden", moderator)).toEqual(["published"]);
+    expect(allowedTransitions("rejected", moderator)).toEqual(["draft"]);
   });
 });

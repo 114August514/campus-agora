@@ -714,3 +714,283 @@ async fn unknown_entry_ids_are_not_found_rather_than_errors() {
     ));
     let _: UserId = author.id;
 }
+
+#[tokio::test]
+async fn a_correction_cannot_be_resolved_through_an_unrelated_entry() {
+    // Authorization is checked against the entry in the path, so a caller who
+    // authors any entry must not be able to close a correction that belongs to
+    // someone else's — doing so would also disclose the correction's contents
+    // for an entry they cannot see.
+    let fixture = Fixture::new().await;
+    let victim = fixture.user("victim", SystemRole::Student).await;
+    let attacker = fixture.user("attacker", SystemRole::Student).await;
+
+    let victim_entry = fixture
+        .service
+        .create_draft(&victim, draft_input("受害条目"), now(), &audit())
+        .await
+        .unwrap();
+    fixture
+        .service
+        .change_status(
+            &victim,
+            victim_entry.id,
+            ModerationStatus::Published,
+            now(),
+            &audit(),
+        )
+        .await
+        .unwrap();
+
+    let correction = fixture
+        .service
+        .file_correction(
+            &attacker,
+            victim_entry.id,
+            CorrectionInput {
+                message: "内容已过期".to_owned(),
+            },
+            now(),
+            &audit(),
+        )
+        .await
+        .unwrap();
+
+    // The attacker authors their own entry, which makes them its Author and so
+    // permitted to resolve corrections *on that entry*.
+    let attacker_entry = fixture
+        .service
+        .create_draft(&attacker, draft_input("攻击者条目"), now(), &audit())
+        .await
+        .unwrap();
+
+    let result = fixture
+        .service
+        .resolve_correction(&attacker, attacker_entry.id, correction.id, now(), &audit())
+        .await;
+
+    assert!(
+        matches!(result, Err(ApplicationError::NotFound(_))),
+        "resolving a correction through an unrelated entry must not succeed, got: {result:?}"
+    );
+
+    let still_open = fixture
+        .service
+        .list_corrections(Some(&victim), victim_entry.id)
+        .await
+        .unwrap();
+    assert!(
+        still_open[0].resolved_at.is_none(),
+        "the victim's correction must remain open"
+    );
+}
+
+#[tokio::test]
+async fn editing_a_draft_rewrites_its_revision_rather_than_leaving_the_original() {
+    // Revision 1 is written at creation, and revision history is readable by
+    // anyone who can see the entry. If a draft edit left revision 1 untouched,
+    // text the author removed before publishing would become world-readable
+    // the moment they publish.
+    let fixture = Fixture::new().await;
+    let author = fixture.user("author", SystemRole::Student).await;
+
+    let mut input = draft_input("草稿");
+    input.body = "同学电话 13800000000".to_owned();
+    let entry = fixture
+        .service
+        .create_draft(&author, input, now(), &audit())
+        .await
+        .unwrap();
+
+    fixture
+        .service
+        .update_entry(
+            &author,
+            entry.id,
+            UpdateArchiveInput {
+                body: Some("电话已删除".to_owned()),
+                ..UpdateArchiveInput::default()
+            },
+            now(),
+            &audit(),
+        )
+        .await
+        .unwrap();
+
+    fixture
+        .service
+        .change_status(
+            &author,
+            entry.id,
+            ModerationStatus::Published,
+            now(),
+            &audit(),
+        )
+        .await
+        .unwrap();
+
+    let revisions = fixture
+        .service
+        .list_revisions(None, entry.id)
+        .await
+        .expect("published revisions are readable by guests");
+
+    assert_eq!(revisions.len(), 1);
+    assert_eq!(revisions[0].body, "电话已删除");
+    assert!(
+        !revisions[0].body.contains("13800000000"),
+        "a draft edit must not leave the removed text in revision history"
+    );
+}
+
+#[tokio::test]
+async fn correction_listing_is_restricted_to_people_with_a_stake_in_the_entry() {
+    // docs/product/privacy.md lists corrections as readable by the entry
+    // author, maintainers, moderators, and admins. A correction names its
+    // reporter and is inherently accusatory, so a public listing would publish
+    // who reported what.
+    let fixture = Fixture::new().await;
+    let author = fixture.user("author", SystemRole::Student).await;
+    let reporter = fixture.user("reporter", SystemRole::Student).await;
+    let bystander = fixture.user("bystander", SystemRole::Student).await;
+    let moderator = fixture.user("moderator", SystemRole::Moderator).await;
+
+    let entry = fixture
+        .service
+        .create_draft(&author, draft_input("公开条目"), now(), &audit())
+        .await
+        .unwrap();
+    fixture
+        .service
+        .change_status(
+            &author,
+            entry.id,
+            ModerationStatus::Published,
+            now(),
+            &audit(),
+        )
+        .await
+        .unwrap();
+    fixture
+        .service
+        .file_correction(
+            &reporter,
+            entry.id,
+            CorrectionInput {
+                message: "流程已变更".to_owned(),
+            },
+            now(),
+            &audit(),
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        matches!(
+            fixture.service.list_corrections(None, entry.id).await,
+            Err(ApplicationError::Unauthorized)
+        ),
+        "a guest must not read reporter identities"
+    );
+    assert!(
+        matches!(
+            fixture
+                .service
+                .list_corrections(Some(&bystander), entry.id)
+                .await,
+            Err(ApplicationError::Forbidden)
+        ),
+        "an unrelated reader must not read reporter identities"
+    );
+
+    assert_eq!(
+        fixture
+            .service
+            .list_corrections(Some(&author), entry.id)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        fixture
+            .service
+            .list_corrections(Some(&moderator), entry.id)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn editing_a_hidden_entry_is_versioned_and_audited() {
+    // An author keeps edit rights while an entry is hidden pending review. If
+    // those edits left no revision and no audit event, a moderator could
+    // restore an entry that no longer matches what they reviewed.
+    let fixture = Fixture::new().await;
+    let author = fixture.user("author", SystemRole::Student).await;
+    let moderator = fixture.user("moderator", SystemRole::Moderator).await;
+
+    let entry = fixture
+        .service
+        .create_draft(&author, draft_input("待复核"), now(), &audit())
+        .await
+        .unwrap();
+    fixture
+        .service
+        .change_status(
+            &author,
+            entry.id,
+            ModerationStatus::Published,
+            now(),
+            &audit(),
+        )
+        .await
+        .unwrap();
+    fixture
+        .service
+        .change_status(
+            &moderator,
+            entry.id,
+            ModerationStatus::Hidden,
+            now(),
+            &audit(),
+        )
+        .await
+        .unwrap();
+
+    let updated = fixture
+        .service
+        .update_entry(
+            &author,
+            entry.id,
+            UpdateArchiveInput {
+                body: Some("被隐藏后重写的正文".to_owned()),
+                ..UpdateArchiveInput::default()
+            },
+            now(),
+            &audit(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(updated.current_revision, 2);
+
+    let revisions = fixture
+        .service
+        .list_revisions(Some(&moderator), entry.id)
+        .await
+        .unwrap();
+    assert_eq!(revisions.len(), 2);
+    assert_eq!(revisions[1].body, "被隐藏后重写的正文");
+
+    let revised: Vec<_> = fixture
+        .store
+        .audit_events_snapshot()
+        .into_iter()
+        .filter(|event| event.action == "archive.revised")
+        .collect();
+    assert_eq!(revised.len(), 1);
+    assert!(revised[0].metadata.to_string().contains("hidden"));
+}

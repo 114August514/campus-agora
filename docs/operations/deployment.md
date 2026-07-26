@@ -1,5 +1,7 @@
 # Deployment
 
+Last updated: 2026-07-26
+
 M0.2 does not define production hosting. It provides the API image, migration
 rules, release order, and rollback principles future environments should follow.
 
@@ -70,3 +72,14 @@ curl -fsS "$BASE_URL/api/v1/meta"
 
 For desktop releases, also launch the shell against the intended web origin and
 confirm no unexpected Tauri capabilities were added.
+
+## Web Hosting
+
+The web app uses client-side routing, and archive entries are meant to be
+linkable, so the static host must serve `index.html` for any unmatched path.
+Without that fallback a direct hit on `/archive/{id}` returns 404 even though
+the route exists, which defeats the point of addressable entries.
+
+Set `VITE_API_BASE_URL` at build time. `VITE_API_MOCK` is ignored in a
+production build, so a stray value cannot ship a bundle serving fabricated
+content.

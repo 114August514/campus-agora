@@ -1,7 +1,9 @@
 import type { CurrentUser } from "@campus-agora/api-client";
+import { ROUTES } from "../../app/routes";
 
 export interface NavigationItem {
   label: string;
+  to: string;
   /** Roles allowed to see the entry; undefined means everyone, including guests. */
   allowedRoles?: ReadonlyArray<CurrentUser["systemRole"]>;
   /** Requires any authenticated session, regardless of role. */
@@ -9,10 +11,10 @@ export interface NavigationItem {
 }
 
 export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
-  { label: "资料库" },
-  { label: "讨论" },
-  { label: "归档助手", requiresAuth: true },
-  { label: "审核", allowedRoles: ["moderator", "admin"] },
+  { label: "资料库", to: ROUTES.archiveList },
+  { label: "讨论", to: ROUTES.home },
+  { label: "归档助手", to: ROUTES.home, requiresAuth: true },
+  { label: "审核", to: ROUTES.home, allowedRoles: ["moderator", "admin"] },
 ];
 
 /**
@@ -23,7 +25,7 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
  */
 export function visibleNavigationItems(
   user: CurrentUser | undefined,
-): readonly string[] {
+): readonly NavigationItem[] {
   return NAVIGATION_ITEMS.filter((item) => {
     if (item.allowedRoles) {
       return user !== undefined && item.allowedRoles.includes(user.systemRole);
@@ -34,5 +36,11 @@ export function visibleNavigationItems(
     }
 
     return true;
-  }).map((item) => item.label);
+  });
+}
+
+export function visibleNavigationLabels(
+  user: CurrentUser | undefined,
+): readonly string[] {
+  return visibleNavigationItems(user).map((item) => item.label);
 }

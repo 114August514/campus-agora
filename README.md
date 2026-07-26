@@ -1,6 +1,6 @@
 # Campus Agora
 
-Campus Agora is a campus discussion and knowledge archive platform. This repository is currently in the M2 Knowledge Archive Core stage.
+Campus Agora is a campus discussion and knowledge archive platform. This repository is currently in the M2 Knowledge Archive Core stage, under review.
 
 ## Requirements
 
@@ -62,3 +62,4 @@ The API exposes:
 - `POST /api/v1/knowledge-entries/{id}/status`
 - `GET /api/v1/knowledge-entries/{id}/revisions`
 - `GET|POST /api/v1/knowledge-entries/{id}/corrections`
+- `POST /api/v1/knowledge-entries/{id}/corrections/{correctionId}/resolve`

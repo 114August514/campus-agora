@@ -14,13 +14,19 @@
   "dependencies": {
     "@campus-agora/api-client": "workspace:*",
     "@vitejs/plugin-react": "^4.3.1",
-    "vite": "^5.4.11",
-    "typescript": "^5.4.5",
+    "lucide-react": "^1.27.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^7.18.1",
+    "typescript": "^5.4.5",
+    "vite": "^5.4.11"
   },
   "devDependencies": {
+    "@happy-dom/global-registrator": "^20.11.1",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^18.2.66",
-    "@types/react-dom": "^18.2.22"
+    "@types/react-dom": "^18.2.22",
+    "happy-dom": "^20.11.1"
   }
 }

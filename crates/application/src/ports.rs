@@ -168,9 +168,18 @@ pub struct ArchiveEntryUpdate {
     pub source_kind: SourceKind,
     pub source_reference: Option<String>,
     pub updated_at: DateTime<Utc>,
-    /// When set, the update also writes this revision row and bumps
-    /// `current_revision`, in the same transaction.
-    pub new_revision: Option<NewRevision>,
+    pub revision: RevisionWrite,
+}
+
+/// How an update touches revision history.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RevisionWrite {
+    /// A published entry gains a new version and bumps `current_revision`.
+    Append(NewRevision),
+    /// A draft has no published history, so its single revision is rewritten
+    /// in place. Leaving the original would publish text the author removed
+    /// before the entry was ever visible.
+    RewriteCurrent { editor_id: UserId },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -264,9 +273,13 @@ pub trait ArchiveRepository: Send + Sync {
         update: ArchiveEntryUpdate,
     ) -> Result<ArchiveEntryRecord, ApplicationError>;
 
+    /// Compare-and-swap on `expected`: the caller authorized the transition
+    /// against the status it read, so a concurrent change must make this fail
+    /// rather than silently overwrite the newer decision.
     async fn set_status(
         &self,
         id: PostId,
+        expected: ModerationStatus,
         status: ModerationStatus,
         updated_at: DateTime<Utc>,
     ) -> Result<ArchiveEntryRecord, ApplicationError>;
@@ -286,8 +299,12 @@ pub trait CorrectionRepository: Send + Sync {
         post_id: PostId,
     ) -> Result<Vec<CorrectionRecord>, ApplicationError>;
 
+    /// Scoped to `post_id` on purpose: the caller is authorized against the
+    /// entry in the request path, so resolving a correction that belongs to a
+    /// different entry must fail rather than silently succeed.
     async fn resolve(
         &self,
+        post_id: PostId,
         id: CorrectionId,
         resolved_by: UserId,
         resolved_at: DateTime<Utc>,

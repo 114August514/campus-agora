@@ -582,3 +582,179 @@ describe("knowledge archive client", () => {
     expect(listed.items).toHaveLength(1);
   });
 });
+
+// The mock is the only thing apps/web tests run against, so any place it is
+// more permissive than the server means the frontend is verified against
+// behavior that does not exist. These mirror crates/api/tests/archive.rs and
+// crates/application/src/archive/service.rs.
+describe("archive mock matches the server's rules", () => {
+  async function session(persona: Parameters<CampusAgoraApiClient["mockLogin"]>[0]) {
+    const fetchImpl = createCampusAgoraMockFetch();
+    const holder: { token?: string } = {};
+    const client = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder.token,
+    });
+    holder.token = (await client.mockLogin(persona)).token;
+
+    return { client, fetchImpl, holder };
+  }
+
+  const draft = {
+    title: "原标题",
+    body: "原正文",
+    summary: "原摘要",
+    tags: ["原标签"],
+    category: "onboarding",
+    applicableAudience: "new_students",
+    sourceKind: "firsthand_experience",
+  } as const;
+
+  test("an unknown bearer token is 401, not a silent downgrade to guest", async () => {
+    const fetchImpl = createCampusAgoraMockFetch();
+    const client = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => "expired-or-bogus",
+    });
+
+    // The server comment in crates/api/src/archive.rs is explicit that an
+    // expired session must not quietly become a guest and hide the reader's
+    // own drafts.
+    await expect(client.listKnowledgeEntries()).rejects.toMatchObject({
+      code: "unauthorized",
+      status: 401,
+    });
+  });
+
+  test("PATCH applies every field the contract exposes", async () => {
+    const { client } = await session("student");
+    const entry = await client.createKnowledgeEntry(draft);
+
+    const updated = await client.updateKnowledgeEntry(entry.id, {
+      title: "新标题",
+      body: "新正文",
+      summary: "新摘要",
+      tags: ["新标签"],
+      category: "academics",
+      applicableAudience: "graduate",
+      sourceKind: "official_announcement",
+      sourceReference: "https://example.test/new",
+    });
+
+    expect(updated.title).toBe("新标题");
+    expect(updated.summary).toBe("新摘要");
+    expect(updated.tags).toEqual(["新标签"]);
+    expect(updated.category).toBe("academics");
+    expect(updated.applicableAudience).toBe("graduate");
+    expect(updated.sourceKind).toBe("official_announcement");
+    expect(updated.sourceReference).toBe("https://example.test/new");
+  });
+
+  test("only a moderator or admin may move an entry beyond publishing own draft", async () => {
+    const { client } = await session("student");
+    const entry = await client.createKnowledgeEntry(draft);
+
+    // An author publishing their own draft is allowed...
+    await client.changeKnowledgeEntryStatus(entry.id, "published");
+
+    // ...but hiding is a moderation action.
+    await expect(
+      client.changeKnowledgeEntryStatus(entry.id, "hidden"),
+    ).rejects.toMatchObject({ code: "forbidden", status: 403 });
+  });
+
+  test("an author may not reject their own draft", async () => {
+    const { client } = await session("student");
+    const entry = await client.createKnowledgeEntry(draft);
+
+    await expect(
+      client.changeKnowledgeEntryStatus(entry.id, "rejected"),
+    ).rejects.toMatchObject({ code: "forbidden", status: 403 });
+  });
+
+  test("a non-author organization member cannot edit someone else's entry", async () => {
+    const { client, fetchImpl } = await session("student");
+    const entry = await client.createKnowledgeEntry(draft);
+    await client.changeKnowledgeEntryStatus(entry.id, "published");
+
+    const otherHolder: { token?: string } = {};
+    const other = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => otherHolder.token,
+    });
+    otherHolder.token = (await other.mockLogin("organization_member")).token;
+
+    await expect(
+      other.updateKnowledgeEntry(entry.id, { title: "劫持" }),
+    ).rejects.toMatchObject({ code: "forbidden", status: 403 });
+  });
+
+  test("input the server rejects is rejected here too", async () => {
+    const { client } = await session("student");
+
+    // Unknown enum value: 400 on the server.
+    await expect(
+      client.createKnowledgeEntry({
+        ...draft,
+        category: "not_a_category" as never,
+      }),
+    ).rejects.toMatchObject({ code: "invalid_request_body", status: 400 });
+
+    // Too many tags: 422 on the server (MAX_TAGS = 10).
+    await expect(
+      client.createKnowledgeEntry({
+        ...draft,
+        tags: Array.from({ length: 11 }, (_, index) => `tag${index}`),
+      }),
+    ).rejects.toMatchObject({ code: "validation_failed", status: 422 });
+
+    // Blank body: 422 on the server.
+    await expect(
+      client.createKnowledgeEntry({ ...draft, body: "   " }),
+    ).rejects.toMatchObject({ code: "validation_failed", status: 422 });
+  });
+
+  test("correction listing requires a stake in the entry", async () => {
+    const { client, fetchImpl } = await session("student");
+    const entry = await client.createKnowledgeEntry(draft);
+    await client.changeKnowledgeEntryStatus(entry.id, "published");
+
+    const guest = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+    });
+
+    // privacy.md restricts reporter identities to the author, maintainers,
+    // moderators, and admins.
+    await expect(guest.listKnowledgeEntryCorrections(entry.id)).rejects.toMatchObject({
+      status: 401,
+    });
+  });
+
+  test("a correction cannot be resolved through an unrelated entry", async () => {
+    const { client, fetchImpl } = await session("student");
+    const victim = await client.createKnowledgeEntry(draft);
+    await client.changeKnowledgeEntryStatus(victim.id, "published");
+
+    const attackerHolder: { token?: string } = {};
+    const attacker = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => attackerHolder.token,
+    });
+    attackerHolder.token = (await attacker.mockLogin("organization_member")).token;
+
+    const correction = await attacker.fileKnowledgeEntryCorrection(
+      victim.id,
+      "内容已过期",
+    );
+    const own = await attacker.createKnowledgeEntry({ ...draft, title: "攻击者条目" });
+
+    await expect(
+      attacker.resolveKnowledgeEntryCorrection(own.id, correction.id),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+});

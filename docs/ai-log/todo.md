@@ -18,19 +18,44 @@ Keep entries short, dated, and actionable.
 
 ## Pending
 
-### 2026-07-26 - Implement M2.2 archive frontend flows
+### 2026-07-26 - Close the remaining M2 frontend test gaps
 
-- Source: `docs/product/milestones.md` M2, second delivery phase.
+- Source: M2 self-review. Several M2.2 plan checkboxes were ticked ahead of the
+  evidence; the plan has been annotated and the gaps listed here.
 - Milestone: M2.
 - Status: open.
-- Acceptance: `components/ui` gains the primitives the archive flows need
-  (Input, Textarea, Select, Card, Badge, EmptyState, LoadingState), and the web
-  app gains archive list, detail, and editor flows built from them, with no
-  page-local one-off styling. M2 reaches its exit criteria only when this
-  lands alongside M2.1.
-- Dependencies: M2.1 backend (this branch).
-- Notes: `apps/web/src/components/ui` currently holds only `Button.tsx`, which
-  is why M2 was split.
+- Acceptance: frontend tests cover the archive list's error-with-retry path and
+  its page reset on filter change; the detail hook's file/resolve refresh cycle;
+  and the editor's server-422 surfacing, create-then-navigate, edit-mode value
+  loading, and in-flight submission blocking.
+- Dependencies: none.
+- Notes: the underlying behaviors are covered at the application and API layers
+  (`crates/application/tests/archive_service.rs`, `crates/api/tests/archive.rs`),
+  so this is frontend wiring coverage rather than unverified behavior.
+
+### 2026-07-26 - Debounce archive list filters
+
+- Source: M2 self-review. `ArchiveListPage` calls `setFilter` on every
+  keystroke, so typing a four-character query pushes four history entries,
+  fires four requests, and blanks the results to a loading state each time.
+- Milestone: M3.
+- Status: open.
+- Acceptance: text filters are debounced, the query string is replaced rather
+  than pushed, and the previous page stays rendered during a refetch.
+- Dependencies: none.
+- Notes: `docs/engineering/quality.md` lists "avoid repeated network requests"
+  in the performance budget.
+
+### 2026-07-26 - Replace Button-inside-Link with a single control
+
+- Source: M2 self-review. Eight places render a `<Button>` inside a `<Link>`,
+  which is invalid HTML: it creates two tab stops for one action and screen
+  readers announce "link, button".
+- Milestone: M3.
+- Status: open.
+- Acceptance: a link-styled `Link`, or a `Button` that navigates, so each
+  action is one control.
+- Dependencies: none.
 
 ### 2026-07-26 - Use a keyed digest for campus identity subjects before M6
 

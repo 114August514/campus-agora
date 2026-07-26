@@ -150,7 +150,7 @@ select {
 }
 
 h1 {
-  font-size: 24px;
+  font-size: var(--font-size-xxl);
   margin: 0 0 var(--space-3);
 }
 
@@ -183,7 +183,7 @@ h1 {
 .button-primary {
   background: var(--color-primary);
   border-color: var(--color-primary);
-  color: #ffffff;
+  color: var(--color-on-primary);
 }
 
 .button-primary:hover {
@@ -214,4 +214,321 @@ h1 {
   .sidebar nav {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* Form primitives. Errors are text plus a border change, never colour alone. */
+.field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.fieldLabel {
+  font-size: var(--font-size-md);
+  font-weight: 500;
+}
+
+.control {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  transition: border-color var(--duration-fast) ease-out;
+  width: 100%;
+}
+
+.control:hover {
+  border-color: var(--color-border-strong);
+}
+
+.control:disabled {
+  background: var(--color-hover);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.control-invalid {
+  border-color: var(--color-danger);
+}
+
+.controlTextarea {
+  line-height: 1.7;
+  min-height: 160px;
+  padding: var(--space-3);
+  resize: vertical;
+}
+
+.controlSelect {
+  padding-right: var(--space-2);
+}
+
+.fieldError {
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+  margin: 0;
+}
+
+.fieldHint {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  margin: 0;
+}
+
+.button-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--color-text-muted);
+}
+
+.button-ghost:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.button-danger {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: var(--color-on-primary);
+}
+
+.button-danger:hover {
+  background: var(--color-danger-hover);
+  border-color: var(--color-danger-hover);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.buttonSpinner {
+  animation: spin var(--duration-medium) linear infinite;
+  margin-right: var(--space-2);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .buttonSpinner,
+  .stateSpinner {
+    animation: none;
+  }
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+
+.badge {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+.badge-neutral {
+  color: var(--color-text-muted);
+}
+
+.badge-success {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.badge-warning {
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
+.badge-danger {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.stateBlock {
+  align-items: center;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+}
+
+.stateBlock-error {
+  border-color: var(--color-danger);
+  border-style: solid;
+}
+
+.stateIcon,
+.stateSpinner {
+  color: var(--color-text-muted);
+}
+
+.stateSpinner {
+  animation: spin var(--duration-medium) linear infinite;
+}
+
+.stateTitle {
+  font-weight: 500;
+  margin: 0;
+}
+
+.stateDescription {
+  color: var(--color-text-muted);
+  margin: 0;
+  max-width: 420px;
+}
+
+.pagination {
+  align-items: center;
+  display: flex;
+  gap: var(--space-3);
+  justify-content: center;
+  padding: var(--space-4) 0;
+}
+
+.paginationStatus {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* Archive flow layout. Composition and spacing only — colour, size, radius,
+   and timing all come from tokens. */
+.pageHeader {
+  align-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  justify-content: space-between;
+}
+
+.pageHeader h1 {
+  margin: 0 0 var(--space-2);
+}
+
+.filters {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.entryList {
+  display: grid;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.entryHead {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+}
+
+.entryHead h1 {
+  margin: 0;
+}
+
+.entryTitle {
+  color: var(--color-text);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  margin: 0;
+}
+
+a.entryTitle:hover {
+  color: var(--color-primary);
+}
+
+.entryMeta {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  margin: 0;
+}
+
+.entryTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.tag {
+  background: var(--color-hover);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+/* Entry bodies are prose typed into a textarea. Without pre-wrap every
+   paragraph break collapses and the product's core content becomes one
+   unreadable block. */
+.entryBody {
+  line-height: 1.8;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.detailSection {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.detailSection h2 {
+  font-size: var(--font-size-lg);
+  margin: 0;
+}
+
+.backLink {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
+.backLink:hover {
+  color: var(--color-text);
+}
+
+.correctionForm,
+.editorForm {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 720px;
+}
+
+.navLink {
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  display: block;
+  padding: var(--space-2) var(--space-3);
+}
+
+.navLink:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.navLink-active {
+  background: var(--color-selected);
+  color: var(--color-text);
+  font-weight: 500;
 }
