@@ -1,6 +1,7 @@
 import { AppShell } from "../components/layout/AppShell";
 import { Button } from "../components/ui/Button";
 import { roleLabel } from "../features/auth/labels";
+import { visibleNavigationItems } from "../features/auth/navigation";
 import { AuthPanel } from "../features/auth/ui/AuthPanel";
 import { useSession } from "../features/auth/useSession";
 import { formatDateTime } from "../lib/format";
@@ -67,11 +68,13 @@ function SessionStatusCard({
 
 export function App() {
   const session = useSession();
+  const currentUser =
+    session.state.status === "authenticated" ? session.state.user : undefined;
 
   return (
     <AppShell
       title="Campus Agora"
-      sidebarItems={["资料库", "讨论", "归档助手", "审核"]}
+      sidebarItems={visibleNavigationItems(currentUser)}
       topbarContent={<AuthPanel session={session} />}
     >
       <section className="workspace">

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 interface AppShellProps {
   title: string;
-  sidebarItems: string[];
+  sidebarItems: readonly string[];
   topbarContent?: ReactNode;
   children: ReactNode;
 }
