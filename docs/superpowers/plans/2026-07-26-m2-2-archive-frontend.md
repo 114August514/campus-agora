@@ -30,18 +30,17 @@ Decisions:
 - **Server state** lives in `features/archive/hooks`. No page calls `fetch`; every request goes through `@campus-agora/api-client`.
 - **Permission in the UI is an affordance only.** Buttons hide when the action is unavailable, but the backend remains the boundary — the same rule the guarded shell already follows.
 - **Copy stays Chinese** and reuses the existing label constants pattern from `features/auth/labels.ts`.
-- **Mock fixtures live in `apps/web/src/mocks`**, not in the API client package, resolving the tension the M1 review noted about fixture data in production client code.
+- **Mock fixtures stay overridable rather than relocated.** `createCampusAgoraMockFetch` already accepts a `users` override, so app-specific fixtures can be injected from `apps/web` without a separate fixtures module that no flow needs yet. `VITE_API_MOCK=true` selects mock mode, and the test setup sets it so component tests never reach a server.
 
 ## File Structure
 
 - Modify `apps/web/package.json` (deps), `apps/web/src/styles/{tokens,themes,globals}.css`.
 - Create `apps/web/src/components/icons/index.ts`.
 - Create `apps/web/src/components/ui/{Input,Textarea,Select,Card,Badge,EmptyState,LoadingState,ErrorState,Pagination}.tsx`; modify `Button.tsx`.
-- Create `apps/web/src/app/router.tsx`; modify `app/App.tsx` and `main.tsx`.
+- Create `apps/web/src/app/routes.ts` (the route table as data); modify `app/App.tsx` and `main.tsx`.
 - Create `apps/web/src/features/archive/{labels.ts,hooks/useArchiveList.ts,hooks/useArchiveEntry.ts,ui/*}`.
 - Create `apps/web/src/pages/{HomePage,ArchiveListPage,ArchiveDetailPage,ArchiveEditorPage,DesignSystemPage}.tsx`.
-- Create `apps/web/src/mocks/archive.ts`.
-- Create `apps/web/tests/{ui.test.tsx,archive.test.tsx,router.test.ts}`.
+- Create `apps/web/tests/{tokens.test.ts,ui.test.tsx,routes.test.ts,archive.test.tsx,setup.ts}`.
 - Modify docs: `docs/engineering/development.md`, `docs/engineering/quality.md`, `docs/product/milestones.md`, `docs/ai-log/{todo,done}.md`.
 
 ## Tasks
@@ -69,7 +68,7 @@ Decisions:
 ### Task 4: Router And Page Shell
 
 - [x] Write a failing test for the route table: `/`, `/archive`, `/archive/new`, `/archive/:id`, `/archive/:id/edit`, `/design-system`, and an unknown path resolving to a not-found view.
-- [x] Implement `app/router.tsx`, wire it in `main.tsx`, and make `AppShell` navigation use router links so the active entry is marked.
+- [x] Implement `app/routes.ts`, wire `BrowserRouter` in `main.tsx`, and make `AppShell` navigation use `NavLink` so the active entry is marked.
 - [x] Keep the guarded-shell rule: navigation entries stay filtered by session and role.
 - [x] Run typecheck and tests green.
 
@@ -95,7 +94,7 @@ Decisions:
 ### Task 8: Design System Page And Mocks
 
 - [x] Write a failing test asserting `/design-system` renders a section per primitive plus the loading, empty, error, and unauthorized states.
-- [x] Implement `DesignSystemPage` and move the archive fixtures into `apps/web/src/mocks/archive.ts`.
+- [x] Implement `DesignSystemPage` and route the app through mock mode under test rather than adding a fixtures module no flow reads.
 - [x] Run tests green.
 
 ### Task 9: Docs And Verification
