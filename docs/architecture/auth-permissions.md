@@ -105,6 +105,8 @@ action/resource matrix.
 | Accept answer | Deny | Deny | Deny | Allow | Allow if assigned | Allow | Allow |
 | Promote to archive | Deny | Allow | Allow | Allow | Allow | Allow | Allow |
 | Archive content | Deny | Deny | Deny | Allow | Allow if assigned | Allow | Allow |
+| Report content | Deny | Allow | Allow | Allow | Allow | Allow | Allow |
+| Review reports | Deny | Deny | Deny | Deny | Deny | Allow | Allow |
 | Change moderation state | Deny | Deny | Deny | Deny | Deny | Allow | Allow |
 | Change roles | Deny | Deny | Deny | Deny | Deny | Deny | Allow |
 | Export data | Deny | Own data only | Own data only | Own data only | Deny | Deny | Allow |
@@ -136,6 +138,16 @@ readable and is reversible, so whoever owns or maintains it may retire it.
 Taking content *out of view* stays `Change moderation state`, which only
 moderators and admins hold. M3 wires this to the `published ↔ archived`
 transitions for both discussions and archive entries.
+
+`Report content` needs only a session. The person best placed to notice a
+privacy leak is usually the person it exposes, who holds no special role.
+
+`Review reports` is the one action whose `Deny` cells are load-bearing. Because
+columns combine as a **union of grants**, `Author` and `Maintainer` are `Deny`
+here deliberately and not incidentally: a report may be *about* the author, so
+the accused must never be the one who closes the case. Any future change that
+adds a column granting this action has to explain why the accused reviewing
+themselves is acceptable.
 
 Each future endpoint must define the action it checks and the resource context
 needed for the decision.
@@ -173,6 +185,11 @@ The moderation state machine, shared by archive entries and discussions:
 | From | To | Who |
 | --- | --- | --- |
 | `draft` | `published` | Author (own draft), moderator, admin |
+| `draft` | `pending_review` | Author, submitting instead of publishing |
+| `published` | `pending_review` | A report re-opening review |
+| `pending_review` | `published` | Moderator, admin |
+| `pending_review` | `rejected` | Moderator, admin |
+| `pending_review` | `draft` | Moderator, admin, returning it to the author |
 | `draft` | `rejected` | Moderator, admin |
 | `published` | `hidden` | Moderator, admin |
 | `hidden` | `published` | Moderator, admin |
@@ -187,6 +204,21 @@ publish does not silently write a revision.
 Permission is checked before legality. An unauthorized caller gets `403` and
 learns nothing about which transitions exist; only a caller who *could* have
 made the transition is told it is illegal with `409`.
+
+### Review Is Opt-In, Not Mandatory
+
+`pending_review` has exactly two entrances: an author choosing to submit a
+draft instead of publishing it, and a report moving published content back for
+a decision. Direct author publishing is unchanged.
+
+Making every publish require review would reverse a rule M2 and M3 already
+established and pinned with tests, and would turn a campus wiki into a
+moderated-first forum. That is a product decision, not a milestone detail.
+
+Content under review is **not** publicly readable and accepts no replies, and
+it cannot be archived or hidden directly — doing either would settle the open
+question by side effect instead of by a decision. A moderator publishes,
+rejects, or returns it to draft.
 
 ### Archived Is Readable
 

@@ -134,6 +134,7 @@ impl ArchiveService {
                 applicable_audience: input.applicable_audience,
                 source_kind: input.source_kind,
                 source_reference: source_reference(input.source_reference)?,
+                ai_provider: None,
                 created_at: now,
             })
             .await

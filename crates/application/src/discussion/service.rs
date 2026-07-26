@@ -382,6 +382,7 @@ impl DiscussionService {
                 // truth about where this came from.
                 source_kind: SourceKind::Discussion,
                 source_reference: None,
+                ai_provider: None,
                 created_at: now,
             })
             .await?;
@@ -500,7 +501,10 @@ impl DiscussionService {
 /// else's content are three different privileges, so they check three actions.
 pub(crate) fn action_for_transition(from: ModerationStatus, to: ModerationStatus) -> Action {
     match (from, to) {
-        (ModerationStatus::Draft, ModerationStatus::Published) => Action::PublishArchiveEntry,
+        // Submitting one's own draft for review asks for less than publishing
+        // it does, so it carries the same authority.
+        (ModerationStatus::Draft, ModerationStatus::Published)
+        | (ModerationStatus::Draft, ModerationStatus::PendingReview) => Action::PublishArchiveEntry,
         (ModerationStatus::Published, ModerationStatus::Archived)
         | (ModerationStatus::Archived, ModerationStatus::Published) => Action::ArchiveContent,
         _ => Action::ChangeModerationState,

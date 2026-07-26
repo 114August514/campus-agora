@@ -15,6 +15,7 @@ export const ROUTES = {
   discussionList: "/discussions",
   discussionNew: "/discussions/new",
   discussionDetail: "/discussions/:id",
+  moderationQueue: "/moderation",
   designSystem: "/design-system",
 } as const;
 

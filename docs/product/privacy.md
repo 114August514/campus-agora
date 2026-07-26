@@ -19,6 +19,8 @@ before real identity integration, attachments, or AI assistance are added.
 | Archive source references | Free-form provenance for an entry, which may contain third-party URLs | PostgreSQL | Readers based on visibility |
 | Discussion-to-archive links | Structured provenance: which discussion or reply an entry was drawn from, and who wrote the quoted text | PostgreSQL | Readers who can see both ends of the link |
 | Corrections | Reports that an entry is out of date or wrong, with the reporter's identity | PostgreSQL | Entry author, maintainers, moderators, admins |
+| Abuse reports | Reports that content breaks the rules, with the reporter's identity, category, and free text | PostgreSQL | Moderators and admins only |
+| AI provenance | Which drafting provider composed an entry, if any | PostgreSQL | Anyone who can read the entry |
 | Moderation state | Review status and safety decisions | PostgreSQL | Moderators, admins |
 | Audit events | Accountability for high-risk actions | PostgreSQL | Admins, security reviewers |
 | Request logs | Debugging and abuse response | Log backend | Operators |
@@ -60,6 +62,28 @@ republish content that was deliberately not public. Both directions of the link
 are filtered by the reader's own visibility: a source pointing at a discussion
 they cannot see is omitted rather than exposing its title, and an entry still in
 draft is not listed on the discussion it came from.
+
+### A Report Is Not A Correction
+
+A correction says an entry is out of date and is resolved by the people who
+maintain it. A report says content breaks the rules — and may be *about* those
+same people. Reporter identities on abuse reports are therefore visible to
+moderators and admins only, and explicitly **not** to the content's author,
+who is the person a report may accuse. The permission matrix enforces this with
+`Deny` in the `Author` and `Maintainer` columns.
+
+Filing a report changes nothing the campus can see. Content stays where it is
+and enters a queue; only an explicit moderation decision changes its status.
+The alternative would hand every authenticated user a takedown control and, by
+hiding the content, prevent anyone else from corroborating or disputing it.
+
+### AI Output Carries Its Provenance
+
+An entry composed by a drafting provider records which provider produced it,
+and every discussion or reply it drew from is recorded in the same source links
+hand-promoted entries use. Hand-written entries leave the provider empty, which
+is what makes the marker meaningful. No text is sent to any third party — see
+`docs/operations/security.md`.
 
 ## Retention
 

@@ -35,6 +35,9 @@ pub enum ModerationStatus {
     Rejected,
     /// Retired but preserved: no longer inviting activity, still readable.
     Archived,
+    /// Awaiting a moderator's decision. Reached by an author submitting a
+    /// draft, or by a report re-opening published content.
+    PendingReview,
 }
 
 impl ModerationStatus {
@@ -42,12 +45,13 @@ impl ModerationStatus {
     /// SQL visibility predicate — can derive it instead of restating it.
     /// `tests/discussion.rs` fails to compile if a variant is added without
     /// being listed here.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Draft,
         Self::Published,
         Self::Hidden,
         Self::Rejected,
         Self::Archived,
+        Self::PendingReview,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -57,6 +61,7 @@ impl ModerationStatus {
             Self::Hidden => "hidden",
             Self::Rejected => "rejected",
             Self::Archived => "archived",
+            Self::PendingReview => "pending_review",
         }
     }
 
@@ -67,6 +72,7 @@ impl ModerationStatus {
             "hidden" => Some(Self::Hidden),
             "rejected" => Some(Self::Rejected),
             "archived" => Some(Self::Archived),
+            "pending_review" => Some(Self::PendingReview),
             _ => None,
         }
     }
@@ -107,6 +113,15 @@ pub fn can_transition(from: ModerationStatus, to: ModerationStatus) -> bool {
             | (Archived, Published)
             // Archiving must not put content beyond moderation reach.
             | (Archived, Hidden)
+            // An author may ask for review instead of publishing directly, and
+            // a report re-opens review on content already live.
+            | (Draft, PendingReview)
+            | (Published, PendingReview)
+            // A reviewer decides. Archiving or hiding content still under
+            // review would settle the question by side effect.
+            | (PendingReview, Published)
+            | (PendingReview, Rejected)
+            | (PendingReview, Draft)
     )
 }
 

@@ -4,6 +4,11 @@ export interface AcceptAnswerRequest {
   commentId?: string | null;
 }
 
+export interface AiDraft {
+  entry: KnowledgeEntry;
+  sources: ArchiveSource[];
+}
+
 export interface ApiErrorResponse {
   code: string;
   details?: Record<string, unknown>;
@@ -51,6 +56,22 @@ export interface ChangeStatusRequest {
   status: ModerationStatus;
 }
 
+export interface ContentReport {
+  category: ReportCategory;
+  createdAt: string;
+  id: string;
+  message: string;
+  postId: string;
+  reporterId: string;
+  resolution?: string | null;
+  resolvedAt?: string | null;
+  resolvedBy?: string | null;
+}
+
+export interface ContentReportCollection {
+  items: ContentReport[];
+}
+
 export interface Correction {
   createdAt: string;
   id: string;
@@ -80,6 +101,12 @@ export interface CreateKnowledgeEntryRequest {
   summary?: string;
   tags?: string[];
   title: string;
+}
+
+export interface CreateReportRequest {
+  category: ReportCategory;
+  message: string;
+  postId: string;
 }
 
 export interface CurrentUser {
@@ -131,6 +158,7 @@ export interface FileCorrectionRequest {
 }
 
 export interface KnowledgeEntry {
+  aiProvider?: string | null;
   applicableAudience: ApplicableAudience;
   authorId: string;
   body: string;
@@ -163,12 +191,24 @@ export interface MockLoginRequest {
   persona: "student" | "organization_member" | "moderator" | "admin";
 }
 
+export interface ModerationQueueItem {
+  authorId: string;
+  moderationStatus: ModerationStatus;
+  openReportCount: number;
+  postId: string;
+  postKind: "knowledge" | "discussion";
+  queuedAt: string;
+  risk: RiskLevel;
+  title: string;
+}
+
 export type ModerationStatus =
   | "draft"
   | "published"
   | "hidden"
   | "rejected"
-  | "archived";
+  | "archived"
+  | "pending_review";
 
 export interface OrganizationMembership {
   name: string;
@@ -186,6 +226,14 @@ export interface PaginatedDiscussions {
 
 export interface PaginatedKnowledgeEntries {
   items: KnowledgeEntry[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+export interface PaginatedModerationQueue {
+  items: ModerationQueueItem[];
   page: number;
   pageSize: number;
   totalItems: number;
@@ -220,6 +268,20 @@ export interface ReplyRequest {
   body: string;
 }
 
+export type ReportCategory =
+  | "spam"
+  | "harassment"
+  | "privacy_violation"
+  | "misinformation"
+  | "illegal"
+  | "other";
+
+export type ReportResolution = "upheld" | "dismissed";
+
+export interface ResolveReportRequest {
+  resolution: ReportResolution;
+}
+
 export interface Revision {
   body: string;
   createdAt: string;
@@ -234,6 +296,8 @@ export interface Revision {
 export interface RevisionCollection {
   items: Revision[];
 }
+
+export type RiskLevel = "none" | "low" | "medium" | "high";
 
 export interface SessionResponse {
   expiresAt: string;

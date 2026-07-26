@@ -19,6 +19,7 @@ import {
   allowedTransitions,
 } from "../features/archive/labels";
 import type { SessionController } from "../features/auth/useSession";
+import { ReportPanel } from "../features/moderation/ui/ReportPanel";
 import { formatDateTime } from "../lib/format";
 
 export function ArchiveDetailPage({ session }: { session: SessionController }) {
@@ -80,6 +81,12 @@ export function ArchiveDetailPage({ session }: { session: SessionController }) {
           <div className="entryHead">
             <h1>{entry.title}</h1>
             <Badge status={entry.moderationStatus} />
+            {/* Where it is read, not only where it is edited: a reader
+                deciding whether to trust campus information needs to know the
+                text was composed, at a glance. */}
+            {entry.aiProvider && (
+              <span className="badge badge-info">AI 起草 · 待人工复核</span>
+            )}
           </div>
           <p className="entryMeta">
             {CATEGORY_LABELS[entry.category]} ·{" "}
@@ -173,6 +180,15 @@ export function ArchiveDetailPage({ session }: { session: SessionController }) {
             </Card>
           ))}
         </ul>
+      </section>
+
+      <section className="detailSection">
+        <h2>举报违规</h2>
+        <p className="entryMeta">
+          举报用于内容违反规则的情况（如隐私泄露、人身攻击）。如果只是内容过期或有误，
+          请使用下方的纠错。提交举报不会立刻下架内容。
+        </p>
+        <ReportPanel postId={entry.id} canReport={viewer !== undefined} />
       </section>
 
       <section className="detailSection">

@@ -87,6 +87,11 @@ pub struct KnowledgeEntryDto {
     pub source_reference: Option<String>,
     pub moderation_status: &'static str,
     pub current_revision: i32,
+    /// Which drafting provider composed this entry, or absent when a person
+    /// wrote it. A reader has to be able to tell composed text from written
+    /// text, and the marker only means something because hand-written entries
+    /// leave it empty.
+    pub ai_provider: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -106,6 +111,7 @@ impl From<ArchiveEntryRecord> for KnowledgeEntryDto {
             source_reference: entry.source_reference,
             moderation_status: entry.moderation_status.as_str(),
             current_revision: entry.current_revision,
+            ai_provider: entry.ai_provider,
             created_at: timestamp(entry.created_at),
             updated_at: timestamp(entry.updated_at),
         }

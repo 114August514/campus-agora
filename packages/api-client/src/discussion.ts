@@ -127,10 +127,7 @@ export function listDiscussionDerivedEntries(
   options: RequestOptions,
   id: string,
 ): Promise<DerivedEntryCollection> {
-  return requestJson<DerivedEntryCollection>(
-    options,
-    `${BASE}/${id}/derived-entries`,
-  );
+  return requestJson<DerivedEntryCollection>(options, `${BASE}/${id}/derived-entries`);
 }
 
 export function listKnowledgeEntrySources(

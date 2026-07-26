@@ -37,6 +37,37 @@ define limits for:
 
 Rate limits do not replace permission checks.
 
+## AI Drafting Boundary
+
+M4 adds AI-assisted archive drafting and contacts **no external provider**. The
+drafting port receives text and returns text plus the ids of the sources it
+drew from; it is given no repository, no service, and no user, so it has no
+path by which it could write, publish, or read anything it was not handed. The
+shipped implementation composes a draft in process with no network call.
+
+Before any third-party provider is introduced, this document and
+`docs/product/privacy.md` must first record:
+
+- Exactly which fields leave the system, and whose content they contain.
+- Whether the provider retains or trains on what it receives.
+- The legal basis and the campus disclosure that covers it.
+- What happens to a draft when the provider is unavailable or returns an error.
+- How a reviewer can still tell composed text from written text.
+
+`AI_ARCHIVE_ENABLED` defaults to false, so the capability cannot appear in an
+environment nobody configured for it.
+
+## Moderation Audit Coverage
+
+Every moderation action writes an audit event: filing a report, resolving one,
+and each content status transition. A resolution records who closed it, and the
+database enforces that a closed report can never be missing the person
+accountable for closing it.
+
+Reporting is deliberately not a status change, so there is exactly one path by
+which what the campus sees can change, and it is always a deliberate act with
+its own event.
+
 ## Upload And Download Safety
 
 Attachments are out of scope for M0.2. Before implementation, define:

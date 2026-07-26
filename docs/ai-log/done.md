@@ -17,6 +17,118 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-27 - Resolve M4 review findings
+
+- Result: Five independent lenses produced 27 findings; 19 were refuted by an
+  adversarial pass and 8 survived, merging into three defects. All are fixed.
+  M4 stays 评审中.
+- Changed:
+  - **The moderation queue was not risk-ordered on PostgreSQL.** `queue()`
+    applied `order by queued_at limit/offset` in SQL and sorted by risk only
+    within the returned page, so the risk ordering was a per-page permutation.
+    With a page of noise already queued, a genuine high-risk report landed on
+    page 2 — reachable by anyone, needing no privileged access. The risk band
+    is now derived in the subquery and ordered before `limit/offset`, with a
+    total order so pagination partitions rather than samples.
+  - **The mock's transition table omitted every `pending_review` pair**, so
+    M4's only entrance into review returned 400 in the one backend `apps/web`
+    tests see, while the server returned 200. The two hand-transcribed copies
+    of the author's permissions are now one function.
+  - **AI drafting skipped the domain text validators.** A composition from a
+    busy thread could exceed `BODY_MAX_CHARS` by an order of magnitude and be
+    stored, and the editor the user is sent to re-validates on save — so the
+    flow delivered them to an editor that could not save. The provider now
+    stops at the bound and reports only the sources that actually made it in;
+    the service validates regardless.
+- Verification: full gate set with a disposable PostgreSQL 16 container. Rust
+  219, apps/web 80, api-client 73. The queue defect was reproduced against a
+  real database before it was fixed, and the new test was mutation-checked by
+  restoring the old `order by`.
+- Decisions:
+  - Truncating the composition rather than refusing it. Refusing would make
+    drafting fail on exactly the busy threads most worth archiving. Truncation
+    is only honest if `used_sources` shrinks with it, so it does.
+  - Ordering in SQL while keeping `risk_for` as the returned value, so
+    `risk_rank` is a sort key and not a second definition of risk.
+  - The recurring defect class moved rather than ended. M3's review forced the
+    content bounds into a shared table; M4's new handlers used it correctly and
+    the divergence appeared in the *state machine*, which had no shared source.
+    Consolidating the mock's two copies addresses this instance; the class is
+    still that the mock re-implements domain rules by hand.
+- Follow-up: none new.
+
+### 2026-07-27 - Deliver M4.2 moderation frontend
+
+- Result: The governance loop is operable. M4's three exit criteria are met;
+  the milestone is 评审中 because the claim should follow review.
+- Changed:
+  - The shell reads `/api/v1/meta` once and filters navigation by capability as
+    well as role. Two entries that pointed at the home page — 归档助手 and 审核
+    — became real, and the assistant appears only when the server has it.
+  - `/moderation`: a queue ordered worst-first, with per-item report review and
+    resolve actions in place.
+  - A report control on both detail pages, with copy saying a report does not
+    take content down.
+  - The AI draft action on a discussion, gated by the capability, and an
+    "AI 起草 · 待人工复核" marker next to an entry's status badge.
+- Verification: full gate set with a disposable PostgreSQL 16 container. Rust
+  217, apps/web 80, api-client 68.
+- Decisions:
+  - Capability defaults are the *off* state, including while meta is in flight
+    and if it fails. A control for a capability the server may not have is
+    worse than one that arrives a moment late, because the first thing the user
+    does with it fails.
+  - A non-moderator opening the queue is told they cannot review, rather than
+    shown an empty list — an empty list makes the different and wrong claim
+    that there is nothing to review.
+  - The composed-text marker lives next to the status badge, where a reader
+    deciding whether to trust campus information sees it, not only in the
+    editor.
+  - Resolving a report is a finding. The queue says so in as many words, so a
+    reviewer does not expect it to change what the campus sees.
+- Follow-up: two page-level assertions could not be written because the shell's
+  capability hook reads meta through a statically imported client; both rules
+  are covered at the client level and the plan records which.
+
+### 2026-07-27 - Deliver M4.1 moderation and AI drafting backend
+
+- Result: Abuse reports, a moderation queue, audit coverage, and an AI drafting
+  interface whose output is source-backed, editable, and structurally unable to
+  publish itself. M4 stays 进行中 — M4.2 is the frontend.
+- Changed:
+  - Domain: `ModerationStatus::PendingReview` and its transitions,
+    `ReportCategory`, `RiskLevel`, `risk_for`, report-message validation, and
+    the `ReportContent` / `ReviewReports` actions.
+  - Application: `ModerationService` over a post lookup that spans both content
+    kinds; `ArchiveDraftProvider` with `DeterministicDraftProvider` and
+    `AiDraftService`.
+  - Database: `content_reports` with a partial unique index over open reports,
+    two CHECKs pairing a resolution with its resolver, `posts.ai_provider`, and
+    the widened status constraint.
+  - API: `POST /api/v1/reports`, the `/api/v1/moderation/*` namespace, and
+    `POST /api/v1/discussions/{id}/ai-draft`, with an `openapi_m4` fragment.
+  - Client and mock: `moderation.ts`, and mock routes that go through the
+    shared `LIMITS`/`boundedText` helpers rather than validating by hand.
+- Verification: full gate set with a disposable PostgreSQL 16 container. Rust
+  219, apps/web 65, api-client 68. The migration was applied to a real database
+  and its constraint and indexes inspected before the repositories were written.
+- Decisions:
+  - **Reporting changes no status.** The plan said otherwise; writing the test
+    exposed that it would hand every authenticated user a takedown control, and
+    that hiding the content would stop anyone else corroborating or disputing
+    it. There is now exactly one path by which what the campus sees changes.
+  - Review is opt-in. Making every publish require review would reverse a rule
+    M2 and M3 pinned with tests and change what the product is.
+  - `ReviewReports` is `Deny` for `Author` and `Maintainer` deliberately.
+    Columns combine as a union of grants, so those cells are what stop the
+    accused closing the case about themselves.
+  - The drafting port receives text and returns text. It holds no repository,
+    so the exit criterion is met by there being no publish path to review.
+  - The provider is deterministic: a draft that changed on every request would
+    make human review harder, not easier.
+- Follow-up: M4.2 frontend — the queue UI, the report flow, and the AI-draft
+  review surface.
+
 ### 2026-07-27 - Resolve M3 review findings
 
 - Result: Five independent review lenses over the M3 diff produced 25 findings;

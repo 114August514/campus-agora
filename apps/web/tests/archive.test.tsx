@@ -194,6 +194,7 @@ describe("design system page", () => {
 
     for (const heading of [
       "按钮",
+      "风险标签",
       "表单",
       "状态标签",
       "卡片",

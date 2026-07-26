@@ -876,9 +876,7 @@ describe("discussion client and the loop into the archive", () => {
     expect(promoted.source.sourceAuthorId).toBe(reply.authorId);
     expect(promoted.source.sourcePostId).toBe(discussion.id);
 
-    const sources = await curator.client.listKnowledgeEntrySources(
-      promoted.entry.id,
-    );
+    const sources = await curator.client.listKnowledgeEntrySources(promoted.entry.id);
     expect(sources.items[0]?.sourceTitle).toBe("场地申请流程");
   });
 
@@ -895,10 +893,7 @@ describe("discussion client and the loop into the archive", () => {
       (await curator.client.listDiscussionDerivedEntries(discussion.id)).items,
     ).toHaveLength(1);
 
-    await curator.client.changeKnowledgeEntryStatus(
-      promoted.entry.id,
-      "published",
-    );
+    await curator.client.changeKnowledgeEntryStatus(promoted.entry.id, "published");
 
     expect(
       (await guest.listDiscussionDerivedEntries(discussion.id)).items,
@@ -955,18 +950,15 @@ describe("discussion mock matches the server's rules", () => {
     await expect(
       guest.replyToDiscussion(discussion.id, "我也想知道"),
     ).rejects.toMatchObject({ status: 401 });
-    await expect(
-      guest.promoteDiscussion(discussion.id, {}),
-    ).rejects.toMatchObject({ status: 401 });
+    await expect(guest.promoteDiscussion(discussion.id, {})).rejects.toMatchObject({
+      status: 401,
+    });
   });
 
   test("an archived discussion stays readable but takes no replies", async () => {
     const { client, guest, discussion } = await harness();
 
-    const archived = await client.changeDiscussionStatus(
-      discussion.id,
-      "archived",
-    );
+    const archived = await client.changeDiscussionStatus(discussion.id, "archived");
     expect(archived.moderationStatus).toBe("archived");
 
     // Readable by a guest, because an entry links back to it.
@@ -1033,9 +1025,9 @@ describe("discussion mock matches the server's rules", () => {
   test("reply bodies are validated the way the server validates them", async () => {
     const { client, discussion } = await harness();
 
-    await expect(
-      client.replyToDiscussion(discussion.id, "   "),
-    ).rejects.toMatchObject({ status: 422 });
+    await expect(client.replyToDiscussion(discussion.id, "   ")).rejects.toMatchObject({
+      status: 422,
+    });
     await expect(
       client.replyToDiscussion(discussion.id, "x".repeat(5001)),
     ).rejects.toMatchObject({ status: 422 });
@@ -1055,9 +1047,9 @@ describe("discussion mock matches the server's rules", () => {
     await expect(guest.listDiscussionReplies(draft.id)).rejects.toMatchObject({
       status: 404,
     });
-    await expect(
-      guest.listDiscussionDerivedEntries(draft.id),
-    ).rejects.toMatchObject({ status: 404 });
+    await expect(guest.listDiscussionDerivedEntries(draft.id)).rejects.toMatchObject({
+      status: 404,
+    });
   });
 });
 
@@ -1102,7 +1094,11 @@ describe("mock enforces the server's content bounds", () => {
     const client = await authed();
 
     await expect(
-      client.createDiscussion({ title: "长标签", body: "正文", tags: ["x".repeat(33)] }),
+      client.createDiscussion({
+        title: "长标签",
+        body: "正文",
+        tags: ["x".repeat(33)],
+      }),
     ).rejects.toMatchObject({ status: 422 });
   });
 
@@ -1157,9 +1153,9 @@ describe("mock enforces the server's content bounds", () => {
   test("an over-long search term is rejected on both list endpoints", async () => {
     const client = await authed();
 
-    await expect(
-      client.listDiscussions({ q: "z".repeat(101) }),
-    ).rejects.toMatchObject({ status: 422 });
+    await expect(client.listDiscussions({ q: "z".repeat(101) })).rejects.toMatchObject({
+      status: 422,
+    });
     await expect(
       client.listKnowledgeEntries({ q: "z".repeat(101) }),
     ).rejects.toMatchObject({ status: 422 });
@@ -1181,5 +1177,322 @@ describe("mock enforces the server's content bounds", () => {
     await expect(
       client.createKnowledgeEntry({ ...base, body: "正文", summary: "s".repeat(501) }),
     ).rejects.toMatchObject({ status: 422 });
+  });
+});
+
+/**
+ * The mock is the only backend `apps/web` tests ever see. Three milestones in
+ * a row shipped a rule the server enforced and the mock did not, so every M4
+ * rule is asserted against the mock here.
+ */
+describe("moderation and AI drafting in the mock", () => {
+  async function signedIn(persona: "student" | "moderator" | "organization_member") {
+    const fetchImpl = createCampusAgoraMockFetch();
+    return withFetch(fetchImpl, persona);
+  }
+
+  async function withFetch(
+    fetchImpl: typeof fetch,
+    persona: "student" | "moderator" | "organization_member",
+  ) {
+    const holder: { token?: string } = {};
+    const client = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder.token,
+    });
+    holder.token = (await client.mockLogin(persona)).token;
+    return { client, fetchImpl };
+  }
+
+  async function publishedDiscussion(
+    client: CampusAgoraApiClient,
+    title = "会被举报的讨论",
+  ) {
+    const created = await client.createDiscussion({ title, body: "正文", tags: [] });
+    await client.changeDiscussionStatus(created.id, "published");
+    await client.replyToDiscussion(created.id, "一条有用的回复。");
+    return created.id;
+  }
+
+  test("a guest cannot report", async () => {
+    const fetchImpl = createCampusAgoraMockFetch();
+    const { client } = await withFetch(fetchImpl, "student");
+    const id = await publishedDiscussion(client);
+    const guest = createCampusAgoraApiClient({ baseUrl: "http://api.test", fetchImpl });
+
+    await expect(
+      guest.createReport({ postId: id, category: "spam", message: "广告" }),
+    ).rejects.toMatchObject({ status: 401 });
+  });
+
+  test("reporting does not take the content down", async () => {
+    const { client } = await signedIn("student");
+    const id = await publishedDiscussion(client);
+
+    await client.createReport({
+      postId: id,
+      category: "privacy_violation",
+      message: "泄露了手机号",
+    });
+
+    // The whole point: a report queues content, it does not hide it.
+    await expect(client.getDiscussion(id)).resolves.toMatchObject({
+      moderationStatus: "published",
+    });
+  });
+
+  test("a duplicate open report is refused but a second reporter is not", async () => {
+    const fetchImpl = createCampusAgoraMockFetch();
+    const first = await withFetch(fetchImpl, "student");
+    const id = await publishedDiscussion(first.client);
+
+    await first.client.createReport({ postId: id, category: "spam", message: "广告" });
+    await expect(
+      first.client.createReport({ postId: id, category: "illegal", message: "再来" }),
+    ).rejects.toMatchObject({ status: 409 });
+
+    const second = await withFetch(fetchImpl, "organization_member");
+    await expect(
+      second.client.createReport({
+        postId: id,
+        category: "illegal",
+        message: "我也看到了",
+      }),
+    ).resolves.toMatchObject({ postId: id });
+  });
+
+  test("the queue and the reports on an item are moderator-only", async () => {
+    const fetchImpl = createCampusAgoraMockFetch();
+    const author = await withFetch(fetchImpl, "student");
+    const id = await publishedDiscussion(author.client);
+    await author.client.createReport({
+      postId: id,
+      category: "illegal",
+      message: "违法",
+    });
+
+    // Not even the content's own author, who a report may be about.
+    await expect(author.client.listModerationQueue()).rejects.toMatchObject({
+      status: 403,
+    });
+    await expect(author.client.listContentReports(id)).rejects.toMatchObject({
+      status: 403,
+    });
+
+    const moderator = await withFetch(fetchImpl, "moderator");
+    const queue = await moderator.client.listModerationQueue();
+    const item = queue.items.find((entry) => entry.postId === id);
+
+    expect(item?.risk).toBe("high");
+    expect(item?.openReportCount).toBe(1);
+    expect(item?.moderationStatus).toBe("published");
+  });
+
+  test("a report cannot be resolved through an unrelated item", async () => {
+    const fetchImpl = createCampusAgoraMockFetch();
+    const author = await withFetch(fetchImpl, "student");
+    const reported = await publishedDiscussion(author.client, "被举报的");
+    const unrelated = await publishedDiscussion(author.client, "无关的");
+    const report = await author.client.createReport({
+      postId: reported,
+      category: "spam",
+      message: "广告",
+    });
+
+    const moderator = await withFetch(fetchImpl, "moderator");
+    await expect(
+      moderator.client.resolveContentReport(unrelated, report.id, "dismissed"),
+    ).rejects.toMatchObject({ status: 404 });
+
+    await expect(
+      moderator.client.resolveContentReport(reported, report.id, "dismissed"),
+    ).resolves.toMatchObject({ resolution: "dismissed" });
+  });
+
+  test("a report message is bounded the way the server bounds it", async () => {
+    const { client } = await signedIn("student");
+    const id = await publishedDiscussion(client);
+
+    await expect(
+      client.createReport({ postId: id, category: "spam", message: "   " }),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(
+      client.createReport({ postId: id, category: "spam", message: "x".repeat(1001) }),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+
+  test("AI drafting is refused unless the capability is on", async () => {
+    const { client } = await signedIn("student");
+    const id = await publishedDiscussion(client);
+
+    await expect(client.generateAiDraft(id)).rejects.toMatchObject({ status: 403 });
+  });
+
+  test("an AI draft is a draft with recorded sources and never a published entry", async () => {
+    const fetchImpl = createCampusAgoraMockFetch({ aiArchiveEnabled: true });
+    const { client } = await withFetch(fetchImpl, "student");
+    const id = await publishedDiscussion(client, "场地申请流程");
+
+    const drafted = await client.generateAiDraft(id);
+
+    expect(drafted.entry.moderationStatus).toBe("draft");
+    expect(drafted.entry.aiProvider).toBe("deterministic-v1");
+    expect(drafted.entry.sourceKind).toBe("discussion");
+    // The opening post plus the reply, each with its own author.
+    expect(drafted.sources).toHaveLength(2);
+    expect(drafted.sources.every((source) => source.sourcePostId === id)).toBe(true);
+    expect(drafted.sources.every((source) => source.sourceAuthorName.length > 0)).toBe(
+      true,
+    );
+  });
+
+  test("only a publicly readable discussion can be drafted from", async () => {
+    const fetchImpl = createCampusAgoraMockFetch({ aiArchiveEnabled: true });
+    const { client } = await withFetch(fetchImpl, "student");
+    const draft = await client.createDiscussion({
+      title: "私密草稿",
+      body: "正文",
+      tags: [],
+    });
+
+    await expect(client.generateAiDraft(draft.id)).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+});
+
+/**
+ * `pending_review` is M4's headline state and, after "reporting changes
+ * nothing" was adopted, an author submitting their own draft is its *only*
+ * entrance. The mock is the only backend `apps/web` tests ever see, so a
+ * transition table that omits it leaves the whole path untested and renders a
+ * button that 400s in development.
+ */
+describe("the mock's state machine matches the domain's", () => {
+  async function authed(persona: "student" | "moderator" = "student") {
+    const fetchImpl = createCampusAgoraMockFetch();
+    const holder: { token?: string } = {};
+    const client = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder.token,
+    });
+    holder.token = (await client.mockLogin(persona)).token;
+    return { client, fetchImpl };
+  }
+
+  test("an author can submit their own draft entry for review", async () => {
+    const { client } = await authed();
+    const entry = await client.createKnowledgeEntry({
+      title: "拿不准的资料",
+      body: "正文",
+      tags: [],
+      category: "other",
+      applicableAudience: "all_students",
+      sourceKind: "unspecified",
+    });
+
+    const submitted = await client.changeKnowledgeEntryStatus(
+      entry.id,
+      "pending_review",
+    );
+    expect(submitted.moderationStatus).toBe("pending_review");
+  });
+
+  test("an author can submit their own draft discussion for review", async () => {
+    const { client } = await authed();
+    const created = await client.createDiscussion({
+      title: "拿不准的讨论",
+      body: "正文",
+      tags: [],
+    });
+
+    const submitted = await client.changeDiscussionStatus(created.id, "pending_review");
+    expect(submitted.moderationStatus).toBe("pending_review");
+  });
+
+  test("submitted content reaches the queue with no report behind it", async () => {
+    const fetchImpl = createCampusAgoraMockFetch();
+    const holder: { token?: string } = {};
+    const author = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder.token,
+    });
+    holder.token = (await author.mockLogin("student")).token;
+
+    const created = await author.createDiscussion({
+      title: "等待复核",
+      body: "正文",
+      tags: [],
+    });
+    await author.changeDiscussionStatus(created.id, "pending_review");
+
+    const holder2: { token?: string } = {};
+    const moderator = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder2.token,
+    });
+    holder2.token = (await moderator.mockLogin("moderator")).token;
+
+    const queue = await moderator.listModerationQueue();
+    const item = queue.items.find((entry) => entry.postId === created.id);
+
+    expect(item?.openReportCount).toBe(0);
+    expect(item?.risk).toBe("none");
+    expect(item?.moderationStatus).toBe("pending_review");
+  });
+
+  test("only a moderator decides what happens to content under review", async () => {
+    const fetchImpl = createCampusAgoraMockFetch();
+    const holder: { token?: string } = {};
+    const author = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder.token,
+    });
+    holder.token = (await author.mockLogin("student")).token;
+
+    const created = await author.createDiscussion({
+      title: "复核中",
+      body: "正文",
+      tags: [],
+    });
+    await author.changeDiscussionStatus(created.id, "pending_review");
+
+    // The author submitted it; they do not get to approve it.
+    await expect(
+      author.changeDiscussionStatus(created.id, "published"),
+    ).rejects.toMatchObject({ status: 403 });
+
+    const holder2: { token?: string } = {};
+    const moderator = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder2.token,
+    });
+    holder2.token = (await moderator.mockLogin("moderator")).token;
+
+    await expect(
+      moderator.changeDiscussionStatus(created.id, "published"),
+    ).resolves.toMatchObject({ moderationStatus: "published" });
+  });
+
+  test("content under review cannot be archived or hidden directly", async () => {
+    const { client } = await authed("moderator");
+    const created = await client.createDiscussion({
+      title: "不能跳过复核",
+      body: "正文",
+      tags: [],
+    });
+    await client.changeDiscussionStatus(created.id, "pending_review");
+
+    for (const target of ["archived", "hidden"] as const) {
+      await expect(
+        client.changeDiscussionStatus(created.id, target),
+      ).rejects.toMatchObject({ status: 409 });
+    }
   });
 });

@@ -26,12 +26,16 @@ import {
 } from "./discussion";
 import type { ListDiscussionsParams } from "./discussion";
 import type {
+  AiDraft,
   ArchiveSourceCollection,
   CapabilityFlags,
+  ContentReport,
+  ContentReportCollection,
   Correction,
   CorrectionCollection,
   CreateDiscussionRequest,
   CreateKnowledgeEntryRequest,
+  CreateReportRequest,
   DerivedEntryCollection,
   Discussion,
   DiscussionReply,
@@ -43,13 +47,23 @@ import type {
   ModerationStatus,
   PaginatedDiscussions,
   PaginatedKnowledgeEntries,
+  PaginatedModerationQueue,
   PromoteRequest,
   Promotion,
   ReadinessResponse,
+  ReportResolution,
   RevisionCollection,
   SessionResponse,
   UpdateKnowledgeEntryRequest,
 } from "./generated";
+import {
+  createReport,
+  generateAiDraft,
+  listContentReports,
+  listModerationQueue,
+  resolveContentReport,
+} from "./moderation";
+import type { ModerationQueueParams } from "./moderation";
 import { requestJson } from "./request";
 
 export interface CampusAgoraApiClientOptions {
@@ -98,6 +112,18 @@ export interface CampusAgoraApiClient {
   acceptDiscussionAnswer(id: string, commentId: string | null): Promise<Discussion>;
   promoteDiscussion(id: string, body: PromoteRequest): Promise<Promotion>;
   listDiscussionDerivedEntries(id: string): Promise<DerivedEntryCollection>;
+  createReport(body: CreateReportRequest): Promise<ContentReport>;
+  listModerationQueue(
+    params?: ModerationQueueParams,
+  ): Promise<PaginatedModerationQueue>;
+  listContentReports(id: string): Promise<ContentReportCollection>;
+  resolveContentReport(
+    id: string,
+    reportId: string,
+    resolution: ReportResolution,
+  ): Promise<ContentReport>;
+  /** Always returns a draft the caller owns; it cannot publish. */
+  generateAiDraft(id: string): Promise<AiDraft>;
 }
 
 export function createCampusAgoraApiClient(
@@ -217,6 +243,26 @@ export function createCampusAgoraApiClient(
 
     listDiscussionDerivedEntries(id) {
       return listDiscussionDerivedEntries(requestOptions, id);
+    },
+
+    createReport(body) {
+      return createReport(requestOptions, body);
+    },
+
+    listModerationQueue(params) {
+      return listModerationQueue(requestOptions, params);
+    },
+
+    listContentReports(id) {
+      return listContentReports(requestOptions, id);
+    },
+
+    resolveContentReport(id, reportId, resolution) {
+      return resolveContentReport(requestOptions, id, reportId, resolution);
+    },
+
+    generateAiDraft(id) {
+      return generateAiDraft(requestOptions, id);
     },
 
     resolveKnowledgeEntryCorrection(id, correctionId) {

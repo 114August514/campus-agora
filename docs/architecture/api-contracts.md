@@ -65,6 +65,13 @@ regenerate the contract and review the diff before committing.
 - `POST /api/v1/discussions/{id}/promotions` is a plural collection because a
   discussion can be promoted more than once; each promotion creates its own
   entry and its own provenance record.
+- `POST /api/v1/reports` carries its target in the body rather than the path.
+  A report applies to content of either kind, and inventing a URL for the union
+  of two resources would say less about what it points at than naming it does.
+- `/api/v1/moderation/*` is a namespace rather than a resource: the queue and
+  the review actions are a workflow over content that lives elsewhere.
+- `POST /api/v1/discussions/{id}/ai-draft` returns a draft and its sources and
+  has no parameter by which publication could be requested.
 - Frontend code imports API types through `@campus-agora/api-client`, not by
   reaching into generated internals.
 

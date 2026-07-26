@@ -19,6 +19,7 @@ describe("route table", () => {
       "/discussions",
       "/discussions/new",
       "/discussions/:id",
+      "/moderation",
       "/design-system",
     ]);
   });

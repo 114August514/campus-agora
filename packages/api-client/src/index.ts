@@ -9,21 +9,26 @@ export type {
 export { createCampusAgoraApiClient } from "./meta";
 export type { ListKnowledgeEntriesParams } from "./archive";
 export type { ListDiscussionsParams } from "./discussion";
+export type { ModerationQueueParams } from "./moderation";
 export type { MockPersona } from "./auth";
 export { createCampusAgoraMockFetch } from "./mock";
 export { CampusAgoraApiError, requestJson } from "./request";
 export type { RequestInitOptions, RequestOptions } from "./request";
 export type {
   AcceptAnswerRequest,
+  AiDraft,
   ApiErrorResponse,
   ApplicableAudience,
   ArchiveCategory,
   ArchiveSource,
   ArchiveSourceCollection,
+  ContentReport,
+  ContentReportCollection,
   Correction,
   CorrectionCollection,
   CreateDiscussionRequest,
   CreateKnowledgeEntryRequest,
+  CreateReportRequest,
   CurrentUser,
   DerivedEntry,
   DerivedEntryCollection,
@@ -35,11 +40,17 @@ export type {
   ModerationStatus,
   MockLoginRequest,
   OrganizationMembership,
+  ModerationQueueItem,
   PaginatedDiscussions,
   PaginatedKnowledgeEntries,
+  PaginatedModerationQueue,
   PromoteRequest,
   Promotion,
   ReplyRequest,
+  ReportCategory,
+  ReportResolution,
+  ResolveReportRequest,
+  RiskLevel,
   ReadinessChecks,
   Revision,
   RevisionCollection,

@@ -6,8 +6,8 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use campus_agora_domain::{
-    CommentId, CorrectionId, ModerationStatus, OrganizationId, PostId, RevisionId, SessionId,
-    UserId,
+    risk_for, CommentId, CorrectionId, ModerationStatus, OrganizationId, PostId, PostKind,
+    ReportCategory, ReportId, RevisionId, SessionId, UserId,
 };
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -21,6 +21,10 @@ use crate::ports::{
     NewArchiveEntry, NewArchiveSource, NewAuditEvent, NewComment, NewCorrection, NewDiscussion,
     NewSession, NewUser, OrganizationRecord, OrganizationRepository, Page, RevisionRecord,
     RevisionWrite, SessionRecord, SessionRepository, UserRecord, UserRepository, VisibilityScope,
+};
+use crate::ports::{
+    ContentReportRecord, ModerationQueueItem, NewContentReport, PostRepository, PostSummary,
+    ReportRepository, ReportResolution,
 };
 
 #[derive(Default)]
@@ -37,6 +41,7 @@ struct StoreState {
     discussions: Vec<DiscussionRecord>,
     comments: Vec<CommentRecord>,
     sources: Vec<ArchiveSourceRecord>,
+    reports: Vec<ContentReportRecord>,
 }
 
 #[derive(Default)]
@@ -277,6 +282,7 @@ impl ArchiveRepository for InMemoryAuthStore {
             source_reference: entry.source_reference.clone(),
             moderation_status: ModerationStatus::Draft,
             current_revision: 1,
+            ai_provider: entry.ai_provider.clone(),
             created_at: entry.created_at,
             updated_at: entry.created_at,
         };
@@ -876,5 +882,313 @@ impl ArchiveSourceRepository for InMemoryAuthStore {
                     })
             })
             .collect())
+    }
+}
+
+/// Whether `scope` may see a post of either kind. The two per-kind helpers
+/// above differ only in the record they take, so this delegates rather than
+/// restating the rule a third time.
+fn scope_can_see_post(
+    scope: VisibilityScope,
+    status: ModerationStatus,
+    author_id: UserId,
+    post_id: PostId,
+    maintainers: &[(PostId, UserId)],
+) -> bool {
+    if status.is_publicly_visible() {
+        return true;
+    }
+
+    match scope {
+        VisibilityScope::Public => false,
+        VisibilityScope::Full => true,
+        VisibilityScope::Owner(user_id) => {
+            author_id == user_id
+                || maintainers
+                    .iter()
+                    .any(|(post, maintainer)| *post == post_id && *maintainer == user_id)
+        }
+    }
+}
+
+#[async_trait]
+impl PostRepository for InMemoryAuthStore {
+    async fn find_visible_post(
+        &self,
+        id: PostId,
+        scope: VisibilityScope,
+    ) -> Result<Option<PostSummary>, ApplicationError> {
+        let state = self.state.lock().expect("store lock");
+
+        let entry = state.entries.iter().find(|entry| entry.id == id).map(|e| {
+            (
+                PostKind::Knowledge,
+                e.author_id,
+                e.title.clone(),
+                e.moderation_status,
+                e.updated_at,
+            )
+        });
+        let discussion = state
+            .discussions
+            .iter()
+            .find(|discussion| discussion.id == id)
+            .map(|d| {
+                (
+                    PostKind::Discussion,
+                    d.author_id,
+                    d.title.clone(),
+                    d.moderation_status,
+                    d.updated_at,
+                )
+            });
+
+        let Some((kind, author_id, title, status, updated_at)) = entry.or(discussion) else {
+            return Ok(None);
+        };
+
+        if !scope_can_see_post(scope, status, author_id, id, &state.maintainers) {
+            return Ok(None);
+        }
+
+        Ok(Some(PostSummary {
+            id,
+            kind,
+            author_id,
+            title,
+            moderation_status: status,
+            updated_at,
+        }))
+    }
+
+    async fn set_status(
+        &self,
+        id: PostId,
+        expected: ModerationStatus,
+        status: ModerationStatus,
+        updated_at: DateTime<Utc>,
+    ) -> Result<PostSummary, ApplicationError> {
+        let mut state = self.state.lock().expect("store lock");
+
+        // Compare-and-swap, like the SQL store: the caller decided against the
+        // status they read, so a concurrent change must make this fail.
+        if let Some(entry) = state.entries.iter_mut().find(|entry| entry.id == id) {
+            if entry.moderation_status != expected {
+                return Err(ApplicationError::Conflict(
+                    "content changed state concurrently".to_owned(),
+                ));
+            }
+
+            entry.moderation_status = status;
+            entry.updated_at = updated_at;
+
+            return Ok(PostSummary {
+                id,
+                kind: PostKind::Knowledge,
+                author_id: entry.author_id,
+                title: entry.title.clone(),
+                moderation_status: status,
+                updated_at,
+            });
+        }
+
+        if let Some(discussion) = state.discussions.iter_mut().find(|d| d.id == id) {
+            if discussion.moderation_status != expected {
+                return Err(ApplicationError::Conflict(
+                    "content changed state concurrently".to_owned(),
+                ));
+            }
+
+            discussion.moderation_status = status;
+            discussion.updated_at = updated_at;
+
+            return Ok(PostSummary {
+                id,
+                kind: PostKind::Discussion,
+                author_id: discussion.author_id,
+                title: discussion.title.clone(),
+                moderation_status: status,
+                updated_at,
+            });
+        }
+
+        Err(ApplicationError::NotFound("content not found".to_owned()))
+    }
+}
+
+#[async_trait]
+impl ReportRepository for InMemoryAuthStore {
+    async fn insert(
+        &self,
+        report: NewContentReport,
+    ) -> Result<ContentReportRecord, ApplicationError> {
+        let mut state = self.state.lock().expect("store lock");
+
+        // One open report per reporter and post, matching the partial unique
+        // index in SQL. A report control must not double as a flood button.
+        let duplicate = state.reports.iter().any(|existing| {
+            existing.post_id == report.post_id
+                && existing.reporter_id == report.reporter_id
+                && existing.resolved_at.is_none()
+        });
+
+        if duplicate {
+            return Err(ApplicationError::Conflict(
+                "you already have an open report on this content".to_owned(),
+            ));
+        }
+
+        let record = ContentReportRecord {
+            id: ReportId::from_uuid(Uuid::new_v4()),
+            post_id: report.post_id,
+            reporter_id: report.reporter_id,
+            category: report.category,
+            message: report.message,
+            created_at: report.created_at,
+            resolved_at: None,
+            resolved_by: None,
+            resolution: None,
+        };
+
+        state.reports.push(record.clone());
+
+        Ok(record)
+    }
+
+    async fn list_for_post(
+        &self,
+        post_id: PostId,
+    ) -> Result<Vec<ContentReportRecord>, ApplicationError> {
+        let state = self.state.lock().expect("store lock");
+
+        Ok(state
+            .reports
+            .iter()
+            .filter(|report| report.post_id == post_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn resolve(
+        &self,
+        post_id: PostId,
+        id: ReportId,
+        resolution: ReportResolution,
+        resolved_by: UserId,
+        resolved_at: DateTime<Utc>,
+    ) -> Result<ContentReportRecord, ApplicationError> {
+        let mut state = self.state.lock().expect("store lock");
+
+        // Scoped to the post the caller was authorized against, matching the
+        // SQL predicate: a report belonging to a different item is reported as
+        // missing rather than resolved.
+        let report = state
+            .reports
+            .iter_mut()
+            .find(|report| report.id == id && report.post_id == post_id)
+            .ok_or_else(|| ApplicationError::NotFound("report not found".to_owned()))?;
+
+        if report.resolved_at.is_none() {
+            report.resolved_at = Some(resolved_at);
+            report.resolved_by = Some(resolved_by);
+            report.resolution = Some(resolution);
+        }
+
+        Ok(report.clone())
+    }
+
+    async fn queue(
+        &self,
+        page: u32,
+        page_size: u32,
+    ) -> Result<Page<ModerationQueueItem>, ApplicationError> {
+        let state = self.state.lock().expect("store lock");
+
+        let mut items: Vec<ModerationQueueItem> = Vec::new();
+
+        let mut push = |post_id: PostId,
+                        kind: PostKind,
+                        title: String,
+                        author_id: UserId,
+                        status: ModerationStatus,
+                        updated_at: DateTime<Utc>| {
+            let open: Vec<&ContentReportRecord> = state
+                .reports
+                .iter()
+                .filter(|report| report.post_id == post_id && report.resolved_at.is_none())
+                .collect();
+
+            // Everything awaiting a decision: content with open reports, plus
+            // content its author submitted for review with none.
+            if open.is_empty() && status != ModerationStatus::PendingReview {
+                return;
+            }
+
+            let categories: Vec<ReportCategory> =
+                open.iter().map(|report| report.category).collect();
+
+            items.push(ModerationQueueItem {
+                post_id,
+                post_kind: kind,
+                title,
+                author_id,
+                moderation_status: status,
+                risk: risk_for(&categories),
+                open_report_count: open.len() as i64,
+                queued_at: open
+                    .iter()
+                    .map(|report| report.created_at)
+                    .min()
+                    .unwrap_or(updated_at),
+            });
+        };
+
+        for entry in &state.entries {
+            push(
+                entry.id,
+                PostKind::Knowledge,
+                entry.title.clone(),
+                entry.author_id,
+                entry.moderation_status,
+                entry.updated_at,
+            );
+        }
+
+        for discussion in &state.discussions {
+            push(
+                discussion.id,
+                PostKind::Discussion,
+                discussion.title.clone(),
+                discussion.author_id,
+                discussion.moderation_status,
+                discussion.updated_at,
+            );
+        }
+
+        // Worst first, then longest-waiting within a band.
+        items.sort_by(|left, right| {
+            right
+                .risk
+                .cmp(&left.risk)
+                .then_with(|| left.queued_at.cmp(&right.queued_at))
+                .then_with(|| left.post_id.cmp(&right.post_id))
+        });
+
+        let total_items = items.len() as u64;
+        let page_size = page_size.max(1);
+        let total_pages = total_items.div_ceil(u64::from(page_size)) as u32;
+        let offset = ((page.saturating_sub(1)) as usize).saturating_mul(page_size as usize);
+
+        Ok(Page {
+            items: items
+                .into_iter()
+                .skip(offset)
+                .take(page_size as usize)
+                .collect(),
+            page,
+            page_size,
+            total_items,
+            total_pages,
+        })
     }
 }

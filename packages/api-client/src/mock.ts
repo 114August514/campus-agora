@@ -1,5 +1,7 @@
 import type {
+  AiDraft,
   ArchiveSource,
+  ContentReport,
   Correction,
   CurrentUser,
   Discussion,
@@ -7,8 +9,11 @@ import type {
   KnowledgeEntry,
   MetaResponse,
   MockLoginRequest,
+  ModerationQueueItem,
   ModerationStatus,
   ReadinessResponse,
+  ReportCategory,
+  RiskLevel,
 } from "./generated";
 
 export interface CampusAgoraMockFetchOptions {
@@ -18,6 +23,8 @@ export interface CampusAgoraMockFetchOptions {
   users?: Partial<Record<MockLoginRequest["persona"], CurrentUser>>;
   /** Session lifetime in seconds; mirrors SESSION_TTL_SECONDS. */
   sessionTtlSeconds?: number;
+  /** Mirrors AI_ARCHIVE_ENABLED. Off by default, like the server. */
+  aiArchiveEnabled?: boolean;
 }
 
 const DEFAULT_SESSION_TTL_SECONDS = 86400;
@@ -35,6 +42,8 @@ const LIMITS = {
   tags: 10,
   /// `SEARCH_QUERY_MAX_CHARS` in the two list services.
   searchQuery: 100,
+  /// `REPORT_MESSAGE_MAX_CHARS` in crates/domain/src/moderation.rs.
+  reportMessage: 1_000,
 } as const;
 
 const COMMENT_BODY_MAX_CHARS = LIMITS.commentBody;
@@ -134,6 +143,14 @@ const ALLOWED_TRANSITIONS: ReadonlyArray<[ModerationStatus, ModerationStatus]> =
   ["archived", "published"],
   // Archiving must not put content beyond moderation reach.
   ["archived", "hidden"],
+  // M4. An author may ask for review instead of publishing, and a moderator
+  // decides. Archiving or hiding content under review is deliberately absent:
+  // it would settle the open question by side effect.
+  ["draft", "pending_review"],
+  ["published", "pending_review"],
+  ["pending_review", "published"],
+  ["pending_review", "rejected"],
+  ["pending_review", "draft"],
 ];
 
 function canTransition(from: ModerationStatus, to: ModerationStatus): boolean {
@@ -197,6 +214,8 @@ export function createCampusAgoraMockFetch(
   };
   const users = { ...DEFAULT_USERS, ...options.users };
   const ttlSeconds = options.sessionTtlSeconds ?? DEFAULT_SESSION_TTL_SECONDS;
+  const aiArchiveEnabled =
+    options.aiArchiveEnabled ?? options.meta?.capabilities?.aiArchiveEnabled ?? false;
   const activeSessions = new Map<string, MockSession>();
   const entries = new Map<string, KnowledgeEntry>();
   const revisions = new Map<string, Array<Record<string, unknown>>>();
@@ -204,6 +223,7 @@ export function createCampusAgoraMockFetch(
   const discussions = new Map<string, Discussion>();
   const replies = new Map<string, DiscussionReply>();
   const sources: ArchiveSource[] = [];
+  const reports: ContentReport[] = [];
   let tokenCounter = 0;
 
   /// Mirrors the server: no header means guest, but a header the server
@@ -277,30 +297,41 @@ export function createCampusAgoraMockFetch(
     return tags.length > LIMITS.tags ? "invalid" : tags;
   }
 
-  /// Mirrors the domain permission matrix for the two moderation actions.
+  /// Mirrors `campus_agora_application::discussion::action_for_transition`
+  /// plus the permission matrix, in one place rather than once per content
+  /// kind. Two hand-transcribed copies of a state machine is how M4 shipped a
+  /// mock that rejected its own headline transition.
+  function mayChangeStatusOf(
+    viewer: CurrentUser,
+    authorId: string,
+    from: ModerationStatus,
+    target: ModerationStatus,
+  ): boolean {
+    if (viewer.systemRole === "moderator" || viewer.systemRole === "admin") {
+      return true;
+    }
+
+    if (authorId !== viewer.id) {
+      return false;
+    }
+
+    // An author may publish their own draft, submit it for review instead,
+    // and retire or restore their own published work. Hiding, rejecting, and
+    // every exit from review stay moderation actions.
+    return (
+      (target === "published" && from === "draft") ||
+      (target === "pending_review" && from === "draft") ||
+      (target === "archived" && from === "published") ||
+      (target === "published" && from === "archived")
+    );
+  }
+
   function mayChangeStatus(
     viewer: CurrentUser,
     entry: KnowledgeEntry,
     target: ModerationStatus,
   ): boolean {
-    const isModeration =
-      viewer.systemRole === "moderator" || viewer.systemRole === "admin";
-
-    if (isModeration) {
-      return true;
-    }
-
-    if (entry.authorId !== viewer.id) {
-      return false;
-    }
-
-    // An author may publish their own draft, and may retire or restore their
-    // own published work. Hiding stays a moderation action.
-    return (
-      (target === "published" && entry.moderationStatus === "draft") ||
-      (target === "archived" && entry.moderationStatus === "published") ||
-      (target === "published" && entry.moderationStatus === "archived")
-    );
+    return mayChangeStatusOf(viewer, entry.authorId, entry.moderationStatus, target);
   }
 
   /// EditOwnDraft: author, assigned maintainer, moderator, admin. The mock has
@@ -323,24 +354,16 @@ export function createCampusAgoraMockFetch(
     );
   }
 
-  /// Same shape as `mayChangeStatus` for entries, against a discussion.
   function mayChangeDiscussionStatus(
     viewer: CurrentUser,
     discussion: Discussion,
     target: ModerationStatus,
   ): boolean {
-    if (viewer.systemRole === "moderator" || viewer.systemRole === "admin") {
-      return true;
-    }
-
-    if (discussion.authorId !== viewer.id) {
-      return false;
-    }
-
-    return (
-      (target === "published" && discussion.moderationStatus === "draft") ||
-      (target === "archived" && discussion.moderationStatus === "published") ||
-      (target === "published" && discussion.moderationStatus === "archived")
+    return mayChangeStatusOf(
+      viewer,
+      discussion.authorId,
+      discussion.moderationStatus,
+      target,
     );
   }
 
@@ -351,6 +374,69 @@ export function createCampusAgoraMockFetch(
         (reply) => reply.postId === discussion.id,
       ).length,
     };
+  }
+
+  /// Mirrors campus_agora_domain::moderation::ReportCategory::risk.
+  function riskForCategory(category: ReportCategory): RiskLevel {
+    switch (category) {
+      case "harassment":
+      case "privacy_violation":
+      case "illegal":
+        return "high";
+      case "misinformation":
+        return "medium";
+      default:
+        return "low";
+    }
+  }
+
+  const RISK_ORDER: RiskLevel[] = ["none", "low", "medium", "high"];
+
+  /// The worst thing anyone said about it. One serious report is not diluted
+  /// by any number of trivial ones.
+  function riskFor(categories: ReportCategory[]): RiskLevel {
+    return categories.reduce<RiskLevel>(
+      (worst, category) =>
+        RISK_ORDER.indexOf(riskForCategory(category)) > RISK_ORDER.indexOf(worst)
+          ? riskForCategory(category)
+          : worst,
+      "none",
+    );
+  }
+
+  /// Content of either kind, for the paths that treat content as content.
+  function findPost(id: string) {
+    const entry = entries.get(id);
+    if (entry) {
+      return {
+        id,
+        kind: "knowledge" as const,
+        authorId: entry.authorId,
+        title: entry.title,
+        moderationStatus: entry.moderationStatus,
+        updatedAt: entry.updatedAt,
+      };
+    }
+
+    const discussion = discussions.get(id);
+    if (discussion) {
+      return {
+        id,
+        kind: "discussion" as const,
+        authorId: discussion.authorId,
+        title: discussion.title,
+        moderationStatus: discussion.moderationStatus,
+        updatedAt: discussion.updatedAt,
+      };
+    }
+
+    return undefined;
+  }
+
+  /// ReviewReports is moderation only, and pointedly not the content's author:
+  /// a report may be about them, and the accused must not close the case.
+  function mayReviewReports(viewer: CurrentUser | undefined): boolean {
+    return viewer?.systemRole === "moderator" || viewer?.systemRole === "admin";
   }
 
   function isPersona(value: unknown): value is MockLoginRequest["persona"] {
@@ -527,9 +613,7 @@ export function createCampusAgoraMockFetch(
 
           const rawQuery = url.searchParams.get("q");
           if (rawQuery && [...rawQuery.trim()].length > LIMITS.searchQuery) {
-            return unprocessable(
-              `q must be at most ${LIMITS.searchQuery} characters`,
-            );
+            return unprocessable(`q must be at most ${LIMITS.searchQuery} characters`);
           }
 
           const q = rawQuery?.toLowerCase();
@@ -930,9 +1014,7 @@ export function createCampusAgoraMockFetch(
       return methodNotAllowed("GET, POST", requestId);
     }
 
-    const sourcesMatch = /^\/api\/v1\/knowledge-entries\/([^/]+)\/sources$/.exec(
-      path,
-    );
+    const sourcesMatch = /^\/api\/v1\/knowledge-entries\/([^/]+)\/sources$/.exec(path);
 
     if (sourcesMatch) {
       const [, entryId] = sourcesMatch;
@@ -970,7 +1052,7 @@ export function createCampusAgoraMockFetch(
     }
 
     const discussionMatch =
-      /^\/api\/v1\/discussions(?:\/([^/]+))?(?:\/(status|replies|accepted-answer|promotions|derived-entries))?$/.exec(
+      /^\/api\/v1\/discussions(?:\/([^/]+))?(?:\/(status|replies|accepted-answer|promotions|derived-entries|ai-draft))?$/.exec(
         path,
       );
 
@@ -1021,9 +1103,7 @@ export function createCampusAgoraMockFetch(
           }
 
           if (rawQuery && [...rawQuery.trim()].length > LIMITS.searchQuery) {
-            return unprocessable(
-              `q must be at most ${LIMITS.searchQuery} characters`,
-            );
+            return unprocessable(`q must be at most ${LIMITS.searchQuery} characters`);
           }
 
           const matched = [...discussions.values()]
@@ -1397,6 +1477,106 @@ export function createCampusAgoraMockFetch(
         return jsonResponse({ entry, source }, 201, requestId);
       }
 
+      if (subresource === "ai-draft") {
+        if (request.method !== "POST") {
+          return methodNotAllowed("POST", requestId);
+        }
+
+        if (!viewer) {
+          return unauthorized();
+        }
+
+        // Off unless the deployment turned it on, mirroring
+        // AI_ARCHIVE_ENABLED. The mock has no flag of its own, so it refuses —
+        // a page must not be built against a capability the server may not
+        // have.
+        if (!aiArchiveEnabled) {
+          return forbidden();
+        }
+
+        if (!isPubliclyVisible(discussion.moderationStatus)) {
+          return errorResponse(
+            409,
+            "conflict",
+            `only a publicly readable discussion can be drafted from, this one is ${discussion.moderationStatus}`,
+            requestId,
+          );
+        }
+
+        const threadReplies = [...replies.values()].filter(
+          (reply) => reply.postId === discussion.id,
+        );
+
+        // The accepted answer leads, matching the deterministic provider.
+        const ordered = [
+          {
+            commentId: null as string | null,
+            body: discussion.body,
+            authorId: discussion.authorId,
+          },
+          ...threadReplies.map((reply) => ({
+            commentId: reply.id,
+            body: reply.body,
+            authorId: reply.authorId,
+          })),
+        ].sort((left, right) => {
+          const leftAccepted = left.commentId === discussion.acceptedCommentId ? 0 : 1;
+          const rightAccepted =
+            right.commentId === discussion.acceptedCommentId ? 0 : 1;
+          return leftAccepted - rightAccepted;
+        });
+
+        const now = new Date().toISOString();
+        const entry: KnowledgeEntry = {
+          id: mockUuid(),
+          authorId: viewer.id,
+          title: discussion.title,
+          body: ordered.map((source) => source.body.trim()).join("\n\n"),
+          summary: undefined,
+          tags: discussion.tags,
+          category: "other",
+          applicableAudience: "all_students",
+          sourceKind: "discussion",
+          moderationStatus: "draft",
+          currentRevision: 1,
+          aiProvider: "deterministic-v1",
+          createdAt: now,
+          updatedAt: now,
+        };
+        entries.set(entry.id, entry);
+        revisions.set(entry.id, [
+          {
+            id: mockUuid(),
+            postId: entry.id,
+            revision: 1,
+            editorId: viewer.id,
+            title: entry.title,
+            body: entry.body,
+            summary: entry.summary,
+            tags: entry.tags,
+            createdAt: now,
+          },
+        ]);
+
+        const drafted: ArchiveSource[] = ordered.map((source) => {
+          const record: ArchiveSource = {
+            entryId: entry.id,
+            sourcePostId: discussion.id,
+            sourceCommentId: source.commentId,
+            sourceAuthorId: source.authorId,
+            sourceAuthorName:
+              Object.values(users).find((user) => user.id === source.authorId)
+                ?.displayName ?? "未知用户",
+            sourceTitle: discussion.title,
+            createdAt: now,
+          };
+          sources.push(record);
+          return record;
+        });
+
+        return jsonResponse({ entry, sources: drafted }, 201, requestId);
+      }
+
       if (subresource === "derived-entries") {
         if (request.method !== "GET") {
           return methodNotAllowed("GET", requestId);
@@ -1420,6 +1600,261 @@ export function createCampusAgoraMockFetch(
 
         return jsonResponse({ items }, 200, requestId);
       }
+    }
+
+    // ---- M4: reports, the moderation queue, and AI drafting ----------------
+
+    if (path === "/api/v1/reports") {
+      const resolved = viewerFor(request);
+      const requestUnauthorized = () =>
+        errorResponse(401, "unauthorized", "Authentication is required", requestId);
+
+      if (resolved === "invalid" || !resolved) {
+        return requestUnauthorized();
+      }
+
+      if (request.method !== "POST") {
+        return methodNotAllowed("POST", requestId);
+      }
+
+      const body = (await request.json().catch(() => undefined)) as
+        | { postId?: unknown; category?: unknown; message?: unknown }
+        | undefined;
+
+      if (
+        !body ||
+        typeof body.postId !== "string" ||
+        typeof body.category !== "string" ||
+        ![
+          "spam",
+          "harassment",
+          "privacy_violation",
+          "misinformation",
+          "illegal",
+          "other",
+        ].includes(body.category)
+      ) {
+        return errorResponse(
+          400,
+          "invalid_request_body",
+          "Request body is invalid",
+          requestId,
+        );
+      }
+
+      const post = findPost(body.postId);
+      if (!post || !canSee(post, resolved)) {
+        return errorResponse(404, "not_found", "Resource not found", requestId);
+      }
+
+      const message = boundedText(body.message, LIMITS.reportMessage, "report message");
+      if (!message.ok) {
+        return errorResponse(422, "validation_failed", message.message, requestId);
+      }
+
+      // One open report per reporter and post, matching the partial unique
+      // index. A report control must not double as a flood button.
+      const duplicate = reports.some(
+        (report) =>
+          report.postId === post.id &&
+          report.reporterId === resolved.id &&
+          !report.resolvedAt,
+      );
+      if (duplicate) {
+        return errorResponse(
+          409,
+          "conflict",
+          "you already have an open report on this content",
+          requestId,
+        );
+      }
+
+      const report: ContentReport = {
+        id: mockUuid(),
+        postId: post.id,
+        reporterId: resolved.id,
+        category: body.category as ReportCategory,
+        message: message.value,
+        createdAt: new Date().toISOString(),
+        resolvedAt: null,
+        resolvedBy: null,
+        resolution: null,
+      };
+      reports.push(report);
+
+      // Reporting deliberately changes no status: otherwise every user would
+      // hold a takedown button, and the first report would also be the last.
+      return jsonResponse(report, 201, requestId);
+    }
+
+    if (path === "/api/v1/moderation/queue") {
+      const resolved = viewerFor(request);
+
+      if (resolved === "invalid" || !resolved) {
+        return errorResponse(
+          401,
+          "unauthorized",
+          "Authentication is required",
+          requestId,
+        );
+      }
+
+      if (request.method !== "GET") {
+        return methodNotAllowed("GET", requestId);
+      }
+
+      if (!mayReviewReports(resolved)) {
+        return errorResponse(403, "forbidden", "Not allowed", requestId);
+      }
+
+      const url = new URL(request.url);
+      const page = Number(url.searchParams.get("page") ?? "1");
+      const pageSize = Number(url.searchParams.get("pageSize") ?? "20");
+
+      if (!Number.isInteger(page) || !Number.isInteger(pageSize)) {
+        return errorResponse(
+          400,
+          "invalid_query",
+          "Query parameters are invalid",
+          requestId,
+        );
+      }
+
+      if (page < 1 || pageSize < 1 || pageSize > 100) {
+        return errorResponse(
+          422,
+          "validation_failed",
+          "page and pageSize are out of range",
+          requestId,
+        );
+      }
+
+      const queued: ModerationQueueItem[] = [];
+      for (const id of [...entries.keys(), ...discussions.keys()]) {
+        const post = findPost(id);
+        if (!post) {
+          continue;
+        }
+
+        const open = reports.filter(
+          (report) => report.postId === id && !report.resolvedAt,
+        );
+
+        // Everything awaiting a decision: open reports, plus content its
+        // author submitted for review with none.
+        if (open.length === 0 && post.moderationStatus !== "pending_review") {
+          continue;
+        }
+
+        queued.push({
+          postId: id,
+          postKind: post.kind,
+          title: post.title,
+          authorId: post.authorId,
+          moderationStatus: post.moderationStatus,
+          risk: riskFor(open.map((report) => report.category)),
+          openReportCount: open.length,
+          queuedAt: open[0]?.createdAt ?? post.updatedAt,
+        });
+      }
+
+      // Worst first, then longest-waiting within a band.
+      queued.sort(
+        (left, right) =>
+          RISK_ORDER.indexOf(right.risk) - RISK_ORDER.indexOf(left.risk) ||
+          left.queuedAt.localeCompare(right.queuedAt) ||
+          left.postId.localeCompare(right.postId),
+      );
+
+      return jsonResponse(
+        {
+          items: queued.slice((page - 1) * pageSize, page * pageSize),
+          page,
+          pageSize,
+          totalItems: queued.length,
+          totalPages: Math.ceil(queued.length / pageSize),
+        },
+        200,
+        requestId,
+      );
+    }
+
+    const reviewMatch =
+      /^\/api\/v1\/moderation\/content\/([^/]+)\/reports(?:\/([^/]+)\/resolve)?$/.exec(
+        path,
+      );
+
+    if (reviewMatch) {
+      const [, postId, reportId] = reviewMatch;
+      const resolved = viewerFor(request);
+
+      if (resolved === "invalid" || !resolved) {
+        return errorResponse(
+          401,
+          "unauthorized",
+          "Authentication is required",
+          requestId,
+        );
+      }
+
+      if (!mayReviewReports(resolved)) {
+        return errorResponse(403, "forbidden", "Not allowed", requestId);
+      }
+
+      const post = findPost(postId as string);
+      if (!post || !canSee(post, resolved)) {
+        return errorResponse(404, "not_found", "Resource not found", requestId);
+      }
+
+      if (!reportId) {
+        if (request.method !== "GET") {
+          return methodNotAllowed("GET", requestId);
+        }
+
+        return jsonResponse(
+          { items: reports.filter((report) => report.postId === post.id) },
+          200,
+          requestId,
+        );
+      }
+
+      if (request.method !== "POST") {
+        return methodNotAllowed("POST", requestId);
+      }
+
+      const body = (await request.json().catch(() => undefined)) as
+        | { resolution?: unknown }
+        | undefined;
+
+      if (
+        !body ||
+        typeof body.resolution !== "string" ||
+        !["upheld", "dismissed"].includes(body.resolution)
+      ) {
+        return errorResponse(
+          400,
+          "invalid_request_body",
+          "Request body is invalid",
+          requestId,
+        );
+      }
+
+      // Scoped to the content the caller was authorized against: a report
+      // belonging to a different item is missing, not resolvable.
+      const report = reports.find(
+        (candidate) => candidate.id === reportId && candidate.postId === post.id,
+      );
+      if (!report) {
+        return errorResponse(404, "not_found", "Resource not found", requestId);
+      }
+
+      if (!report.resolvedAt) {
+        report.resolvedAt = new Date().toISOString();
+        report.resolvedBy = resolved.id;
+        report.resolution = body.resolution as ContentReport["resolution"];
+      }
+
+      return jsonResponse(report, 200, requestId);
     }
 
     return errorResponse(404, "not_found", "Route not found", requestId);

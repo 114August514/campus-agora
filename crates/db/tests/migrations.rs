@@ -132,3 +132,61 @@ fn m3_migration_admits_the_archived_status() {
     assert!(normalized.contains("drop constraint"));
     assert!(normalized.contains("'archived'"));
 }
+
+#[test]
+fn m4_migration_defines_reports_and_ai_provenance() {
+    let migration = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("migrations/20260729000000_m4_moderation_reports.sql"),
+    )
+    .expect("m4 moderation migration must exist");
+    let normalized = migration.to_lowercase();
+
+    assert!(normalized.contains("create table content_reports"));
+
+    // Reports are user content and stay recoverable like every other kind.
+    assert!(normalized.contains("deleted_at timestamptz"));
+    assert!(normalized.contains("deleted_by uuid"));
+
+    // A report control must not double as a flood button, but a reporter must
+    // be free to file again once the first one is closed — so the uniqueness
+    // is partial, over open reports only.
+    assert!(normalized.contains("create unique index"));
+    assert!(normalized.contains("where resolved_at is null"));
+
+    // The queue reads by risk and age across all open reports.
+    assert!(normalized.contains("content_reports_open_idx"));
+    assert!(normalized.contains("content_reports_post_idx"));
+
+    // Composed text has to be distinguishable from written text.
+    assert!(normalized.contains("ai_provider"));
+}
+
+/// `pending_review` is rejected by the CHECK constraint M3 last widened, so
+/// this migration has to widen it again. Without it the status exists in Rust
+/// and fails at the database.
+#[test]
+fn m4_migration_admits_the_pending_review_status() {
+    let migration = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("migrations/20260729000000_m4_moderation_reports.sql"),
+    )
+    .expect("m4 moderation migration must exist");
+    let normalized = migration.to_lowercase();
+
+    assert!(normalized.contains("drop constraint"));
+    assert!(normalized.contains("'pending_review'"));
+    // Every earlier status has to survive the rewrite.
+    for status in [
+        "'draft'",
+        "'published'",
+        "'hidden'",
+        "'rejected'",
+        "'archived'",
+    ] {
+        assert!(
+            normalized.contains(status),
+            "the widened constraint must keep {status}"
+        );
+    }
+}

@@ -5,8 +5,8 @@
 use async_trait::async_trait;
 use campus_agora_domain::{
     ApplicableAudience, ArchiveCategory, AuthProviderKind, CommentId, CorrectionId,
-    ModerationStatus, OrganizationId, PostId, RevisionId, SessionId, SourceKind, SystemRole,
-    UserId,
+    ModerationStatus, OrganizationId, PostId, PostKind, ReportCategory, ReportId, RevisionId,
+    RiskLevel, SessionId, SourceKind, SystemRole, UserId,
 };
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -137,6 +137,11 @@ pub struct ArchiveEntryRecord {
     pub source_reference: Option<String>,
     pub moderation_status: ModerationStatus,
     pub current_revision: i32,
+    /// Which drafting provider composed this entry, or `None` when a person
+    /// wrote it. Recorded so a reader can tell composed text from written
+    /// text; the marker only means something because hand-written entries
+    /// leave it empty.
+    pub ai_provider: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -152,6 +157,7 @@ pub struct NewArchiveEntry {
     pub applicable_audience: ApplicableAudience,
     pub source_kind: SourceKind,
     pub source_reference: Option<String>,
+    pub ai_provider: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -480,4 +486,139 @@ pub trait ArchiveSourceRepository: Send + Sync {
         source_post_id: PostId,
         scope: VisibilityScope,
     ) -> Result<Vec<DerivedEntryRecord>, ApplicationError>;
+}
+
+// ---------------------------------------------------------------------------
+// M4: abuse reports and the moderation queue.
+// ---------------------------------------------------------------------------
+
+/// What a reviewer concluded. Upholding is a *finding*, not a state change:
+/// the moderator still decides what happens to the content through the normal
+/// status transitions, which keeps one path for changing what the campus sees.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReportResolution {
+    Upheld,
+    Dismissed,
+}
+
+impl ReportResolution {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Upheld => "upheld",
+            Self::Dismissed => "dismissed",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "upheld" => Some(Self::Upheld),
+            "dismissed" => Some(Self::Dismissed),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContentReportRecord {
+    pub id: ReportId,
+    pub post_id: PostId,
+    pub reporter_id: UserId,
+    pub category: ReportCategory,
+    pub message: String,
+    pub created_at: DateTime<Utc>,
+    pub resolved_at: Option<DateTime<Utc>>,
+    pub resolved_by: Option<UserId>,
+    pub resolution: Option<ReportResolution>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NewContentReport {
+    pub post_id: PostId,
+    pub reporter_id: UserId,
+    pub category: ReportCategory,
+    pub message: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// One row of the moderation queue. `risk` is derived from the open reports by
+/// `campus_agora_domain::risk_for`, never stored as an opinion.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModerationQueueItem {
+    pub post_id: PostId,
+    pub post_kind: PostKind,
+    pub title: String,
+    pub author_id: UserId,
+    pub moderation_status: ModerationStatus,
+    pub risk: RiskLevel,
+    pub open_report_count: i64,
+    /// When the item entered the queue, used to break ties within a risk band
+    /// so the longest-waiting item is looked at first.
+    pub queued_at: DateTime<Utc>,
+}
+
+/// A post of either kind, for the paths that treat content as content —
+/// reporting and review apply to a discussion exactly as they do to an entry.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PostSummary {
+    pub id: PostId,
+    pub kind: PostKind,
+    pub author_id: UserId,
+    pub title: String,
+    pub moderation_status: ModerationStatus,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[async_trait]
+pub trait PostRepository: Send + Sync {
+    /// Same contract as the per-kind lookups: `None` when the scope may not see
+    /// it, so a report on an invisible draft is `NotFound` rather than a
+    /// confirmation that it exists.
+    async fn find_visible_post(
+        &self,
+        id: PostId,
+        scope: VisibilityScope,
+    ) -> Result<Option<PostSummary>, ApplicationError>;
+
+    async fn set_status(
+        &self,
+        id: PostId,
+        expected: ModerationStatus,
+        status: ModerationStatus,
+        updated_at: DateTime<Utc>,
+    ) -> Result<PostSummary, ApplicationError>;
+}
+
+#[async_trait]
+pub trait ReportRepository: Send + Sync {
+    /// `Conflict` when this reporter already has an open report on this post,
+    /// so a report control cannot be used to flood the queue.
+    async fn insert(
+        &self,
+        report: NewContentReport,
+    ) -> Result<ContentReportRecord, ApplicationError>;
+
+    async fn list_for_post(
+        &self,
+        post_id: PostId,
+    ) -> Result<Vec<ContentReportRecord>, ApplicationError>;
+
+    /// Scoped to `post_id` on purpose: the caller was authorized against the
+    /// item in the request path, so resolving a report that belongs to a
+    /// different item must fail rather than silently succeed.
+    async fn resolve(
+        &self,
+        post_id: PostId,
+        id: ReportId,
+        resolution: ReportResolution,
+        resolved_by: UserId,
+        resolved_at: DateTime<Utc>,
+    ) -> Result<ContentReportRecord, ApplicationError>;
+
+    /// Everything awaiting a decision: content with open reports, plus content
+    /// an author submitted for review. Ordered by risk, then by wait.
+    async fn queue(
+        &self,
+        page: u32,
+        page_size: u32,
+    ) -> Result<Page<ModerationQueueItem>, ApplicationError>;
 }

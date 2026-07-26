@@ -1,4 +1,4 @@
-import type { DiscussionReply } from "@campus-agora/api-client";
+import { CampusAgoraApiError, type DiscussionReply } from "@campus-agora/api-client";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ROUTES, archiveDetailPath, archiveEditPath } from "../app/routes";
@@ -22,13 +22,18 @@ import {
   boundedTitle,
   canPromote,
 } from "../features/discussion/labels";
+import { useCapabilities } from "../features/meta/useCapabilities";
+import { ReportPanel } from "../features/moderation/ui/ReportPanel";
+import { apiClient } from "../lib/api";
 import { formatDateTime } from "../lib/format";
 
 export function DiscussionDetailPage({ session }: { session: SessionController }) {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const controller = useDiscussion(id);
+  const capabilities = useCapabilities();
   const [draft, setDraft] = useState("");
+  const [draftError, setDraftError] = useState<string | undefined>();
   const { state } = controller;
   const viewer =
     session.state.status === "authenticated" ? session.state.user : undefined;
@@ -74,6 +79,23 @@ export function DiscussionDetailPage({ session }: { session: SessionController }
   const promotable = viewer !== undefined && canPromote(discussion.moderationStatus);
   const open = acceptsReplies(discussion.moderationStatus);
 
+  async function generateDraft() {
+    setDraftError(undefined);
+
+    try {
+      const drafted = await apiClient.generateAiDraft(id);
+      // Composed text is the start of curating, not the end. The entry is a
+      // draft the requester owns, so send them where they can correct it.
+      navigate(archiveEditPath(drafted.entry.id));
+    } catch (error) {
+      setDraftError(
+        error instanceof CampusAgoraApiError && error.code === "forbidden"
+          ? "归档助手当前不可用。"
+          : "起草失败，请重试。",
+      );
+    }
+  }
+
   async function promote(commentId: string | null, title: string) {
     const promotion = await controller.promote({
       commentId,
@@ -112,9 +134,9 @@ export function DiscussionDetailPage({ session }: { session: SessionController }
         </div>
       </header>
 
-      {controller.actionError && (
+      {(controller.actionError || draftError) && (
         <p className="fieldError" role="alert">
-          {controller.actionError}
+          {controller.actionError ?? draftError}
         </p>
       )}
 
@@ -150,6 +172,17 @@ export function DiscussionDetailPage({ session }: { session: SessionController }
           >
             <Sprout {...ICON_DEFAULTS} size={16} aria-hidden="true" />
             将主帖整理为资料
+          </Button>
+        )}
+        {/* Absent, not present-and-failing, when the server does not have the
+            capability. */}
+        {promotable && capabilities.aiArchiveEnabled && (
+          <Button
+            loading={controller.actionPending}
+            onClick={() => void generateDraft()}
+          >
+            <Sprout {...ICON_DEFAULTS} size={16} aria-hidden="true" />
+            用归档助手起草
           </Button>
         )}
       </div>
@@ -223,6 +256,11 @@ export function DiscussionDetailPage({ session }: { session: SessionController }
             {DISCUSSION_STATUS_HINTS[discussion.moderationStatus]}
           </p>
         )}
+      </section>
+
+      <section className="detailSection">
+        <h2>举报违规</h2>
+        <ReportPanel postId={discussion.id} canReport={viewer !== undefined} />
       </section>
 
       {/* One half of the loop. The other half lives on the archive entry,
