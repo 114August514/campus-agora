@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { CurrentUser } from "@campus-agora/api-client";
-import { ROUTE_PATHS, ROUTES, discussionDetailPath } from "../src/app/routes";
+import { ROUTES, ROUTE_PATHS, discussionDetailPath } from "../src/app/routes";
 import { allowedTransitions } from "../src/features/archive/labels";
 import {
   visibleNavigationItems,
@@ -80,10 +80,7 @@ describe("archive status transitions offered in the UI", () => {
     expect(allowedTransitions("hidden", moderator)).toEqual(["published"]);
     expect(allowedTransitions("rejected", moderator)).toEqual(["draft"]);
     // Archiving must not put content beyond moderation reach.
-    expect(allowedTransitions("archived", moderator)).toEqual([
-      "published",
-      "hidden",
-    ]);
+    expect(allowedTransitions("archived", moderator)).toEqual(["published", "hidden"]);
   });
 });
 

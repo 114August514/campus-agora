@@ -84,10 +84,7 @@ describe("stylesheet coverage", () => {
 describe("composed variant classes", () => {
   test("every badge tone the components can emit has a rule", () => {
     const defined = definedClasses();
-    const source = readFileSync(
-      join(srcDir, "components/ui/Badge.tsx"),
-      "utf8",
-    );
+    const source = readFileSync(join(srcDir, "components/ui/Badge.tsx"), "utf8");
 
     const tones = [...source.matchAll(/:\s*"(neutral|success|warning|danger|info)"/g)]
       .map((match) => match[1] as string)

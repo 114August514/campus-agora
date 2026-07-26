@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { setSessionToken } from "../src/features/auth/session";
@@ -54,7 +54,13 @@ async function seedThread() {
     `先去团委登记，再到场馆办公室盖章。（${seedCounter}）`,
   );
 
-  return { login, title, id: created.id, replyId: reply.id, replyBody: `先去团委登记，再到场馆办公室盖章。（${seedCounter}）` };
+  return {
+    login,
+    title,
+    id: created.id,
+    replyId: reply.id,
+    replyBody: `先去团委登记，再到场馆办公室盖章。（${seedCounter}）`,
+  };
 }
 
 const guestSession = { state: { status: "guest" } } as never;
@@ -74,10 +80,7 @@ function renderList(session: unknown, search = "") {
   return render(
     <MemoryRouter initialEntries={[`/discussions${search}`]}>
       <Routes>
-        <Route
-          path="/discussions"
-          element={<DiscussionListPage session={session} />}
-        />
+        <Route path="/discussions" element={<DiscussionListPage session={session} />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -101,27 +104,27 @@ function renderEntry(id: string, session: unknown) {
   return render(
     <MemoryRouter initialEntries={[`/archive/${id}`]}>
       <Routes>
-        <Route
-          path="/archive/:id"
-          element={<ArchiveDetailPage session={session} />}
-        />
+        <Route path="/archive/:id" element={<ArchiveDetailPage session={session} />} />
         <Route path="/discussions/:id" element={<p>来源讨论</p>} />
       </Routes>
     </MemoryRouter>,
   );
 }
 
+// The session module caches the token in memory at import time, reading it
+// from a `window.sessionStorage` that every test file shares. Another file can
+// therefore leave a token that makes this file's first request 401 — which is
+// exactly what happened in CI, where the file order differs from a local run.
+// Stating the invariant on both sides makes the file independent of ordering.
+beforeEach(signOut);
+
 afterEach(() => {
   cleanup();
-  // The session module is shared across test files, so a token left behind
-  // here would break an unrelated file's guest fixture.
   signOut();
 });
 
 describe("discussion list page", () => {
-
   test("shows a loading state, then an empty state when nothing matches", async () => {
-
     renderList(guestSession, "?q=nothing-matches-this");
 
     expect(screen.getByRole("status").textContent).toContain("正在加载讨论");
@@ -132,7 +135,6 @@ describe("discussion list page", () => {
   });
 
   test("filters are read from the URL so a filtered list is linkable", async () => {
-
     renderList(guestSession, "?q=%E5%AE%BF%E8%88%8D&tag=%E9%A3%9F%E5%A0%82");
 
     await waitFor(() => {
@@ -142,7 +144,6 @@ describe("discussion list page", () => {
   });
 
   test("guests are not offered the create action", async () => {
-
     renderList(guestSession, "?q=nothing-matches-this");
 
     await waitFor(() => {
@@ -172,9 +173,7 @@ describe("discussion list page", () => {
 });
 
 describe("discussion detail page", () => {
-
   test("a discussion the viewer may not see renders not-found, not an error", async () => {
-
     renderDetail("00000000-0000-4000-8000-999999999999", guestSession);
 
     await waitFor(() => {
@@ -285,7 +284,6 @@ describe("discussion detail page", () => {
 });
 
 describe("the discussion-to-archive loop", () => {
-
   test("promoting a reply lands in the new draft's editor", async () => {
     const { login, id } = await seedThread();
 
@@ -388,18 +386,14 @@ describe("the discussion-to-archive loop", () => {
     await waitFor(() => {
       // By role: the archive page also lists the title in its revision
       // history, so a bare text query matches twice.
-      expect(
-        screen.getByRole("heading", { name: "手写的资料-无来源" }),
-      ).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "手写的资料-无来源" })).toBeTruthy();
     });
     expect(screen.queryByText("内容来源")).toBeNull();
   });
 });
 
 describe("discussion editor page", () => {
-
   test("blocks submission until the required fields are filled", async () => {
-
     render(
       <MemoryRouter initialEntries={["/discussions/new"]}>
         <Routes>
@@ -446,7 +440,6 @@ describe("discussion editor page", () => {
 
   /** A page must surface what the server actually said, not a generic retry. */
   test("an unauthenticated create surfaces the server's refusal", async () => {
-
     render(
       <MemoryRouter initialEntries={["/discussions/new"]}>
         <Routes>
