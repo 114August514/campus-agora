@@ -17,6 +17,55 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-27 - Resolve M3 review findings
+
+- Result: Five independent review lenses over the M3 diff produced 25 findings;
+  20 were refuted by an adversarial pass, 5 survived, and 2 refutations were
+  overridden on my own judgement. All are fixed. M3 stays 评审中.
+- Changed:
+  - Mock parity. The mock skipped every text and tag bound the server enforces:
+    verified that 11 tags, a 300-character title, a 250-character promoted
+    title and a 101-character search term all returned 201/200 where the server
+    returns 422, and that duplicate tags were stored undeduped. The bounds now
+    live in one `LIMITS` table with `boundedText`/`boundedSummary` helpers that
+    every branch calls.
+  - Reply promotion truncates the derived title. A thread titled at or near the
+    200-character limit produced an over-long entry title and a 422 the reader
+    could not act on, so the promote button was permanently dead for it.
+  - The contract declares 422 on `listDiscussions`, and the OpenAPI test now
+    pins the exact status set per operation instead of only asserting 500.
+  - The provenance card names the quoted author instead of printing their UUID;
+    the name is carried through the ports, both stores, the DTO, the contract
+    and the mock, and asserted against a real database.
+  - Added the failed-reply test the M3.2 plan ticked without writing.
+- Verification: full gate set with a disposable PostgreSQL 16 container. Rust
+  166, apps/web 65, api-client 59. Every finding was reproduced before it was
+  fixed — the mock divergences with a probe against both implementations, the
+  contract gap with a throwaway integration test, and the new failed-reply test
+  was mutation-checked by inverting the guard it covers.
+- Decisions:
+  - The mock/server divergence is a recurring class, not a bug: three
+    milestones, three occurrences, each time because a new handler
+    re-implemented validation by hand. The fix is the shared table, not the
+    five individual bounds.
+  - Overrode the refutation of "the provenance card prints a raw UUID". The
+    refuter was right that it is not a privacy leak — the id is already in the
+    same payload — and right that the review brief excluded style. But
+    `docs/product/privacy.md` makes preserving the quoted author's identity a
+    requirement, and a UUID satisfies it in the database while satisfying
+    nothing for a reader. The feature did not do what it existed to do.
+  - Overrode the refutation of "M3.2 Task 3 ticks a test that does not exist".
+    The refuter downgraded it because the code is correct. The code being
+    correct is not the point: an unwritten test ticked as written is exactly
+    what made M2 walk back its completion claim, and Task 3 carried no
+    "Not covered" clause.
+  - Accepted 20 refutations, including the promotion race (an attacker gains no
+    capability they do not already have through `create_draft`), the missing
+    ceiling on derived entries (bounded by the unique constraint), and the
+    absence of a transaction around promotion (the failure modes are a
+    recoverable orphan draft, not a disclosure).
+- Follow-up: none new. The pre-existing todo entries stand.
+
 ### 2026-07-26 - Deliver M3.2 discussion frontend and close the loop in the UI
 
 - Result: The discussion-to-archive loop has a face. M3's three exit criteria
