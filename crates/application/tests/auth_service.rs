@@ -5,8 +5,9 @@ use campus_agora_application::auth::{
     MockCampusAuthProvider,
 };
 use campus_agora_application::memory::InMemoryAuthStore;
+use campus_agora_application::ports::{NewSession, SessionRepository};
 use campus_agora_application::ApplicationError;
-use campus_agora_domain::SystemRole;
+use campus_agora_domain::{SystemRole, UserId};
 use chrono::{Duration, TimeZone, Utc};
 
 fn service_with_store() -> (AuthService, Arc<InMemoryAuthStore>) {
@@ -197,6 +198,39 @@ async fn logout_revokes_the_session() {
         .logout(&outcome.token, now() + Duration::minutes(3), &audit())
         .await;
     assert!(matches!(second_logout, Err(ApplicationError::Unauthorized)));
+}
+
+#[tokio::test]
+async fn revoking_an_already_revoked_session_succeeds_and_keeps_the_first_timestamp() {
+    // Two concurrent logout requests can both resolve the session before
+    // either revokes it. The loser must not turn a successful logout into an
+    // error, and must not overwrite when the session was actually revoked.
+    let store = InMemoryAuthStore::default();
+    let session = SessionRepository::insert(
+        &store,
+        NewSession {
+            user_id: UserId::from_uuid(uuid::Uuid::new_v4()),
+            token_hash: "hash-for-double-revoke".to_owned(),
+            created_at: now(),
+            expires_at: now() + Duration::hours(24),
+        },
+    )
+    .await
+    .unwrap();
+
+    let first_revocation = now() + Duration::minutes(1);
+    SessionRepository::revoke(&store, session.id, first_revocation)
+        .await
+        .unwrap();
+    SessionRepository::revoke(&store, session.id, now() + Duration::minutes(2))
+        .await
+        .expect("revoking twice must stay successful");
+
+    let stored = SessionRepository::find_by_token_hash(&store, "hash-for-double-revoke")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.revoked_at, Some(first_revocation));
 }
 
 #[tokio::test]

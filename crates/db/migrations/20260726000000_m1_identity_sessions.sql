@@ -30,6 +30,8 @@ create table sessions (
 );
 
 create index sessions_user_idx on sessions(user_id);
-create index sessions_active_idx on sessions(token_hash) where revoked_at is null;
+-- Supports the stale-session purge that privacy.md requires before launch.
+-- Lookup by token_hash is already served by its unique constraint.
+create index sessions_expires_at_idx on sessions(expires_at);
 create index organization_memberships_user_idx on organization_memberships(user_id);
 create index organization_memberships_org_idx on organization_memberships(organization_id);

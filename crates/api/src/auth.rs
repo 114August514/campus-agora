@@ -159,9 +159,17 @@ pub(crate) async fn logout(State(state): State<ApiState>, headers: HeaderMap) ->
     }
 }
 
+/// RFC 7235 makes the auth scheme case-insensitive, so `bearer <token>` and
+/// `Bearer <token>` are the same credential.
 fn bearer_token(headers: &HeaderMap) -> Option<String> {
     let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
-    let token = value.strip_prefix("Bearer ")?.trim();
+    let (scheme, token) = value.split_once(char::is_whitespace)?;
+
+    if !scheme.eq_ignore_ascii_case("bearer") {
+        return None;
+    }
+
+    let token = token.trim();
 
     if token.is_empty() {
         return None;

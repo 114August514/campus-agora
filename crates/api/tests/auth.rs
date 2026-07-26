@@ -219,6 +219,140 @@ async fn logout_revokes_the_session_token() {
 }
 
 #[tokio::test]
+async fn bearer_scheme_is_case_insensitive() {
+    // RFC 7235 makes the auth scheme case-insensitive, so a client sending
+    // `bearer <token>` holds the same credential as one sending `Bearer`.
+    let app = app();
+    let login_json = login(&app, "student").await;
+    let token = login_json["token"].as_str().unwrap();
+
+    for header_value in [
+        format!("bearer {token}"),
+        format!("BEARER {token}"),
+        format!("Bearer {token}"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get("/api/v1/auth/session")
+                    .header(header::AUTHORIZATION, header_value.clone())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK, "header: {header_value}");
+    }
+}
+
+#[tokio::test]
+async fn client_supplied_request_ids_are_rejected_when_unusable() {
+    // The request id is persisted into audit metadata, so an unbounded or
+    // non-printable client value would let callers pad or forge the trail.
+    let app = app();
+    let oversized = "a".repeat(65);
+
+    for supplied in [oversized.as_str(), "has space", "semi;colon"] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get("/api/v1/auth/session")
+                    .header(REQUEST_ID, supplied)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let json = response_json(response).await;
+        let request_id = json["requestId"].as_str().unwrap();
+        assert_ne!(request_id, supplied, "supplied: {supplied}");
+        assert!(
+            request_id.starts_with("campus-agora-"),
+            "expected a generated id, got: {request_id}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn acceptable_client_request_ids_are_preserved() {
+    let app = app();
+
+    let response = app
+        .oneshot(
+            Request::get("/api/v1/auth/session")
+                .header(REQUEST_ID, "req_abc-123.4")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let json = response_json(response).await;
+    assert_eq!(json["requestId"], "req_abc-123.4");
+}
+
+#[tokio::test]
+async fn logout_is_idempotent_for_a_session_revoked_concurrently() {
+    // Two concurrent logouts can both resolve the session before either
+    // revokes it. The loser must not turn a completed logout into a 404.
+    let app = app();
+    let login_json = login(&app, "student").await;
+    let token = login_json["token"].as_str().unwrap();
+
+    let logout = |token: String| {
+        let app = app.clone();
+        async move {
+            app.oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/logout")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+        }
+    };
+
+    let (first, second) = tokio::join!(logout(token.to_owned()), logout(token.to_owned()));
+
+    for response in [first, second] {
+        assert!(
+            matches!(
+                response.status(),
+                StatusCode::NO_CONTENT | StatusCode::UNAUTHORIZED
+            ),
+            "concurrent logout must be 204 or 401, got: {}",
+            response.status()
+        );
+    }
+}
+
+#[tokio::test]
+async fn unknown_persona_error_does_not_echo_caller_input() {
+    // The 422 message reaches the client verbatim, so echoing the request
+    // would make the error contract an arbitrary reflection channel.
+    let app = app();
+    let marker = "x".repeat(200);
+
+    let response = app.oneshot(mock_login_request(&marker)).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    let json = response_json(response).await;
+    assert_eq!(json["code"], "validation_failed");
+    assert!(
+        !json["message"].as_str().unwrap().contains(&marker),
+        "message must not echo the supplied persona"
+    );
+}
+
+#[tokio::test]
 async fn logout_requires_a_valid_bearer_token() {
     let app = app();
 

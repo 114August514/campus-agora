@@ -1,6 +1,9 @@
 [package]
 name = "campus_agora_api"
 version = "0.1.0"
+# The crate also ships the `export-openapi` tool, so the documented
+# `cargo run -p campus_agora_api` needs an unambiguous default.
+default-run = "campus-agora-api"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -9,7 +12,6 @@ repository.workspace = true
 axum.workspace = true
 campus_agora_application = { path = "../application" }
 campus_agora_db = { path = "../db" }
-campus_agora_domain = { path = "../domain" }
 chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true

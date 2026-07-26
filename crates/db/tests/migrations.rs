@@ -44,5 +44,6 @@ fn m1_migration_defines_identity_and_session_tables() {
     assert!(!normalized.contains("plain_token"));
 
     assert!(normalized.contains("create index sessions_user_idx"));
+    assert!(normalized.contains("create index sessions_expires_at_idx"));
     assert!(normalized.contains("create index organization_memberships_user_idx"));
 }

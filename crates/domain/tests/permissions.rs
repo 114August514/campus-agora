@@ -404,6 +404,43 @@ fn export_data_is_own_data_only_except_for_admin() {
 }
 
 #[test]
+fn columns_combine_as_a_union_of_grants() {
+    // Documented in docs/architecture/auth-permissions.md: an actor can match
+    // several columns at once and the most permissive one wins. A `Deny` cell
+    // means "this column alone grants nothing", never "this column revokes".
+    //
+    // Concretely: a Moderator exporting their own authored data is allowed,
+    // because the Author column grants "own data only". The Moderator column's
+    // Deny only means moderation status by itself confers no export right.
+    let moderator_exporting_own_authored_data = AuthenticatedActor {
+        is_resource_author: true,
+        owns_exported_data: true,
+        ..actor(SystemRole::Moderator)
+    };
+    assert_eq!(
+        decide(
+            Action::ExportData,
+            &authenticated(moderator_exporting_own_authored_data)
+        ),
+        PermissionDecision::Allow
+    );
+
+    // The same moderator exporting data that is not theirs stays denied.
+    let moderator_exporting_other_data = AuthenticatedActor {
+        is_resource_author: true,
+        owns_exported_data: false,
+        ..actor(SystemRole::Moderator)
+    };
+    assert_eq!(
+        decide(
+            Action::ExportData,
+            &authenticated(moderator_exporting_other_data)
+        ),
+        PermissionDecision::Deny
+    );
+}
+
+#[test]
 fn is_allowed_matches_allow_decisions_only() {
     assert!(is_allowed(Action::ReadPublicContent, &Actor::Guest));
     assert!(!is_allowed(Action::CreateOwnDraft, &Actor::Guest));

@@ -50,6 +50,8 @@ impl InMemoryAuthStore {
 
 #[async_trait]
 impl UserRepository for InMemoryAuthStore {
+    /// Mirrors `PgAuthStore::upsert`: the provider seeds `system_role` only on
+    /// first sight, so a later login cannot undo a locally assigned role.
     async fn upsert(&self, user: NewUser) -> Result<UserRecord, ApplicationError> {
         let mut state = self.state.lock().expect("store lock");
 
@@ -58,7 +60,6 @@ impl UserRepository for InMemoryAuthStore {
                 && candidate.provider_subject_hash == user.provider_subject_hash
         }) {
             existing.display_name = user.display_name;
-            existing.system_role = user.system_role;
             return Ok(existing.clone());
         }
 
@@ -122,6 +123,8 @@ impl SessionRepository for InMemoryAuthStore {
             .cloned())
     }
 
+    /// Idempotent: concurrent logouts can both resolve the same session, and
+    /// the loser must still succeed. The first revocation timestamp wins.
     async fn revoke(
         &self,
         session_id: SessionId,
@@ -134,7 +137,7 @@ impl SessionRepository for InMemoryAuthStore {
             .iter_mut()
             .find(|session| session.id == session_id)
             .ok_or_else(|| ApplicationError::NotFound("session not found".to_owned()))?;
-        session.revoked_at = Some(revoked_at);
+        session.revoked_at.get_or_insert(revoked_at);
 
         Ok(())
     }

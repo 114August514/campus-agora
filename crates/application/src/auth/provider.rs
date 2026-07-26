@@ -85,10 +85,14 @@ impl AuthProvider for MockCampusAuthProvider {
                 system_role: SystemRole::Admin,
                 organization: None,
             },
+            // The message is fixed rather than echoing `persona`: it is
+            // caller-controlled and reaches the client verbatim in the 422
+            // body, so reflecting it would turn the error contract into an
+            // arbitrary reflection channel.
             _ => {
-                return Err(ApplicationError::Validation(format!(
-                    "unknown mock persona: {persona}"
-                )))
+                return Err(ApplicationError::Validation(
+                    "Unknown mock persona".to_owned(),
+                ))
             }
         };
 

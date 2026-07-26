@@ -5,6 +5,7 @@ use campus_agora_application::ports::{
     AuditEventRepository, NewAuditEvent, NewSession, NewUser, OrganizationRepository,
     SessionRepository, UserRepository,
 };
+use campus_agora_application::ApplicationError;
 use campus_agora_db::{PgAuthStore, MIGRATIONS_DIR};
 use campus_agora_domain::{AuthProviderKind, SystemRole};
 use chrono::{Duration, Utc};
@@ -68,6 +69,58 @@ async fn pg_repositories_cover_the_m1_identity_lifecycle() {
         .expect("user exists");
     assert_eq!(loaded.system_role, SystemRole::Student);
     assert_eq!(loaded.auth_provider, AuthProviderKind::MockCampus);
+
+    // Logging in must not reset a locally managed role. The permission matrix
+    // gives Admin a `Change roles` action, so once M4/M6 assigns roles the
+    // provider must not silently undo them on the user's next login.
+    sqlx::query("update users set system_role = 'moderator' where id = $1")
+        .bind(first.id.into_uuid())
+        .execute(&pool)
+        .await
+        .expect("promote user");
+
+    let after_relogin = store
+        .upsert(NewUser {
+            auth_provider: AuthProviderKind::MockCampus,
+            provider_subject_hash: subject_hash.clone(),
+            display_name: "测试用户改名".to_owned(),
+            system_role: SystemRole::Student,
+        })
+        .await
+        .expect("upsert after promotion");
+    assert_eq!(after_relogin.system_role, SystemRole::Moderator);
+
+    // A soft-deleted account must not be able to log back in. `find_by_id`
+    // already filters on `deleted_at`, so allowing the upsert through would
+    // hand out a token whose every later request fails with 401.
+    let deleted_subject = format!("test-deleted-{unique}");
+    let deleted = store
+        .upsert(NewUser {
+            auth_provider: AuthProviderKind::MockCampus,
+            provider_subject_hash: deleted_subject.clone(),
+            display_name: "待删除用户".to_owned(),
+            system_role: SystemRole::Student,
+        })
+        .await
+        .expect("insert user to soft delete");
+    sqlx::query("update users set deleted_at = now() where id = $1")
+        .bind(deleted.id.into_uuid())
+        .execute(&pool)
+        .await
+        .expect("soft delete user");
+
+    let relogin_attempt = store
+        .upsert(NewUser {
+            auth_provider: AuthProviderKind::MockCampus,
+            provider_subject_hash: deleted_subject,
+            display_name: "待删除用户".to_owned(),
+            system_role: SystemRole::Student,
+        })
+        .await;
+    assert!(
+        matches!(relogin_attempt, Err(ApplicationError::Forbidden)),
+        "soft-deleted users must not be able to log in, got: {relogin_attempt:?}"
+    );
 
     // Sessions store hashes with expiry and revocation.
     let token_hash = format!("test-token-hash-{unique}");

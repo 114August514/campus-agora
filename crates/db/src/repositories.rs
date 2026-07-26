@@ -64,6 +64,11 @@ fn session_from_row(row: &PgRow) -> Result<SessionRecord, ApplicationError> {
 
 #[async_trait]
 impl UserRepository for PgAuthStore {
+    /// The provider seeds `system_role` on first sight only. Roles are managed
+    /// locally afterwards (the matrix gives Admin a `Change roles` action), so
+    /// a later login must not undo an assignment. Soft-deleted accounts are
+    /// excluded from the update, which surfaces as `Forbidden` rather than
+    /// handing out a token whose every later request would 401.
     async fn upsert(&self, user: NewUser) -> Result<UserRecord, ApplicationError> {
         let row = sqlx::query(
             r#"
@@ -72,8 +77,8 @@ impl UserRepository for PgAuthStore {
             on conflict (auth_provider, provider_subject_hash)
             do update set
                 display_name = excluded.display_name,
-                system_role = excluded.system_role,
                 updated_at = now()
+            where users.deleted_at is null
             returning id, auth_provider, provider_subject_hash, display_name, system_role
             "#,
         )
@@ -83,7 +88,10 @@ impl UserRepository for PgAuthStore {
         .bind(user.system_role.as_str())
         .fetch_one(&self.pool)
         .await
-        .map_err(internal)?;
+        .map_err(|error| match error {
+            sqlx::Error::RowNotFound => ApplicationError::Forbidden,
+            other => internal(other),
+        })?;
 
         user_from_row(&row)
     }
@@ -150,12 +158,16 @@ impl SessionRepository for PgAuthStore {
         row.as_ref().map(session_from_row).transpose()
     }
 
+    /// Idempotent: concurrent logouts can both resolve the same session, and
+    /// the loser must still succeed rather than turning a completed logout
+    /// into a 404. The `revoked_at is null` guard keeps the first revocation
+    /// timestamp, so a repeat call updates nothing and is treated as success.
     async fn revoke(
         &self,
         session_id: SessionId,
         revoked_at: DateTime<Utc>,
     ) -> Result<(), ApplicationError> {
-        let result = sqlx::query(
+        sqlx::query(
             r#"
             update sessions
             set revoked_at = $2
@@ -167,12 +179,6 @@ impl SessionRepository for PgAuthStore {
         .execute(&self.pool)
         .await
         .map_err(internal)?;
-
-        if result.rows_affected() == 0 {
-            return Err(ApplicationError::NotFound(
-                "session not found or already revoked".to_owned(),
-            ));
-        }
 
         Ok(())
     }
