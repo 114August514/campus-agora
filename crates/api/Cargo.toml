@@ -10,6 +10,7 @@ axum.workspace = true
 campus_agora_application = { path = "../application" }
 campus_agora_db = { path = "../db" }
 campus_agora_domain = { path = "../domain" }
+chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
