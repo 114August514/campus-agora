@@ -11,6 +11,7 @@ import { Pagination } from "../components/ui/Pagination";
 import { Select } from "../components/ui/Select";
 import { Textarea } from "../components/ui/Textarea";
 import { CATEGORY_OPTIONS } from "../features/archive/labels";
+import { RISK_LABELS, RISK_TONES } from "../features/moderation/labels";
 
 const STATUSES: ModerationStatus[] = [
   "draft",
@@ -74,6 +75,21 @@ export function DesignSystemPage() {
           />
         </div>
         <Textarea id="ds-textarea" label="多行文本" rows={4} defaultValue="" />
+      </section>
+
+      <section className="detailSection">
+        <h2>风险标签</h2>
+        {/* Risk is the one place colour carries urgency, so every level is
+            shown here with its label to check the pairing in both themes. */}
+        <div className="actions">
+          {(Object.keys(RISK_LABELS) as Array<keyof typeof RISK_LABELS>).map(
+            (level) => (
+              <span className={`badge badge-${RISK_TONES[level]}`} key={level}>
+                风险：{RISK_LABELS[level]}
+              </span>
+            ),
+          )}
+        </div>
       </section>
 
       <section className="detailSection">

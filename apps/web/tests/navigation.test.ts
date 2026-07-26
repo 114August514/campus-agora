@@ -21,12 +21,11 @@ describe("shell navigation visibility", () => {
     expect(visibleNavigationLabels(undefined)).toEqual(["资料库", "讨论"]);
   });
 
-  test("authenticated students gain the archive assistant but not moderation", () => {
-    expect(visibleNavigationLabels(user("student"))).toEqual([
-      "资料库",
-      "讨论",
-      "归档助手",
-    ]);
+  /// M4 gates the assistant on the capability flag, which is off by default,
+  /// so the default shell no longer offers it. The capability-aware tests
+  /// below cover the on case.
+  test("authenticated students see no moderation entry", () => {
+    expect(visibleNavigationLabels(user("student"))).toEqual(["资料库", "讨论"]);
   });
 
   test("organization members do not gain moderation access", () => {
@@ -136,5 +135,43 @@ describe("discussion routes", () => {
     );
 
     expect(item?.to).toBe(ROUTES.discussionList);
+  });
+});
+
+describe("capability-aware navigation", () => {
+  const allOff = { aiArchiveEnabled: false } as const;
+  const aiOn = { aiArchiveEnabled: true } as const;
+
+  /**
+   * `AI_ARCHIVE_ENABLED` defaults to false, so the entry has to be absent
+   * rather than present-and-failing. A nav item that leads to a capability the
+   * server does not have is worse than no item.
+   */
+  test("the archive assistant appears only when the capability is on", () => {
+    expect(visibleNavigationLabels(user("student"), allOff)).not.toContain("归档助手");
+    expect(visibleNavigationLabels(user("student"), aiOn)).toContain("归档助手");
+  });
+
+  test("a capability cannot substitute for a role", () => {
+    expect(visibleNavigationLabels(user("student"), aiOn)).not.toContain("审核");
+    expect(visibleNavigationLabels(user("moderator"), allOff)).toContain("审核");
+  });
+
+  test("guests gain nothing from a capability being on", () => {
+    expect(visibleNavigationLabels(undefined, aiOn)).toEqual(["资料库", "讨论"]);
+  });
+
+  test("every entry points at a route the app renders", () => {
+    for (const item of visibleNavigationItems(user("admin"), aiOn)) {
+      expect(ROUTE_PATHS).toContain(item.to);
+    }
+  });
+
+  test("the moderation entry points at the queue", () => {
+    const item = visibleNavigationItems(user("moderator"), allOff).find(
+      (entry) => entry.label === "审核",
+    );
+
+    expect(item?.to).toBe(ROUTES.moderationQueue);
   });
 });

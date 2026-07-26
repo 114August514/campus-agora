@@ -17,6 +17,39 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-27 - Deliver M4.2 moderation frontend
+
+- Result: The governance loop is operable. M4's three exit criteria are met;
+  the milestone is 评审中 because the claim should follow review.
+- Changed:
+  - The shell reads `/api/v1/meta` once and filters navigation by capability as
+    well as role. Two entries that pointed at the home page — 归档助手 and 审核
+    — became real, and the assistant appears only when the server has it.
+  - `/moderation`: a queue ordered worst-first, with per-item report review and
+    resolve actions in place.
+  - A report control on both detail pages, with copy saying a report does not
+    take content down.
+  - The AI draft action on a discussion, gated by the capability, and an
+    "AI 起草 · 待人工复核" marker next to an entry's status badge.
+- Verification: full gate set with a disposable PostgreSQL 16 container. Rust
+  217, apps/web 80, api-client 68.
+- Decisions:
+  - Capability defaults are the *off* state, including while meta is in flight
+    and if it fails. A control for a capability the server may not have is
+    worse than one that arrives a moment late, because the first thing the user
+    does with it fails.
+  - A non-moderator opening the queue is told they cannot review, rather than
+    shown an empty list — an empty list makes the different and wrong claim
+    that there is nothing to review.
+  - The composed-text marker lives next to the status badge, where a reader
+    deciding whether to trust campus information sees it, not only in the
+    editor.
+  - Resolving a report is a finding. The queue says so in as many words, so a
+    reviewer does not expect it to change what the campus sees.
+- Follow-up: two page-level assertions could not be written because the shell's
+  capability hook reads meta through a statically imported client; both rules
+  are covered at the client level and the plan records which.
+
 ### 2026-07-27 - Deliver M4.1 moderation and AI drafting backend
 
 - Result: Abuse reports, a moderation queue, audit coverage, and an AI drafting

@@ -115,10 +115,25 @@ Keep entries short, dated, and actionable.
 
 - Source: M4 milestone, split into a backend and a frontend phase.
 - Milestone: M4.
-- Status: in progress — M4.1 backend delivered, M4.2 frontend not started.
+- Status: done — both phases delivered; see `docs/ai-log/done.md`.
 - Acceptance: AI output is traceable, editable, reviewable, and cannot reach
   publication without a human action; every moderation action writes an audit
   event; no third-party provider is contacted, and the boundary is documented.
 - Dependencies: M3, delivered.
 - Notes: the three shaping decisions are recorded in `docs/product/milestones.md`
   rather than only in the plan, because they change product behaviour.
+
+### 2026-07-27 - Cover the two M4.2 page-level gaps
+
+- Source: M4.2. The shell's capability hook reads `/api/v1/meta` through a
+  statically imported client, so a page-level fixture cannot turn the mock's AI
+  flag on. Two assertions were therefore written at the client level instead:
+  drafting navigating to the new entry's editor, and the composed-text marker
+  rendering on an AI-drafted entry.
+- Milestone: M5.
+- Status: open.
+- Acceptance: either inject the client into the pages under test, or give the
+  mock a way to flip a capability at runtime, and assert both through the page.
+- Dependencies: none.
+- Notes: the same limitation would block any future capability-gated UI test,
+  so the fix is worth more than these two assertions.
