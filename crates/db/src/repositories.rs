@@ -4,11 +4,16 @@
 use async_trait::async_trait;
 use campus_agora_application::errors::ApplicationError;
 use campus_agora_application::ports::{
-    AuditEventRepository, MembershipSummary, NewAuditEvent, NewSession, NewUser,
-    OrganizationRecord, OrganizationRepository, SessionRecord, SessionRepository, UserRecord,
-    UserRepository,
+    ArchiveEntryRecord, ArchiveEntryUpdate, ArchiveListQuery, ArchiveRepository,
+    AuditEventRepository, CorrectionRecord, CorrectionRepository, MembershipSummary,
+    NewArchiveEntry, NewAuditEvent, NewCorrection, NewSession, NewUser, OrganizationRecord,
+    OrganizationRepository, Page, RevisionRecord, SessionRecord, SessionRepository, UserRecord,
+    UserRepository, VisibilityScope,
 };
-use campus_agora_domain::{AuthProviderKind, OrganizationId, SessionId, SystemRole, UserId};
+use campus_agora_domain::{
+    ApplicableAudience, ArchiveCategory, AuthProviderKind, CorrectionId, ModerationStatus,
+    OrganizationId, PostId, RevisionId, SessionId, SourceKind, SystemRole, UserId,
+};
 use chrono::{DateTime, Utc};
 use sqlx::postgres::PgRow;
 use sqlx::{PgPool, Row};
@@ -286,5 +291,458 @@ impl AuditEventRepository for PgAuthStore {
         .map_err(internal)?;
 
         Ok(())
+    }
+}
+
+fn archive_from_row(row: &PgRow) -> Result<ArchiveEntryRecord, ApplicationError> {
+    let category: String = row.try_get("category").map_err(internal)?;
+    let audience: String = row.try_get("applicable_audience").map_err(internal)?;
+    let source_kind: String = row.try_get("source_kind").map_err(internal)?;
+    let status: String = row.try_get("moderation_status").map_err(internal)?;
+
+    let enum_error =
+        |field: &str, value: &str| ApplicationError::Internal(format!("unknown {field}: {value}"));
+
+    Ok(ArchiveEntryRecord {
+        id: PostId::from_uuid(row.try_get::<Uuid, _>("id").map_err(internal)?),
+        author_id: UserId::from_uuid(row.try_get::<Uuid, _>("author_id").map_err(internal)?),
+        title: row.try_get("title").map_err(internal)?,
+        body: row.try_get("body").map_err(internal)?,
+        summary: row.try_get("summary").map_err(internal)?,
+        tags: row.try_get("tags").map_err(internal)?,
+        category: ArchiveCategory::parse(&category)
+            .ok_or_else(|| enum_error("archive category", &category))?,
+        applicable_audience: ApplicableAudience::parse(&audience)
+            .ok_or_else(|| enum_error("applicable audience", &audience))?,
+        source_kind: SourceKind::parse(&source_kind)
+            .ok_or_else(|| enum_error("source kind", &source_kind))?,
+        source_reference: row.try_get("source_reference").map_err(internal)?,
+        moderation_status: ModerationStatus::parse(&status)
+            .ok_or_else(|| enum_error("moderation status", &status))?,
+        current_revision: row.try_get("current_revision").map_err(internal)?,
+        created_at: row
+            .try_get::<DateTime<Utc>, _>("created_at")
+            .map_err(internal)?,
+        updated_at: row
+            .try_get::<DateTime<Utc>, _>("updated_at")
+            .map_err(internal)?,
+    })
+}
+
+fn revision_from_row(row: &PgRow) -> Result<RevisionRecord, ApplicationError> {
+    Ok(RevisionRecord {
+        id: RevisionId::from_uuid(row.try_get::<Uuid, _>("id").map_err(internal)?),
+        post_id: PostId::from_uuid(row.try_get::<Uuid, _>("post_id").map_err(internal)?),
+        revision: row.try_get("revision").map_err(internal)?,
+        editor_id: UserId::from_uuid(row.try_get::<Uuid, _>("editor_id").map_err(internal)?),
+        title: row.try_get("title").map_err(internal)?,
+        body: row.try_get("body").map_err(internal)?,
+        summary: row.try_get("summary").map_err(internal)?,
+        tags: row.try_get("tags").map_err(internal)?,
+        created_at: row
+            .try_get::<DateTime<Utc>, _>("created_at")
+            .map_err(internal)?,
+    })
+}
+
+fn correction_from_row(row: &PgRow) -> Result<CorrectionRecord, ApplicationError> {
+    Ok(CorrectionRecord {
+        id: CorrectionId::from_uuid(row.try_get::<Uuid, _>("id").map_err(internal)?),
+        post_id: PostId::from_uuid(row.try_get::<Uuid, _>("post_id").map_err(internal)?),
+        reporter_id: UserId::from_uuid(row.try_get::<Uuid, _>("reporter_id").map_err(internal)?),
+        message: row.try_get("message").map_err(internal)?,
+        created_at: row
+            .try_get::<DateTime<Utc>, _>("created_at")
+            .map_err(internal)?,
+        resolved_at: row
+            .try_get::<Option<DateTime<Utc>>, _>("resolved_at")
+            .map_err(internal)?,
+        resolved_by: row
+            .try_get::<Option<Uuid>, _>("resolved_by")
+            .map_err(internal)?
+            .map(UserId::from_uuid),
+    })
+}
+
+/// The visibility predicate, expressed once and reused by every archive read.
+/// `$1` is the viewer id and is NULL for public and moderation scopes; the
+/// `full` flag short-circuits it for moderators. Keeping this in SQL rather
+/// than filtering in Rust means an unpublished entry is never fetched at all.
+const VISIBILITY_PREDICATE: &str = "
+    p.deleted_at is null
+    and p.post_type = 'knowledge'
+    and (
+        p.moderation_status = 'published'
+        or $2
+        or (
+            $1::uuid is not null
+            and (
+                p.author_id = $1::uuid
+                or exists (
+                    select 1 from post_maintainers m
+                    where m.post_id = p.id and m.user_id = $1::uuid
+                )
+            )
+        )
+    )
+";
+
+fn scope_bindings(scope: VisibilityScope) -> (Option<Uuid>, bool) {
+    match scope {
+        VisibilityScope::Public => (None, false),
+        VisibilityScope::Owner(user_id) => (Some(user_id.into_uuid()), false),
+        VisibilityScope::Full => (None, true),
+    }
+}
+
+const ARCHIVE_COLUMNS: &str = "p.id, p.author_id, p.title, p.body, p.summary, p.tags, \
+     p.category, p.applicable_audience, p.source_kind, p.source_reference, \
+     p.moderation_status, p.current_revision, p.created_at, p.updated_at";
+
+#[async_trait]
+impl ArchiveRepository for PgAuthStore {
+    async fn insert(&self, entry: NewArchiveEntry) -> Result<ArchiveEntryRecord, ApplicationError> {
+        let mut tx = self.pool.begin().await.map_err(internal)?;
+
+        let row = sqlx::query(
+            r#"
+            insert into posts (
+                author_id, post_type, moderation_status, title, body, summary, tags,
+                category, applicable_audience, source_kind, source_reference,
+                current_revision, created_at, updated_at
+            )
+            values ($1, 'knowledge', 'draft', $2, $3, $4, $5, $6, $7, $8, $9, 1, $10, $10)
+            returning id, author_id, title, body, summary, tags, category,
+                applicable_audience, source_kind, source_reference, moderation_status,
+                current_revision, created_at, updated_at
+            "#,
+        )
+        .bind(entry.author_id.into_uuid())
+        .bind(&entry.title)
+        .bind(&entry.body)
+        .bind(&entry.summary)
+        .bind(&entry.tags)
+        .bind(entry.category.as_str())
+        .bind(entry.applicable_audience.as_str())
+        .bind(entry.source_kind.as_str())
+        .bind(&entry.source_reference)
+        .bind(entry.created_at)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(internal)?;
+
+        let record = archive_from_row(&row)?;
+
+        // Revision 1 is written with the entry so history is never missing its
+        // first state, even for an entry that is published without an edit.
+        sqlx::query(
+            r#"
+            insert into post_revisions (post_id, revision, editor_id, title, body, summary, tags, created_at)
+            values ($1, 1, $2, $3, $4, $5, $6, $7)
+            "#,
+        )
+        .bind(record.id.into_uuid())
+        .bind(entry.author_id.into_uuid())
+        .bind(&entry.title)
+        .bind(&entry.body)
+        .bind(&entry.summary)
+        .bind(&entry.tags)
+        .bind(entry.created_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(internal)?;
+
+        tx.commit().await.map_err(internal)?;
+
+        Ok(record)
+    }
+
+    async fn find_visible(
+        &self,
+        id: PostId,
+        scope: VisibilityScope,
+    ) -> Result<Option<ArchiveEntryRecord>, ApplicationError> {
+        let (viewer, full) = scope_bindings(scope);
+        let sql = format!(
+            "select {ARCHIVE_COLUMNS} from posts p where p.id = $3 and {VISIBILITY_PREDICATE}"
+        );
+
+        let row = sqlx::query(&sql)
+            .bind(viewer)
+            .bind(full)
+            .bind(id.into_uuid())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(internal)?;
+
+        row.as_ref().map(archive_from_row).transpose()
+    }
+
+    async fn list(
+        &self,
+        query: ArchiveListQuery,
+    ) -> Result<Page<ArchiveEntryRecord>, ApplicationError> {
+        let (viewer, full) = scope_bindings(query.scope);
+        // $3 q, $4 tag, $5 category; NULL means "no filter" so one statement
+        // serves every combination without string-building user input in.
+        let filters = "
+            and ($3::text is null or p.title ilike '%' || $3 || '%'
+                 or coalesce(p.summary, '') ilike '%' || $3 || '%')
+            and ($4::text is null or $4 = any(p.tags))
+            and ($5::text is null or p.category = $5)
+        ";
+
+        let count_sql =
+            format!("select count(*) from posts p where {VISIBILITY_PREDICATE} {filters}");
+        let (total_items,): (i64,) = sqlx::query_as(&count_sql)
+            .bind(viewer)
+            .bind(full)
+            .bind(&query.q)
+            .bind(&query.tag)
+            .bind(query.category.map(|category| category.as_str()))
+            .fetch_one(&self.pool)
+            .await
+            .map_err(internal)?;
+
+        let page_size = query.page_size.max(1);
+        let offset = i64::from(query.page.saturating_sub(1)) * i64::from(page_size);
+        let list_sql = format!(
+            "select {ARCHIVE_COLUMNS} from posts p where {VISIBILITY_PREDICATE} {filters} \
+             order by p.updated_at desc, p.id desc limit $6 offset $7"
+        );
+
+        let rows = sqlx::query(&list_sql)
+            .bind(viewer)
+            .bind(full)
+            .bind(&query.q)
+            .bind(&query.tag)
+            .bind(query.category.map(|category| category.as_str()))
+            .bind(i64::from(page_size))
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(internal)?;
+
+        let total_items = total_items.max(0) as u64;
+
+        Ok(Page {
+            items: rows
+                .iter()
+                .map(archive_from_row)
+                .collect::<Result<Vec<_>, _>>()?,
+            page: query.page,
+            page_size,
+            total_items,
+            total_pages: total_items.div_ceil(u64::from(page_size)) as u32,
+        })
+    }
+
+    /// Content update and revision write share one transaction, so history can
+    /// never be missing a version that the entry claims to have.
+    async fn update(
+        &self,
+        id: PostId,
+        update: ArchiveEntryUpdate,
+    ) -> Result<ArchiveEntryRecord, ApplicationError> {
+        let mut tx = self.pool.begin().await.map_err(internal)?;
+
+        let revision = update
+            .new_revision
+            .as_ref()
+            .map(|revision| revision.revision);
+        let row = sqlx::query(
+            r#"
+            update posts
+            set title = $2, body = $3, summary = $4, tags = $5, category = $6,
+                applicable_audience = $7, source_kind = $8, source_reference = $9,
+                updated_at = $10,
+                current_revision = coalesce($11, current_revision)
+            where id = $1 and deleted_at is null
+            returning id, author_id, title, body, summary, tags, category,
+                applicable_audience, source_kind, source_reference, moderation_status,
+                current_revision, created_at, updated_at
+            "#,
+        )
+        .bind(id.into_uuid())
+        .bind(&update.title)
+        .bind(&update.body)
+        .bind(&update.summary)
+        .bind(&update.tags)
+        .bind(update.category.as_str())
+        .bind(update.applicable_audience.as_str())
+        .bind(update.source_kind.as_str())
+        .bind(&update.source_reference)
+        .bind(update.updated_at)
+        .bind(revision)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| ApplicationError::NotFound("archive entry not found".to_owned()))?;
+
+        if let Some(new_revision) = update.new_revision {
+            sqlx::query(
+                r#"
+                insert into post_revisions (post_id, revision, editor_id, title, body, summary, tags, created_at)
+                values ($1, $2, $3, $4, $5, $6, $7, $8)
+                "#,
+            )
+            .bind(id.into_uuid())
+            .bind(new_revision.revision)
+            .bind(new_revision.editor_id.into_uuid())
+            .bind(&update.title)
+            .bind(&update.body)
+            .bind(&update.summary)
+            .bind(&update.tags)
+            .bind(update.updated_at)
+            .execute(&mut *tx)
+            .await
+            .map_err(internal)?;
+        }
+
+        let record = archive_from_row(&row)?;
+        tx.commit().await.map_err(internal)?;
+
+        Ok(record)
+    }
+
+    async fn set_status(
+        &self,
+        id: PostId,
+        status: ModerationStatus,
+        updated_at: DateTime<Utc>,
+    ) -> Result<ArchiveEntryRecord, ApplicationError> {
+        let row = sqlx::query(
+            r#"
+            update posts
+            set moderation_status = $2, updated_at = $3
+            where id = $1 and deleted_at is null
+            returning id, author_id, title, body, summary, tags, category,
+                applicable_audience, source_kind, source_reference, moderation_status,
+                current_revision, created_at, updated_at
+            "#,
+        )
+        .bind(id.into_uuid())
+        .bind(status.as_str())
+        .bind(updated_at)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| ApplicationError::NotFound("archive entry not found".to_owned()))?;
+
+        archive_from_row(&row)
+    }
+
+    async fn list_revisions(&self, id: PostId) -> Result<Vec<RevisionRecord>, ApplicationError> {
+        let rows = sqlx::query(
+            r#"
+            select id, post_id, revision, editor_id, title, body, summary, tags, created_at
+            from post_revisions
+            where post_id = $1
+            order by revision
+            "#,
+        )
+        .bind(id.into_uuid())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(internal)?;
+
+        rows.iter().map(revision_from_row).collect()
+    }
+
+    async fn is_maintainer(&self, id: PostId, user_id: UserId) -> Result<bool, ApplicationError> {
+        let (exists,): (bool,) = sqlx::query_as(
+            "select exists (select 1 from post_maintainers where post_id = $1 and user_id = $2)",
+        )
+        .bind(id.into_uuid())
+        .bind(user_id.into_uuid())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(internal)?;
+
+        Ok(exists)
+    }
+}
+
+#[async_trait]
+impl CorrectionRepository for PgAuthStore {
+    async fn insert(
+        &self,
+        correction: NewCorrection,
+    ) -> Result<CorrectionRecord, ApplicationError> {
+        let row = sqlx::query(
+            r#"
+            insert into post_corrections (post_id, reporter_id, message, created_at)
+            values ($1, $2, $3, $4)
+            returning id, post_id, reporter_id, message, created_at, resolved_at, resolved_by
+            "#,
+        )
+        .bind(correction.post_id.into_uuid())
+        .bind(correction.reporter_id.into_uuid())
+        .bind(&correction.message)
+        .bind(correction.created_at)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(internal)?;
+
+        correction_from_row(&row)
+    }
+
+    async fn list_for_post(
+        &self,
+        post_id: PostId,
+    ) -> Result<Vec<CorrectionRecord>, ApplicationError> {
+        let rows = sqlx::query(
+            r#"
+            select id, post_id, reporter_id, message, created_at, resolved_at, resolved_by
+            from post_corrections
+            where post_id = $1
+            order by created_at
+            "#,
+        )
+        .bind(post_id.into_uuid())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(internal)?;
+
+        rows.iter().map(correction_from_row).collect()
+    }
+
+    /// Idempotent, mirroring the in-memory store: the `resolved_at is null`
+    /// guard keeps the first resolution, and a repeat call returns the stored
+    /// row instead of a 404.
+    async fn resolve(
+        &self,
+        id: CorrectionId,
+        resolved_by: UserId,
+        resolved_at: DateTime<Utc>,
+    ) -> Result<CorrectionRecord, ApplicationError> {
+        sqlx::query(
+            r#"
+            update post_corrections
+            set resolved_at = $2, resolved_by = $3
+            where id = $1 and resolved_at is null
+            "#,
+        )
+        .bind(id.into_uuid())
+        .bind(resolved_at)
+        .bind(resolved_by.into_uuid())
+        .execute(&self.pool)
+        .await
+        .map_err(internal)?;
+
+        let row = sqlx::query(
+            r#"
+            select id, post_id, reporter_id, message, created_at, resolved_at, resolved_by
+            from post_corrections
+            where id = $1
+            "#,
+        )
+        .bind(id.into_uuid())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| ApplicationError::NotFound("correction not found".to_owned()))?;
+
+        correction_from_row(&row)
     }
 }

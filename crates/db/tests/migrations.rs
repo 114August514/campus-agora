@@ -47,3 +47,40 @@ fn m1_migration_defines_identity_and_session_tables() {
     assert!(normalized.contains("create index sessions_expires_at_idx"));
     assert!(normalized.contains("create index organization_memberships_user_idx"));
 }
+
+#[test]
+fn m2_migration_defines_archive_metadata_maintainers_and_corrections() {
+    let migration = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations/20260727000000_m2_archive_core.sql"),
+    )
+    .expect("m2 archive migration must exist");
+    let normalized = migration.to_lowercase();
+
+    // Archive metadata extends the existing posts spine rather than forking a
+    // second table, so discussion (M3) stays on the same schema.
+    for column in [
+        "category",
+        "applicable_audience",
+        "source_kind",
+        "source_reference",
+    ] {
+        assert!(
+            normalized.contains(&format!("add column {column}")),
+            "posts must gain a {column} column"
+        );
+    }
+
+    assert!(normalized.contains("create table post_maintainers"));
+    assert!(normalized.contains("unique (post_id, user_id)"));
+
+    assert!(normalized.contains("create table post_corrections"));
+    assert!(normalized.contains("resolved_at timestamptz"));
+    assert!(normalized.contains("resolved_by uuid references users(id)"));
+
+    // Listing filters on kind plus status, on tags, and on category, so each
+    // needs an index rather than a sequential scan over every post.
+    assert!(normalized.contains("create index posts_kind_status_idx"));
+    assert!(normalized.contains("create index posts_tags_idx"));
+    assert!(normalized.contains("using gin"));
+    assert!(normalized.contains("create index post_corrections_post_idx"));
+}
