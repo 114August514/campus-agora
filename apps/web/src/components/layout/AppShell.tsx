@@ -3,10 +3,16 @@ import type { ReactNode } from "react";
 interface AppShellProps {
   title: string;
   sidebarItems: string[];
+  topbarContent?: ReactNode;
   children: ReactNode;
 }
 
-export function AppShell({ title, sidebarItems, children }: AppShellProps) {
+export function AppShell({
+  title,
+  sidebarItems,
+  topbarContent,
+  children,
+}: AppShellProps) {
   return (
     <div className="appShell">
       <aside className="sidebar" aria-label="主导航">
@@ -21,7 +27,8 @@ export function AppShell({ title, sidebarItems, children }: AppShellProps) {
       </aside>
       <main className="main">
         <header className="topbar">
-          <span>Repository Skeleton</span>
+          <span>身份、权限与认证外壳</span>
+          {topbarContent}
         </header>
         {children}
       </main>
