@@ -17,6 +17,64 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-26 - Resolve M2 review findings
+
+- Result: Fixed the defects three independent reviews found in M2 (general
+  code, security, contract/documentation), and corrected an over-claimed
+  milestone status.
+- Changed:
+  - Authorization. `resolve_correction` authorized against the entry in the
+    path but acted on the correction id alone, so any student who authored any
+    entry could close a correction belonging to another entry — and the
+    response disclosed its message and reporter for an entry they could not
+    see. `CorrectionRepository::resolve` now takes the owning entry and both
+    stores filter on it.
+  - Disclosure. Revision 1 was written at creation while draft edits updated
+    the post in place, so text removed before publishing stayed in history and
+    became world-readable on publish. A draft edit now rewrites its revision.
+    Edits to hidden or rejected entries gain a revision and an audit event.
+  - Privacy. The corrections listing was public while `privacy.md` restricts
+    reporter identities; it now requires a session and a stake in the entry.
+  - Concurrency. `set_status` is compare-and-swap, so an author cannot
+    overwrite a moderator's reject that lands between check and write. A
+    concurrent revision collision is a 409 rather than a 500.
+  - Bounds. Search terms are capped and LIKE metacharacters escaped; revisions
+    and corrections are capped because both are returned whole.
+  - Mock parity. The mock treated an expired token as a guest, skipped the
+    permission check on status changes, discarded six of eight PATCH fields,
+    and accepted input the server rejects. Frontend tests run only against the
+    mock, so the editor's save path had never met real behavior.
+  - Frontend. Fifteen class names had no CSS rule; entry bodies lacked
+    `white-space: pre-wrap`, collapsing every paragraph break in the product's
+    core content. Mock mode is now disabled in production builds. Status
+    buttons show only performable transitions, a 401 on read asks for re-login
+    instead of a retry, a failed correction keeps its text, and clearing an
+    optional field now clears it.
+  - Contract and docs. Optional-auth reads declare
+    `security: [{}, {"bearerAuth": []}]` rather than `security: []`, so a
+    generated client still sends the token; the unreachable 403 on create was
+    dropped; the two archive action paths are recorded as naming exceptions;
+    `quality.md`, `index.md`, and `deployment.md` gained freshness lines;
+    `.env.example` gained `VITE_API_MOCK`; `AGENTS.md` records M2; and
+    `deployment.md` records the history-fallback requirement that client-side
+    routing implies.
+- Verification: `cargo test --workspace` (106 tests) against a disposable
+  PostgreSQL 16 container, `cargo fmt --all --check`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, `bun run api:check`, `bun run typecheck`,
+  `bun run lint`, `bun run lint:styles`, `bun --cwd apps/web test` (38),
+  `bun --cwd packages/api-client test` (39), `bun run build`,
+  `bun run ci:docs`, `git diff --check`. Each authorization and disclosure fix
+  landed with a test that failed first: the IDOR, the revision leak, the
+  corrections listing, and the missing stylesheet rules were all demonstrated
+  before being fixed.
+- Decisions: M2 was marked 已完成 on test coverage that had not been written.
+  Several M2.2 plan checkboxes claimed assertions the tests did not make. The
+  plan is now annotated with what was actually covered, the gaps are recorded
+  in `todo.md`, and M2 is back to 评审中 — the exit criteria are met, but the
+  claim should follow review rather than precede it.
+- Follow-up: the remaining frontend test gaps, list-filter debouncing, and the
+  `Button`-inside-`Link` markup are tracked in `docs/ai-log/todo.md`.
+
 ### 2026-07-26 - Implement M2.2 archive frontend flows and close M2
 
 - Result: Completed M2. Knowledge entries can now be created, updated,
