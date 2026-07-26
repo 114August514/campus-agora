@@ -538,3 +538,87 @@ fn is_allowed_matches_allow_decisions_only() {
         &authenticated(actor(SystemRole::Admin))
     ));
 }
+
+#[test]
+fn replying_to_a_discussion_requires_a_session() {
+    assert!(!is_allowed(Action::ReplyToDiscussion, &Actor::Guest));
+
+    for system_role in [
+        SystemRole::Student,
+        SystemRole::OrganizationMember,
+        SystemRole::Moderator,
+        SystemRole::Admin,
+    ] {
+        assert!(is_allowed(
+            Action::ReplyToDiscussion,
+            &authenticated(actor(system_role))
+        ));
+    }
+}
+
+/// Marking the useful reply belongs to whoever asked the question, plus the
+/// people who curate the discussion. It is an affordance for readers, not a
+/// moderation power, so a passer-by must not have it.
+#[test]
+fn accepting_an_answer_belongs_to_the_asker_and_the_curators() {
+    let mut author = actor(SystemRole::Student);
+    author.is_resource_author = true;
+    assert!(is_allowed(Action::AcceptAnswer, &authenticated(author)));
+
+    let mut maintainer = actor(SystemRole::Student);
+    maintainer.is_assigned_maintainer = true;
+    assert!(is_allowed(Action::AcceptAnswer, &authenticated(maintainer)));
+
+    for system_role in [SystemRole::Moderator, SystemRole::Admin] {
+        assert!(is_allowed(
+            Action::AcceptAnswer,
+            &authenticated(actor(system_role))
+        ));
+    }
+
+    for system_role in [SystemRole::Student, SystemRole::OrganizationMember] {
+        assert!(!is_allowed(
+            Action::AcceptAnswer,
+            &authenticated(actor(system_role))
+        ));
+    }
+
+    assert!(!is_allowed(Action::AcceptAnswer, &Actor::Guest));
+}
+
+/// Promotion creates the promoter's own draft and leaves the source untouched,
+/// so it needs no authority over the discussion — only a session. Requiring
+/// authorship here would mean only the asker could sediment their own thread.
+#[test]
+fn promoting_to_archive_needs_only_a_session() {
+    assert!(!is_allowed(Action::PromoteToArchive, &Actor::Guest));
+
+    for system_role in [
+        SystemRole::Student,
+        SystemRole::OrganizationMember,
+        SystemRole::Moderator,
+        SystemRole::Admin,
+    ] {
+        assert!(is_allowed(
+            Action::PromoteToArchive,
+            &authenticated(actor(system_role))
+        ));
+    }
+}
+
+/// Promotion must grant no read access of its own: a student who cannot see a
+/// draft discussion must not be able to launder it into a published entry.
+/// Visibility stays the repository's job, exactly as it is for archive reads.
+#[test]
+fn promotion_permission_does_not_imply_visibility() {
+    assert_eq!(
+        decide(
+            Action::PromoteToArchive,
+            &authenticated(actor(SystemRole::Student))
+        ),
+        decide(
+            Action::CreateOwnDraft,
+            &authenticated(actor(SystemRole::Student))
+        )
+    );
+}

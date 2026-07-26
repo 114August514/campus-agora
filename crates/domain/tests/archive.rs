@@ -11,6 +11,8 @@ fn moderation_status_round_trips_through_stable_strings() {
         (ModerationStatus::Published, "published"),
         (ModerationStatus::Hidden, "hidden"),
         (ModerationStatus::Rejected, "rejected"),
+        // Added by M3; its transitions and visibility live in tests/discussion.rs.
+        (ModerationStatus::Archived, "archived"),
     ];
 
     for (status, value) in cases {
@@ -18,7 +20,7 @@ fn moderation_status_round_trips_through_stable_strings() {
         assert_eq!(ModerationStatus::parse(value), Some(status));
     }
 
-    assert_eq!(ModerationStatus::parse("archived"), None);
+    assert_eq!(ModerationStatus::parse("deleted"), None);
     assert_eq!(ModerationStatus::parse("Published"), None);
 }
 

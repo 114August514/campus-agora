@@ -12,7 +12,7 @@ use campus_agora_application::ports::{
 };
 use campus_agora_domain::{
     ApplicableAudience, ArchiveCategory, AuthProviderKind, CorrectionId, ModerationStatus,
-    OrganizationId, PostId, RevisionId, SessionId, SourceKind, SystemRole, UserId,
+    OrganizationId, PostId, PostKind, RevisionId, SessionId, SourceKind, SystemRole, UserId,
 };
 use chrono::{DateTime, Utc};
 use sqlx::postgres::PgRow;
@@ -364,15 +364,28 @@ fn correction_from_row(row: &PgRow) -> Result<CorrectionRecord, ApplicationError
     })
 }
 
-/// The visibility predicate, expressed once and reused by every archive read.
+/// The visibility predicate, expressed once and reused by every post read.
 /// `$1` is the viewer id and is NULL for public and moderation scopes; the
 /// `full` flag short-circuits it for moderators. Keeping this in SQL rather
-/// than filtering in Rust means an unpublished entry is never fetched at all.
-const VISIBILITY_PREDICATE: &str = "
+/// than filtering in Rust means an invisible post is never fetched at all.
+///
+/// The list of publicly readable statuses is derived from the domain rather
+/// than written out here. Two hand-maintained copies of one rule is how a
+/// status can become readable in one code path and not the other.
+fn visibility_predicate(kind: PostKind) -> String {
+    let public = ModerationStatus::ALL
+        .iter()
+        .filter(|status| status.is_publicly_visible())
+        .map(|status| format!("'{}'", status.as_str()))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    format!(
+        "
     p.deleted_at is null
-    and p.post_type = 'knowledge'
+    and p.post_type = '{kind}'
     and (
-        p.moderation_status = 'published'
+        p.moderation_status in ({public})
         or $2
         or (
             $1::uuid is not null
@@ -385,7 +398,15 @@ const VISIBILITY_PREDICATE: &str = "
             )
         )
     )
-";
+",
+        kind = kind.as_str()
+    )
+}
+
+/// The archive half of the predicate, which every M2 read already uses.
+fn archive_visibility_predicate() -> String {
+    visibility_predicate(PostKind::Knowledge)
+}
 
 fn scope_bindings(scope: VisibilityScope) -> (Option<Uuid>, bool) {
     match scope {
@@ -463,9 +484,8 @@ impl ArchiveRepository for PgAuthStore {
         scope: VisibilityScope,
     ) -> Result<Option<ArchiveEntryRecord>, ApplicationError> {
         let (viewer, full) = scope_bindings(scope);
-        let sql = format!(
-            "select {ARCHIVE_COLUMNS} from posts p where p.id = $3 and {VISIBILITY_PREDICATE}"
-        );
+        let visibility = archive_visibility_predicate();
+        let sql = format!("select {ARCHIVE_COLUMNS} from posts p where p.id = $3 and {visibility}");
 
         let row = sqlx::query(&sql)
             .bind(viewer)
@@ -483,6 +503,7 @@ impl ArchiveRepository for PgAuthStore {
         query: ArchiveListQuery,
     ) -> Result<Page<ArchiveEntryRecord>, ApplicationError> {
         let (viewer, full) = scope_bindings(query.scope);
+        let visibility = archive_visibility_predicate();
         // $3 q, $4 tag, $5 category; NULL means "no filter" so one statement
         // serves every combination without string-building user input in.
         let filters = "
@@ -493,8 +514,7 @@ impl ArchiveRepository for PgAuthStore {
             and ($5::text is null or p.category = $5)
         ";
 
-        let count_sql =
-            format!("select count(*) from posts p where {VISIBILITY_PREDICATE} {filters}");
+        let count_sql = format!("select count(*) from posts p where {visibility} {filters}");
         let (total_items,): (i64,) = sqlx::query_as(&count_sql)
             .bind(viewer)
             .bind(full)
@@ -508,7 +528,7 @@ impl ArchiveRepository for PgAuthStore {
         let page_size = query.page_size.max(1);
         let offset = i64::from(query.page.saturating_sub(1)) * i64::from(page_size);
         let list_sql = format!(
-            "select {ARCHIVE_COLUMNS} from posts p where {VISIBILITY_PREDICATE} {filters} \
+            "select {ARCHIVE_COLUMNS} from posts p where {visibility} {filters} \
              order by p.updated_at desc, p.id desc limit $6 offset $7"
         );
 
@@ -792,5 +812,45 @@ impl CorrectionRepository for PgAuthStore {
         .ok_or_else(|| ApplicationError::NotFound("correction not found".to_owned()))?;
 
         correction_from_row(&row)
+    }
+}
+
+#[cfg(test)]
+mod visibility_tests {
+    use super::*;
+
+    /// The predicate is the single gate every read passes through, and it is
+    /// built by string formatting, so nothing else would catch it drifting from
+    /// the domain rule it is supposed to express.
+    #[test]
+    fn predicate_admits_exactly_the_publicly_visible_statuses() {
+        let sql = archive_visibility_predicate();
+
+        for status in ModerationStatus::ALL {
+            let listed = sql.contains(&format!("'{}'", status.as_str()));
+
+            assert_eq!(
+                listed,
+                status.is_publicly_visible(),
+                "{} is publicly visible = {} but {} in the predicate",
+                status.as_str(),
+                status.is_publicly_visible(),
+                if listed { "listed" } else { "absent" }
+            );
+        }
+    }
+
+    #[test]
+    fn predicate_scopes_to_the_requested_post_kind() {
+        assert!(archive_visibility_predicate().contains("p.post_type = 'knowledge'"));
+        assert!(visibility_predicate(PostKind::Discussion).contains("p.post_type = 'discussion'"));
+    }
+
+    /// Soft-deleted rows must never surface, whatever the viewer's scope.
+    #[test]
+    fn predicate_always_excludes_soft_deleted_rows() {
+        for kind in [PostKind::Knowledge, PostKind::Discussion] {
+            assert!(visibility_predicate(kind).contains("p.deleted_at is null"));
+        }
     }
 }

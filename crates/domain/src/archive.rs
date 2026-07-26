@@ -33,15 +33,30 @@ pub enum ModerationStatus {
     Published,
     Hidden,
     Rejected,
+    /// Retired but preserved: no longer inviting activity, still readable.
+    Archived,
 }
 
 impl ModerationStatus {
+    /// Every status, so callers that must handle the whole set — notably the
+    /// SQL visibility predicate — can derive it instead of restating it.
+    /// `tests/discussion.rs` fails to compile if a variant is added without
+    /// being listed here.
+    pub const ALL: [Self; 5] = [
+        Self::Draft,
+        Self::Published,
+        Self::Hidden,
+        Self::Rejected,
+        Self::Archived,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Draft => "draft",
             Self::Published => "published",
             Self::Hidden => "hidden",
             Self::Rejected => "rejected",
+            Self::Archived => "archived",
         }
     }
 
@@ -51,6 +66,7 @@ impl ModerationStatus {
             "published" => Some(Self::Published),
             "hidden" => Some(Self::Hidden),
             "rejected" => Some(Self::Rejected),
+            "archived" => Some(Self::Archived),
             _ => None,
         }
     }
@@ -58,7 +74,17 @@ impl ModerationStatus {
     /// Whether readers without a stake in the entry may see it. Ownership and
     /// moderation scope widen this, but that decision needs the actor and so
     /// lives in the application layer.
+    ///
+    /// `Archived` is readable on purpose: an archive entry links back to the
+    /// discussion it was drawn from, and that link has to resolve. Taking
+    /// content out of view is what `Hidden` does.
     pub fn is_publicly_visible(self) -> bool {
+        matches!(self, Self::Published | Self::Archived)
+    }
+
+    /// Whether new replies may be attached. Archiving closes a discussion to
+    /// further activity without removing what is already there.
+    pub fn accepts_replies(self) -> bool {
         matches!(self, Self::Published)
     }
 }
@@ -77,6 +103,10 @@ pub fn can_transition(from: ModerationStatus, to: ModerationStatus) -> bool {
             | (Published, Hidden)
             | (Hidden, Published)
             | (Rejected, Draft)
+            | (Published, Archived)
+            | (Archived, Published)
+            // Archiving must not put content beyond moderation reach.
+            | (Archived, Hidden)
     )
 }
 
@@ -188,6 +218,9 @@ pub const SUMMARY_MAX_CHARS: usize = 500;
 pub const BODY_MAX_CHARS: usize = 50_000;
 pub const MAX_TAGS: usize = 10;
 pub const TAG_MAX_CHARS: usize = 32;
+/// Well under `BODY_MAX_CHARS`: a reply that wants to be an essay belongs in an
+/// archive entry, where it can be versioned and corrected.
+pub const COMMENT_BODY_MAX_CHARS: usize = 5_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextError {
@@ -207,6 +240,10 @@ pub fn validate_title(input: &str) -> Result<String, TextError> {
 
 pub fn validate_body(input: &str) -> Result<String, TextError> {
     bounded_text(input, BODY_MAX_CHARS)
+}
+
+pub fn validate_comment_body(input: &str) -> Result<String, TextError> {
+    bounded_text(input, COMMENT_BODY_MAX_CHARS)
 }
 
 /// A summary is optional. Whitespace-only input normalizes to absent rather
