@@ -1268,46 +1268,6 @@ impl ArchiveSourceRepository for PgAuthStore {
     }
 }
 
-#[cfg(test)]
-mod visibility_tests {
-    use super::*;
-
-    /// The predicate is the single gate every read passes through, and it is
-    /// built by string formatting, so nothing else would catch it drifting from
-    /// the domain rule it is supposed to express.
-    #[test]
-    fn predicate_admits_exactly_the_publicly_visible_statuses() {
-        let sql = archive_visibility_predicate();
-
-        for status in ModerationStatus::ALL {
-            let listed = sql.contains(&format!("'{}'", status.as_str()));
-
-            assert_eq!(
-                listed,
-                status.is_publicly_visible(),
-                "{} is publicly visible = {} but {} in the predicate",
-                status.as_str(),
-                status.is_publicly_visible(),
-                if listed { "listed" } else { "absent" }
-            );
-        }
-    }
-
-    #[test]
-    fn predicate_scopes_to_the_requested_post_kind() {
-        assert!(archive_visibility_predicate().contains("p.post_type = 'knowledge'"));
-        assert!(visibility_predicate(PostKind::Discussion).contains("p.post_type = 'discussion'"));
-    }
-
-    /// Soft-deleted rows must never surface, whatever the viewer's scope.
-    #[test]
-    fn predicate_always_excludes_soft_deleted_rows() {
-        for kind in [PostKind::Knowledge, PostKind::Discussion] {
-            assert!(visibility_predicate(kind).contains("p.deleted_at is null"));
-        }
-    }
-}
-
 fn report_from_row(row: &PgRow) -> Result<ContentReportRecord, ApplicationError> {
     let category: String = row.try_get("category").map_err(internal)?;
     let resolution: Option<String> = row.try_get("resolution").map_err(internal)?;
@@ -1634,4 +1594,44 @@ fn any_kind_visibility_predicate() -> String {
     )
 "
     )
+}
+
+#[cfg(test)]
+mod visibility_tests {
+    use super::*;
+
+    /// The predicate is the single gate every read passes through, and it is
+    /// built by string formatting, so nothing else would catch it drifting from
+    /// the domain rule it is supposed to express.
+    #[test]
+    fn predicate_admits_exactly_the_publicly_visible_statuses() {
+        let sql = archive_visibility_predicate();
+
+        for status in ModerationStatus::ALL {
+            let listed = sql.contains(&format!("'{}'", status.as_str()));
+
+            assert_eq!(
+                listed,
+                status.is_publicly_visible(),
+                "{} is publicly visible = {} but {} in the predicate",
+                status.as_str(),
+                status.is_publicly_visible(),
+                if listed { "listed" } else { "absent" }
+            );
+        }
+    }
+
+    #[test]
+    fn predicate_scopes_to_the_requested_post_kind() {
+        assert!(archive_visibility_predicate().contains("p.post_type = 'knowledge'"));
+        assert!(visibility_predicate(PostKind::Discussion).contains("p.post_type = 'discussion'"));
+    }
+
+    /// Soft-deleted rows must never surface, whatever the viewer's scope.
+    #[test]
+    fn predicate_always_excludes_soft_deleted_rows() {
+        for kind in [PostKind::Knowledge, PostKind::Discussion] {
+            assert!(visibility_predicate(kind).contains("p.deleted_at is null"));
+        }
+    }
 }
