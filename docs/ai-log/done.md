@@ -17,6 +17,51 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-26 - Implement M1 identity, permissions, and auth shell
+
+- Result: Delivered the M1 milestone: permission matrix policy functions, an
+  auth provider abstraction with a mock campus provider, user/organization/
+  session persistence, `/api/v1/auth/*` endpoints, an auth-aware API client,
+  and a frontend login-state shell.
+- Changed: `crates/domain/src/{ids,roles,users,permissions}.rs` plus tests;
+  `crates/application/src/{errors,ports,memory}.rs` and `auth/*` plus tests;
+  `crates/db/migrations/20260726000000_m1_identity_sessions.sql`,
+  `crates/db/src/{pool,repositories}.rs`, `crates/db/tests/repositories.rs`;
+  `crates/api/src/auth.rs`, auth wiring and OpenAPI in `crates/api/src/lib.rs`,
+  `crates/api/tests/auth.rs`; regenerated `contracts/openapi.json` and
+  `packages/api-client/src/generated.ts`; `packages/api-client/src/auth.ts`
+  with request/mock/index updates; `apps/web/src/features/auth/*`,
+  `apps/web/src/lib/*`, App shell and styles; auth/backend/api-contract,
+  privacy, milestone docs and `.env.example`.
+- Verification: `cargo test --workspace` (42 tests), `cargo fmt --all --check`,
+  `cargo clippy --workspace --all-targets -- -D warnings`, `bun run api:types`,
+  `bun run typecheck`, `bun run lint`, `bun run lint:styles`, `bun run test`,
+  `bun run build`, `bun run ci:docs`, `git diff --check`. Against a disposable
+  PostgreSQL 16 container: `cargo test -p campus_agora_db` with `DATABASE_URL`
+  set (repository test executed, not skipped) plus an end-to-end HTTP smoke run
+  of login, session, logout, 401 and 422 paths. Confirmed by SQL that sessions
+  store only a 64-char SHA-256 hash that differs from the issued token, that
+  `provider_subject_hash` does not contain the raw subject, and that
+  `auth.login`/`auth.logout` audit rows carry provider and request id but no
+  token. A deliberate mutation removing the session expiry/revocation check was
+  caught by three tests, confirming the suite is not vacuous.
+- Decisions: Sessions use opaque 256-bit tokens hashed with SHA-256 at rest,
+  bearer transport, `SESSION_TTL_SECONDS` expiry and explicit revocation;
+  clients keep tokens in tab-scoped `sessionStorage`, never `localStorage`.
+  Permission-matrix cells whose extra requirements belong to later milestones
+  return a `Conditional` decision that `is_allowed` denies. The auth runtime
+  uses PostgreSQL when `DATABASE_URL` is set and an in-memory store otherwise,
+  logging a warning; the in-memory store is for local development and tests
+  only. Kept runtime SQLx queries instead of query macros, so no `.sqlx/`
+  offline metadata is required; the migration test loads the migration
+  directory at runtime rather than through `sqlx::migrate!`.
+  `packages/api-client` now resolves through its TypeScript source rather than
+  `dist/`, because CI runs `typecheck` before `build`.
+- Follow-up: `./scripts/ci/desktop.sh` could not run inside the nested
+  worktree; see the open AI LOG todo. Publishing, moderation, and export
+  actions remain `Conditional` or unimplemented until M2 and later milestones
+  bind the resource state they need.
+
 ### 2026-07-06 - 明确工具目录和文档时效规则
 
 - Result: 新增 `tools/README.md`，并在 `AGENTS.md` 中明确长期文档的更新时间规则。

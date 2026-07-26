@@ -1,5 +1,7 @@
 # API Contracts
 
+Last updated: 2026-07-26
+
 Campus Agora uses `contracts/openapi.json` as the committed API contract
 snapshot. The Rust API crate is the source of this contract.
 
@@ -24,6 +26,9 @@ regenerate the contract and review the diff before committing.
 ## Rules
 
 - Public endpoints must explicitly use `security: []` in the OpenAPI document.
+- Protected endpoints declare the `bearerAuth` security scheme
+  (`Authorization: Bearer <session token>`); missing or invalid tokens answer
+  `401` with error code `unauthorized`.
 - Business endpoints live under `/api/v1`.
 - `/healthz`, `/readyz`, and OpenAPI tooling stay outside `/api/v1`.
 - Errors use flat `ErrorResponse` fields:

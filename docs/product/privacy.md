@@ -1,5 +1,7 @@
 # Privacy And Data Boundaries
 
+Last updated: 2026-07-26
+
 Campus Agora handles campus community content. Privacy rules must be explicit
 before real identity integration, attachments, or AI assistance are added.
 
@@ -8,7 +10,9 @@ before real identity integration, attachments, or AI assistance are added.
 | Data | Purpose | Storage | Access |
 | --- | --- | --- | --- |
 | Account profile | Identify authenticated users and display ownership | PostgreSQL | User, moderators, admins |
-| Campus identity reference | Link account to campus auth provider | PostgreSQL | Auth service, admins |
+| Campus identity reference | Link account to campus auth provider; stored as SHA-256 subject hash plus provider name, never as raw assertions | PostgreSQL | Auth service, admins |
+| Session records | Keep authenticated sessions alive; stored as SHA-256 token hash with expiry and revocation timestamps, never the raw token | PostgreSQL | Auth service, admins |
+| Organization memberships | Prove a user acts within a verified organization context | PostgreSQL | User, organization tooling, moderators, admins |
 | Discussion content | Community discussion and later archive source | PostgreSQL | Readers based on visibility |
 | Archive content | Durable knowledge entries | PostgreSQL | Readers based on visibility |
 | Moderation state | Review status and safety decisions | PostgreSQL | Moderators, admins |
@@ -31,6 +35,7 @@ Default retention targets:
 | Data Category | Product Retention Boundary |
 | --- | --- |
 | Business content | Retained while visible, drafted, recoverable, or needed for account-visible history. |
+| Session records | Valid for `SESSION_TTL_SECONDS` (default 24 hours). Expired and revoked session rows carry no usable credential because only the token hash is stored; bulk purge of stale rows must be defined before production launch. |
 | Soft-deleted content | Retained until policy-driven purge is approved. |
 | Audit logs | Retained longer than operational request logs because they explain risk actions. Exact production duration must be set before real auth, moderation, or admin actions launch. |
 | Request logs | Short operational retention, enough for debugging and abuse response. |

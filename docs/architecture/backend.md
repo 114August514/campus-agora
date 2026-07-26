@@ -1,5 +1,7 @@
 # Backend Architecture
 
+Last updated: 2026-07-26
+
 The backend is a Rust API server. Handlers should stay thin; domain and
 application crates carry business rules.
 
@@ -59,11 +61,17 @@ production secrets.
 Initialization supports:
 
 - `SERVER_HOST` and `SERVER_PORT` in the API binary.
-- `DATABASE_URL` for readiness checks and migrations.
+- `DATABASE_URL` for readiness checks, migrations, and the M1 auth runtime.
+  When it is set, users, sessions, organizations, memberships, and audit
+  events persist in PostgreSQL; when it is missing, the auth runtime falls
+  back to an in-memory store for local development only.
 - `CORS_ALLOWED_ORIGINS` as a comma-separated allowlist. `*` is allowed only as
   an explicit single value and must not be combined with cookie/session auth in
   production.
 - `REQUEST_BODY_LIMIT_BYTES` as a positive integer request body limit.
+- `SESSION_TTL_SECONDS` as a positive integer session lifetime for M1 auth
+  sessions (default 86400).
+- `AUTH_MOCK_ENABLED` to expose or disable the mock campus login endpoint.
 - `RUST_LOG` for tracing filter configuration.
 
 ## Observability
