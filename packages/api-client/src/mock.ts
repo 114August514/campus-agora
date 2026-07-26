@@ -1,6 +1,9 @@
 import type {
+  ArchiveSource,
   Correction,
   CurrentUser,
+  Discussion,
+  DiscussionReply,
   KnowledgeEntry,
   MetaResponse,
   MockLoginRequest,
@@ -18,6 +21,8 @@ export interface CampusAgoraMockFetchOptions {
 }
 
 const DEFAULT_SESSION_TTL_SECONDS = 86400;
+/// Mirrors campus_agora_domain::archive::COMMENT_BODY_MAX_CHARS.
+const COMMENT_BODY_MAX_CHARS = 5000;
 
 // Stable ids so a login is reproducible across calls, but still UUID-shaped
 // like the real server's, so consumers that parse or shorten ids behave the
@@ -68,6 +73,10 @@ const ALLOWED_TRANSITIONS: ReadonlyArray<[ModerationStatus, ModerationStatus]> =
   ["published", "hidden"],
   ["hidden", "published"],
   ["rejected", "draft"],
+  ["published", "archived"],
+  ["archived", "published"],
+  // Archiving must not put content beyond moderation reach.
+  ["archived", "hidden"],
 ];
 
 function canTransition(from: ModerationStatus, to: ModerationStatus): boolean {
@@ -76,8 +85,17 @@ function canTransition(from: ModerationStatus, to: ModerationStatus): boolean {
 
 /// Mirrors the SQL visibility predicate: published is public, and a viewer
 /// additionally sees what they authored. Moderators and admins see all.
-function canSee(entry: KnowledgeEntry, viewer: CurrentUser | undefined): boolean {
-  if (entry.moderationStatus === "published") {
+function isPubliclyVisible(status: ModerationStatus): boolean {
+  // Archived content stays readable: an entry links back to the discussion it
+  // came from, and that link has to resolve.
+  return status === "published" || status === "archived";
+}
+
+function canSee(
+  post: { moderationStatus: ModerationStatus; authorId: string },
+  viewer: CurrentUser | undefined,
+): boolean {
+  if (isPubliclyVisible(post.moderationStatus)) {
     return true;
   }
 
@@ -88,7 +106,7 @@ function canSee(entry: KnowledgeEntry, viewer: CurrentUser | undefined): boolean
   return (
     viewer.systemRole === "moderator" ||
     viewer.systemRole === "admin" ||
-    entry.authorId === viewer.id
+    post.authorId === viewer.id
   );
 }
 
@@ -126,6 +144,9 @@ export function createCampusAgoraMockFetch(
   const entries = new Map<string, KnowledgeEntry>();
   const revisions = new Map<string, Array<Record<string, unknown>>>();
   const corrections = new Map<string, Correction>();
+  const discussions = new Map<string, Discussion>();
+  const replies = new Map<string, DiscussionReply>();
+  const sources: ArchiveSource[] = [];
   let tokenCounter = 0;
 
   /// Mirrors the server: no header means guest, but a header the server
@@ -212,11 +233,16 @@ export function createCampusAgoraMockFetch(
       return true;
     }
 
-    // An author may publish their own draft; everything else is moderation.
+    if (entry.authorId !== viewer.id) {
+      return false;
+    }
+
+    // An author may publish their own draft, and may retire or restore their
+    // own published work. Hiding stays a moderation action.
     return (
-      target === "published" &&
-      entry.moderationStatus === "draft" &&
-      entry.authorId === viewer.id
+      (target === "published" && entry.moderationStatus === "draft") ||
+      (target === "archived" && entry.moderationStatus === "published") ||
+      (target === "published" && entry.moderationStatus === "archived")
     );
   }
 
@@ -228,6 +254,46 @@ export function createCampusAgoraMockFetch(
       viewer.systemRole === "moderator" ||
       viewer.systemRole === "admin"
     );
+  }
+
+  /// AcceptAnswer: the asker plus the curators. The mock has no maintainer
+  /// concept, so it models author, moderator, and admin.
+  function mayAcceptAnswer(viewer: CurrentUser, discussion: Discussion): boolean {
+    return (
+      discussion.authorId === viewer.id ||
+      viewer.systemRole === "moderator" ||
+      viewer.systemRole === "admin"
+    );
+  }
+
+  /// Same shape as `mayChangeStatus` for entries, against a discussion.
+  function mayChangeDiscussionStatus(
+    viewer: CurrentUser,
+    discussion: Discussion,
+    target: ModerationStatus,
+  ): boolean {
+    if (viewer.systemRole === "moderator" || viewer.systemRole === "admin") {
+      return true;
+    }
+
+    if (discussion.authorId !== viewer.id) {
+      return false;
+    }
+
+    return (
+      (target === "published" && discussion.moderationStatus === "draft") ||
+      (target === "archived" && discussion.moderationStatus === "published") ||
+      (target === "published" && discussion.moderationStatus === "archived")
+    );
+  }
+
+  function withReplyCount(discussion: Discussion): Discussion {
+    return {
+      ...discussion,
+      replyCount: [...replies.values()].filter(
+        (reply) => reply.postId === discussion.id,
+      ).length,
+    };
   }
 
   function isPersona(value: unknown): value is MockLoginRequest["persona"] {
@@ -798,6 +864,453 @@ export function createCampusAgoraMockFetch(
       }
 
       return methodNotAllowed("GET, POST", requestId);
+    }
+
+    const sourcesMatch = /^\/api\/v1\/knowledge-entries\/([^/]+)\/sources$/.exec(
+      path,
+    );
+
+    if (sourcesMatch) {
+      const [, entryId] = sourcesMatch;
+      const resolved = viewerFor(request);
+
+      if (resolved === "invalid") {
+        return errorResponse(
+          401,
+          "unauthorized",
+          "Authentication is required",
+          requestId,
+        );
+      }
+
+      if (request.method !== "GET") {
+        return methodNotAllowed("GET", requestId);
+      }
+
+      const entry = entries.get(entryId as string);
+
+      if (!entry || !canSee(entry, resolved)) {
+        return errorResponse(404, "not_found", "Resource not found", requestId);
+      }
+
+      // A source pointing at a discussion the reader cannot see is omitted,
+      // so the backlink cannot disclose a hidden title.
+      const items = sources
+        .filter((source) => source.entryId === entry.id)
+        .filter((source) => {
+          const discussion = discussions.get(source.sourcePostId);
+          return discussion !== undefined && canSee(discussion, resolved);
+        });
+
+      return jsonResponse({ items }, 200, requestId);
+    }
+
+    const discussionMatch =
+      /^\/api\/v1\/discussions(?:\/([^/]+))?(?:\/(status|replies|accepted-answer|promotions|derived-entries))?$/.exec(
+        path,
+      );
+
+    if (discussionMatch) {
+      const [, discussionId, subresource] = discussionMatch;
+      const resolved = viewerFor(request);
+      const unauthorized = () =>
+        errorResponse(401, "unauthorized", "Authentication is required", requestId);
+      const forbidden = () => errorResponse(403, "forbidden", "Not allowed", requestId);
+      const notFound = () =>
+        errorResponse(404, "not_found", "Resource not found", requestId);
+      const badBody = () =>
+        errorResponse(
+          400,
+          "invalid_request_body",
+          "Request body is invalid",
+          requestId,
+        );
+      const unprocessable = (message: string) =>
+        errorResponse(422, "validation_failed", message, requestId);
+
+      if (resolved === "invalid") {
+        return unauthorized();
+      }
+
+      const viewer = resolved;
+
+      if (!discussionId) {
+        if (request.method === "GET") {
+          const url = new URL(request.url);
+          const q = url.searchParams.get("q")?.toLowerCase();
+          const tag = url.searchParams.get("tag")?.toLowerCase();
+          const page = Number(url.searchParams.get("page") ?? "1");
+          const pageSize = Number(url.searchParams.get("pageSize") ?? "20");
+
+          if (!Number.isInteger(page) || !Number.isInteger(pageSize)) {
+            return errorResponse(
+              400,
+              "invalid_query",
+              "Query parameters are invalid",
+              requestId,
+            );
+          }
+
+          if (page < 1 || pageSize < 1 || pageSize > 100) {
+            return unprocessable("page and pageSize are out of range");
+          }
+
+          const matched = [...discussions.values()]
+            .filter((discussion) => canSee(discussion, viewer))
+            .filter(
+              (discussion) =>
+                !q ||
+                discussion.title.toLowerCase().includes(q) ||
+                discussion.body.toLowerCase().includes(q),
+            )
+            .filter((discussion) => !tag || discussion.tags.includes(tag))
+            .map(withReplyCount);
+
+          return jsonResponse(
+            {
+              items: matched.slice((page - 1) * pageSize, page * pageSize),
+              page,
+              pageSize,
+              totalItems: matched.length,
+              totalPages: Math.ceil(matched.length / pageSize),
+            },
+            200,
+            requestId,
+          );
+        }
+
+        if (request.method === "POST") {
+          if (!viewer) {
+            return unauthorized();
+          }
+
+          const body = (await request.json().catch(() => undefined)) as
+            | { title?: unknown; body?: unknown; tags?: unknown }
+            | undefined;
+
+          if (
+            !body ||
+            typeof body.title !== "string" ||
+            typeof body.body !== "string"
+          ) {
+            return badBody();
+          }
+
+          const title = body.title.trim();
+          const text = body.body.trim();
+
+          if (!title || !text) {
+            return unprocessable("title and body must not be empty");
+          }
+
+          const now = new Date().toISOString();
+          const discussion: Discussion = {
+            id: mockUuid(),
+            authorId: viewer.id,
+            title,
+            body: text,
+            tags: Array.isArray(body.tags)
+              ? (body.tags as string[]).map((tag) => tag.trim().toLowerCase())
+              : [],
+            moderationStatus: "draft",
+            acceptedCommentId: null,
+            replyCount: 0,
+            createdAt: now,
+            updatedAt: now,
+          };
+          discussions.set(discussion.id, discussion);
+
+          return jsonResponse(discussion, 201, requestId);
+        }
+
+        return methodNotAllowed("GET, POST", requestId);
+      }
+
+      const discussion = discussions.get(discussionId);
+
+      // Visibility before permission: an invisible discussion is 404 on every
+      // one of its endpoints, never 403.
+      if (!discussion || !canSee(discussion, viewer)) {
+        return notFound();
+      }
+
+      if (!subresource) {
+        if (request.method !== "GET") {
+          return methodNotAllowed("GET", requestId);
+        }
+
+        return jsonResponse(withReplyCount(discussion), 200, requestId);
+      }
+
+      if (subresource === "status") {
+        if (request.method !== "POST") {
+          return methodNotAllowed("POST", requestId);
+        }
+
+        if (!viewer) {
+          return unauthorized();
+        }
+
+        const body = (await request.json().catch(() => undefined)) as
+          | { status?: unknown }
+          | undefined;
+
+        if (!body || typeof body.status !== "string") {
+          return badBody();
+        }
+
+        const target = body.status as ModerationStatus;
+
+        if (!ALLOWED_TRANSITIONS.some(([, to]) => to === target)) {
+          return badBody();
+        }
+
+        if (!mayChangeDiscussionStatus(viewer, discussion, target)) {
+          return forbidden();
+        }
+
+        if (!canTransition(discussion.moderationStatus, target)) {
+          return errorResponse(
+            409,
+            "conflict",
+            `cannot move a discussion from ${discussion.moderationStatus} to ${target}`,
+            requestId,
+          );
+        }
+
+        const updated: Discussion = {
+          ...discussion,
+          moderationStatus: target,
+          updatedAt: new Date().toISOString(),
+        };
+        discussions.set(updated.id, updated);
+
+        return jsonResponse(withReplyCount(updated), 200, requestId);
+      }
+
+      if (subresource === "replies") {
+        if (request.method === "GET") {
+          const items = [...replies.values()].filter(
+            (reply) => reply.postId === discussion.id,
+          );
+
+          return jsonResponse({ items }, 200, requestId);
+        }
+
+        if (request.method === "POST") {
+          if (!viewer) {
+            return unauthorized();
+          }
+
+          const body = (await request.json().catch(() => undefined)) as
+            | { body?: unknown }
+            | undefined;
+
+          if (!body || typeof body.body !== "string") {
+            return badBody();
+          }
+
+          // A draft is still being worded and an archived thread is closed.
+          if (discussion.moderationStatus !== "published") {
+            return errorResponse(
+              409,
+              "conflict",
+              `a ${discussion.moderationStatus} discussion does not accept replies`,
+              requestId,
+            );
+          }
+
+          const text = body.body.trim();
+
+          if (!text) {
+            return unprocessable("body must not be empty");
+          }
+
+          if ([...text].length > COMMENT_BODY_MAX_CHARS) {
+            return unprocessable(
+              `body must be at most ${COMMENT_BODY_MAX_CHARS} characters`,
+            );
+          }
+
+          const now = new Date().toISOString();
+          const reply: DiscussionReply = {
+            id: mockUuid(),
+            postId: discussion.id,
+            authorId: viewer.id,
+            body: text,
+            createdAt: now,
+            updatedAt: now,
+          };
+          replies.set(reply.id, reply);
+
+          return jsonResponse(reply, 201, requestId);
+        }
+
+        return methodNotAllowed("GET, POST", requestId);
+      }
+
+      if (subresource === "accepted-answer") {
+        if (request.method !== "POST") {
+          return methodNotAllowed("POST", requestId);
+        }
+
+        if (!viewer) {
+          return unauthorized();
+        }
+
+        const body = (await request.json().catch(() => undefined)) as
+          | { commentId?: unknown }
+          | undefined;
+
+        if (!body || (body.commentId !== null && typeof body.commentId !== "string")) {
+          return badBody();
+        }
+
+        if (!mayAcceptAnswer(viewer, discussion)) {
+          return forbidden();
+        }
+
+        // Resolved inside the discussion the caller was authorized against.
+        if (typeof body.commentId === "string") {
+          const reply = replies.get(body.commentId);
+
+          if (!reply || reply.postId !== discussion.id) {
+            return notFound();
+          }
+        }
+
+        const updated: Discussion = {
+          ...discussion,
+          acceptedCommentId: (body.commentId as string | null) ?? null,
+          updatedAt: new Date().toISOString(),
+        };
+        discussions.set(updated.id, updated);
+
+        return jsonResponse(withReplyCount(updated), 200, requestId);
+      }
+
+      if (subresource === "promotions") {
+        if (request.method !== "POST") {
+          return methodNotAllowed("POST", requestId);
+        }
+
+        if (!viewer) {
+          return unauthorized();
+        }
+
+        const body = (await request.json().catch(() => undefined)) as
+          | Record<string, unknown>
+          | undefined;
+
+        if (!body) {
+          return badBody();
+        }
+
+        // Promotion copies text into a separately-moderated artifact, so the
+        // source must be public. Being able to see it is not enough.
+        if (!isPubliclyVisible(discussion.moderationStatus)) {
+          return errorResponse(
+            409,
+            "conflict",
+            `only a publicly readable discussion can be promoted, this one is ${discussion.moderationStatus}`,
+            requestId,
+          );
+        }
+
+        let sourceBody = discussion.body;
+        let sourceAuthorId = discussion.authorId;
+
+        if (typeof body.commentId === "string") {
+          const reply = replies.get(body.commentId);
+
+          if (!reply || reply.postId !== discussion.id) {
+            return notFound();
+          }
+
+          sourceBody = reply.body;
+          sourceAuthorId = reply.authorId;
+        } else if (body.commentId !== undefined && body.commentId !== null) {
+          return badBody();
+        }
+
+        const now = new Date().toISOString();
+        const entry: KnowledgeEntry = {
+          id: mockUuid(),
+          authorId: viewer.id,
+          title: typeof body.title === "string" ? body.title.trim() : discussion.title,
+          body: typeof body.body === "string" ? body.body.trim() : sourceBody,
+          summary: typeof body.summary === "string" ? body.summary.trim() : undefined,
+          tags: Array.isArray(body.tags)
+            ? (body.tags as string[]).map((tag) => tag.trim().toLowerCase())
+            : discussion.tags,
+          category: (typeof body.category === "string"
+            ? body.category
+            : "other") as KnowledgeEntry["category"],
+          applicableAudience: (typeof body.applicableAudience === "string"
+            ? body.applicableAudience
+            : "all_students") as KnowledgeEntry["applicableAudience"],
+          sourceKind: "discussion",
+          moderationStatus: "draft",
+          currentRevision: 1,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        if (!entry.title || !entry.body) {
+          return unprocessable("title and body must not be empty");
+        }
+
+        entries.set(entry.id, entry);
+        revisions.set(entry.id, [
+          {
+            id: mockUuid(),
+            postId: entry.id,
+            revision: 1,
+            editorId: viewer.id,
+            title: entry.title,
+            body: entry.body,
+            summary: entry.summary,
+            tags: entry.tags,
+            createdAt: now,
+          },
+        ]);
+
+        const source: ArchiveSource = {
+          entryId: entry.id,
+          sourcePostId: discussion.id,
+          sourceCommentId: (body.commentId as string | undefined) ?? null,
+          sourceAuthorId,
+          sourceTitle: discussion.title,
+          createdAt: now,
+        };
+        sources.push(source);
+
+        return jsonResponse({ entry, source }, 201, requestId);
+      }
+
+      if (subresource === "derived-entries") {
+        if (request.method !== "GET") {
+          return methodNotAllowed("GET", requestId);
+        }
+
+        // Scoped: an entry the reader cannot see is not listed, so the
+        // backlink cannot enumerate other people's drafts.
+        const items = sources
+          .filter((source) => source.sourcePostId === discussion.id)
+          .map((source) => ({ source, entry: entries.get(source.entryId) }))
+          .filter(
+            (pair): pair is { source: ArchiveSource; entry: KnowledgeEntry } =>
+              pair.entry !== undefined && canSee(pair.entry, viewer),
+          )
+          .map(({ source, entry }) => ({
+            entryId: entry.id,
+            title: entry.title,
+            moderationStatus: entry.moderationStatus,
+            createdAt: source.createdAt,
+          }));
+
+        return jsonResponse({ items }, 200, requestId);
+      }
     }
 
     return errorResponse(404, "not_found", "Route not found", requestId);

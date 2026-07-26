@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 type JsonSchema = {
-  type?: string;
+  type?: string | string[];
   const?: string;
   enum?: string[];
   required?: string[];
@@ -34,7 +34,7 @@ function renderSchema(name: string, schema: JsonSchema): string {
   // A named schema that is not an object is a reusable scalar, typically an
   // enum shared by several DTOs. It becomes a type alias so both sides of the
   // contract keep one spelling of the value set.
-  if (schema.type !== "object") {
+  if (schema.type !== "object" || !schema.properties) {
     const rendered = renderType(schema);
     const single = `export type ${name} = ${rendered};`;
 
@@ -48,10 +48,6 @@ function renderSchema(name: string, schema: JsonSchema): string {
       .map((value) => `  | ${JSON.stringify(value)}`)
       .join("\n");
     return `export type ${name} =\n${members};`;
-  }
-
-  if (!schema.properties) {
-    throw new Error(`Unsupported object schema without properties: ${name}`);
   }
 
   const required = new Set(schema.required ?? []);
@@ -68,6 +64,20 @@ function renderSchema(name: string, schema: JsonSchema): string {
 function renderType(schema: JsonSchema): string {
   if (schema.$ref) {
     return schema.$ref.split("/").at(-1) ?? "unknown";
+  }
+
+  // OpenAPI 3.1 spells a nullable field as a type union rather than the 3.0
+  // `nullable: true`. Rendering the union member by member keeps `null` in the
+  // emitted type instead of silently dropping it, which would let the frontend
+  // assume a value is always present.
+  if (Array.isArray(schema.type)) {
+    return schema.type
+      .map((type) => renderType({ ...schema, type }))
+      .join(" | ");
+  }
+
+  if (schema.type === "null") {
+    return "null";
   }
 
   if (schema.const) {

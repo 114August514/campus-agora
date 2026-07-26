@@ -181,12 +181,115 @@ fn openapi_document_covers_m2_archive_endpoints() {
         assert!(schemas[name].is_object(), "{name} schema must exist");
     }
 
-    assert_eq!(
-        schemas["ModerationStatus"]["enum"],
-        serde_json::json!(["draft", "published", "hidden", "rejected"])
-    );
+    // The full enum, including M3's `archived`, is asserted below.
     assert_eq!(
         schemas["PaginatedKnowledgeEntries"]["required"],
         serde_json::json!(["items", "page", "pageSize", "totalItems", "totalPages"])
+    );
+}
+
+#[test]
+fn openapi_document_covers_m3_discussion_endpoints() {
+    let document = campus_agora_api::openapi_document();
+    let json: Value = serde_json::to_value(document).unwrap();
+    let bearer = serde_json::json!([{ "bearerAuth": [] }]);
+    let optional_auth = serde_json::json!([{}, { "bearerAuth": [] }]);
+
+    let collection = &json["paths"]["/api/v1/discussions"];
+    assert_eq!(collection["get"]["operationId"], "listDiscussions");
+    assert_eq!(collection["get"]["security"], optional_auth);
+    assert_eq!(collection["post"]["operationId"], "createDiscussion");
+    assert_eq!(collection["post"]["security"], bearer);
+    assert!(collection["post"]["responses"]["201"].is_object());
+
+    let item = &json["paths"]["/api/v1/discussions/{id}"]["get"];
+    assert_eq!(item["operationId"], "getDiscussion");
+    assert_eq!(item["security"], optional_auth);
+    assert!(item["responses"]["404"].is_object());
+
+    let status = &json["paths"]["/api/v1/discussions/{id}/status"]["post"];
+    assert_eq!(status["operationId"], "changeDiscussionStatus");
+    assert!(status["responses"]["409"].is_object());
+    assert!(status["responses"]["403"].is_object());
+
+    let replies = &json["paths"]["/api/v1/discussions/{id}/replies"];
+    assert_eq!(replies["get"]["operationId"], "listDiscussionReplies");
+    assert_eq!(replies["get"]["security"], optional_auth);
+    assert_eq!(replies["post"]["operationId"], "replyToDiscussion");
+    assert_eq!(replies["post"]["security"], bearer);
+    assert!(replies["post"]["responses"]["201"].is_object());
+    // An archived discussion is readable but closed.
+    assert!(replies["post"]["responses"]["409"].is_object());
+
+    let accept = &json["paths"]["/api/v1/discussions/{id}/accepted-answer"]["post"];
+    assert_eq!(accept["operationId"], "acceptDiscussionAnswer");
+    assert_eq!(accept["security"], bearer);
+    assert!(accept["responses"]["403"].is_object());
+    // A comment from another discussion resolves to 404, not 403.
+    assert!(accept["responses"]["404"].is_object());
+
+    let promote = &json["paths"]["/api/v1/discussions/{id}/promotions"]["post"];
+    assert_eq!(promote["operationId"], "promoteDiscussion");
+    assert_eq!(promote["security"], bearer);
+    assert!(promote["responses"]["201"].is_object());
+    // Only a publicly readable discussion can be promoted.
+    assert!(promote["responses"]["409"].is_object());
+
+    let derived = &json["paths"]["/api/v1/discussions/{id}/derived-entries"]["get"];
+    assert_eq!(derived["operationId"], "listDiscussionDerivedEntries");
+    assert_eq!(derived["security"], optional_auth);
+
+    let sources = &json["paths"]["/api/v1/knowledge-entries/{id}/sources"]["get"];
+    assert_eq!(sources["operationId"], "listKnowledgeEntrySources");
+    assert_eq!(sources["security"], optional_auth);
+
+    for (path, method) in [
+        ("/api/v1/discussions", "get"),
+        ("/api/v1/discussions", "post"),
+        ("/api/v1/discussions/{id}", "get"),
+        ("/api/v1/discussions/{id}/status", "post"),
+        ("/api/v1/discussions/{id}/replies", "get"),
+        ("/api/v1/discussions/{id}/replies", "post"),
+        ("/api/v1/discussions/{id}/accepted-answer", "post"),
+        ("/api/v1/discussions/{id}/promotions", "post"),
+        ("/api/v1/discussions/{id}/derived-entries", "get"),
+        ("/api/v1/knowledge-entries/{id}/sources", "get"),
+    ] {
+        assert!(
+            json["paths"][path][method]["responses"]["500"].is_object(),
+            "{method} {path} must document 500"
+        );
+    }
+
+    let schemas = &json["components"]["schemas"];
+    for name in [
+        "Discussion",
+        "PaginatedDiscussions",
+        "CreateDiscussionRequest",
+        "DiscussionReply",
+        "DiscussionReplyCollection",
+        "ReplyRequest",
+        "AcceptAnswerRequest",
+        "PromoteRequest",
+        "Promotion",
+        "ArchiveSource",
+        "ArchiveSourceCollection",
+        "DerivedEntry",
+        "DerivedEntryCollection",
+    ] {
+        assert!(schemas[name].is_object(), "{name} schema must exist");
+    }
+}
+
+/// M3 adds `archived`. The generated client's union has to grow with it, or
+/// the frontend cannot represent a state the server will send.
+#[test]
+fn moderation_status_enum_includes_archived() {
+    let document = campus_agora_api::openapi_document();
+    let json: Value = serde_json::to_value(document).unwrap();
+
+    assert_eq!(
+        json["components"]["schemas"]["ModerationStatus"]["enum"],
+        serde_json::json!(["draft", "published", "hidden", "rejected", "archived"])
     );
 }

@@ -75,3 +75,25 @@ describe("stylesheet coverage", () => {
     expect(rule).toContain("pre-wrap");
   });
 });
+
+/**
+ * Badge and button tones are composed (`badge-${tone}`), so the coverage check
+ * above skips them. A tone added in TypeScript with no matching rule renders
+ * an unstyled badge, which is how `archived` would have shipped invisible.
+ */
+describe("composed variant classes", () => {
+  test("every badge tone the components can emit has a rule", () => {
+    const defined = definedClasses();
+    const source = readFileSync(
+      join(srcDir, "components/ui/Badge.tsx"),
+      "utf8",
+    );
+
+    const tones = [...source.matchAll(/:\s*"(neutral|success|warning|danger|info)"/g)]
+      .map((match) => match[1] as string)
+      .filter((tone, index, all) => all.indexOf(tone) === index);
+
+    expect(tones.length).toBeGreaterThan(0);
+    expect(tones.filter((tone) => !defined.has(`badge-${tone}`))).toEqual([]);
+  });
+});

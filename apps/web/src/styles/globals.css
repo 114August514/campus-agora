@@ -355,6 +355,11 @@ h1 {
   color: var(--color-danger);
 }
 
+.badge-info {
+  border-color: var(--color-info);
+  color: var(--color-info);
+}
+
 .stateBlock {
   align-items: center;
   border: 1px dashed var(--color-border);

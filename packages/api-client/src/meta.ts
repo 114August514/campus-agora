@@ -12,17 +12,39 @@ import {
 import type { ListKnowledgeEntriesParams } from "./archive";
 import { getAuthSession, logout, mockLogin } from "./auth";
 import type { MockPersona } from "./auth";
+import {
+  acceptDiscussionAnswer,
+  changeDiscussionStatus,
+  createDiscussion,
+  getDiscussion,
+  listDiscussionDerivedEntries,
+  listDiscussionReplies,
+  listDiscussions,
+  listKnowledgeEntrySources,
+  promoteDiscussion,
+  replyToDiscussion,
+} from "./discussion";
+import type { ListDiscussionsParams } from "./discussion";
 import type {
+  ArchiveSourceCollection,
   CapabilityFlags,
   Correction,
   CorrectionCollection,
+  CreateDiscussionRequest,
   CreateKnowledgeEntryRequest,
+  DerivedEntryCollection,
+  Discussion,
+  DiscussionReply,
+  DiscussionReplyCollection,
   HealthResponse,
   KnowledgeEntry,
   LoginResponse,
   MetaResponse,
   ModerationStatus,
+  PaginatedDiscussions,
   PaginatedKnowledgeEntries,
+  PromoteRequest,
+  Promotion,
   ReadinessResponse,
   RevisionCollection,
   SessionResponse,
@@ -65,6 +87,17 @@ export interface CampusAgoraApiClient {
     id: string,
     correctionId: string,
   ): Promise<Correction>;
+  listKnowledgeEntrySources(id: string): Promise<ArchiveSourceCollection>;
+  listDiscussions(params?: ListDiscussionsParams): Promise<PaginatedDiscussions>;
+  getDiscussion(id: string): Promise<Discussion>;
+  createDiscussion(body: CreateDiscussionRequest): Promise<Discussion>;
+  changeDiscussionStatus(id: string, status: ModerationStatus): Promise<Discussion>;
+  listDiscussionReplies(id: string): Promise<DiscussionReplyCollection>;
+  replyToDiscussion(id: string, body: string): Promise<DiscussionReply>;
+  /** Pass `null` to clear the accepted answer. */
+  acceptDiscussionAnswer(id: string, commentId: string | null): Promise<Discussion>;
+  promoteDiscussion(id: string, body: PromoteRequest): Promise<Promotion>;
+  listDiscussionDerivedEntries(id: string): Promise<DerivedEntryCollection>;
 }
 
 export function createCampusAgoraApiClient(
@@ -144,6 +177,46 @@ export function createCampusAgoraApiClient(
 
     fileKnowledgeEntryCorrection(id, message) {
       return fileKnowledgeEntryCorrection(requestOptions, id, message);
+    },
+
+    listKnowledgeEntrySources(id) {
+      return listKnowledgeEntrySources(requestOptions, id);
+    },
+
+    listDiscussions(params) {
+      return listDiscussions(requestOptions, params);
+    },
+
+    getDiscussion(id) {
+      return getDiscussion(requestOptions, id);
+    },
+
+    createDiscussion(body) {
+      return createDiscussion(requestOptions, body);
+    },
+
+    changeDiscussionStatus(id, status) {
+      return changeDiscussionStatus(requestOptions, id, status);
+    },
+
+    listDiscussionReplies(id) {
+      return listDiscussionReplies(requestOptions, id);
+    },
+
+    replyToDiscussion(id, body) {
+      return replyToDiscussion(requestOptions, id, body);
+    },
+
+    acceptDiscussionAnswer(id, commentId) {
+      return acceptDiscussionAnswer(requestOptions, id, commentId);
+    },
+
+    promoteDiscussion(id, body) {
+      return promoteDiscussion(requestOptions, id, body);
+    },
+
+    listDiscussionDerivedEntries(id) {
+      return listDiscussionDerivedEntries(requestOptions, id);
     },
 
     resolveKnowledgeEntryCorrection(id, correctionId) {

@@ -40,6 +40,7 @@ export const STATUS_LABELS: Record<ModerationStatus, string> = {
   published: "已发布",
   hidden: "已隐藏",
   rejected: "已退回",
+  archived: "已归档",
 };
 
 function toOptions<T extends string>(labels: Record<T, string>) {
@@ -56,9 +57,10 @@ export const SOURCE_OPTIONS = toOptions(SOURCE_LABELS);
 /** Transitions the state machine allows, mirroring crates/domain. */
 const TRANSITIONS: Record<ModerationStatus, ModerationStatus[]> = {
   draft: ["published", "rejected"],
-  published: ["hidden"],
+  published: ["hidden", "archived"],
   hidden: ["published"],
   rejected: ["draft"],
+  archived: ["published", "hidden"],
 };
 
 export const TRANSITION_LABELS: Record<ModerationStatus, string> = {
@@ -66,6 +68,7 @@ export const TRANSITION_LABELS: Record<ModerationStatus, string> = {
   published: "发布",
   hidden: "隐藏",
   rejected: "退回",
+  archived: "归档",
 };
 
 /// Mirrors the backend rule: an author may publish their own draft, and every
@@ -82,5 +85,24 @@ export function allowedTransitions(
     return TRANSITIONS[from];
   }
 
-  return from === "draft" && viewer.isAuthor ? ["published"] : [];
+  if (!viewer.isAuthor) {
+    return [];
+  }
+
+  // An author may publish their own draft, and may retire or restore their own
+  // published work — archiving leaves it readable and is reversible. Hiding
+  // stays a moderation action.
+  if (from === "draft") {
+    return ["published"];
+  }
+
+  if (from === "published") {
+    return ["archived"];
+  }
+
+  if (from === "archived") {
+    return ["published"];
+  }
+
+  return [];
 }
