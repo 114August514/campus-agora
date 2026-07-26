@@ -5,5 +5,11 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[dependencies]
+uuid.workspace = true
+
+[dev-dependencies]
+uuid.workspace = true
+
 [lib]
 path = "src/lib.rs"
