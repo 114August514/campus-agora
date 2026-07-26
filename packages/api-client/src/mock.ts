@@ -128,13 +128,106 @@ export function createCampusAgoraMockFetch(
   const corrections = new Map<string, Correction>();
   let tokenCounter = 0;
 
-  function viewerFor(request: Request): CurrentUser | undefined {
+  /// Mirrors the server: no header means guest, but a header the server
+  /// cannot resolve is 401. Downgrading an expired session to guest would
+  /// hide the reader's own drafts instead of telling them to log in again.
+  function viewerFor(request: Request): CurrentUser | undefined | "invalid" {
     const token = bearerToken(request);
-    const session = token ? activeSessions.get(token) : undefined;
+
+    if (!token) {
+      return undefined;
+    }
+
+    const session = activeSessions.get(token);
 
     return session && Date.parse(session.expiresAt) > Date.now()
       ? session.user
-      : undefined;
+      : "invalid";
+  }
+
+  const CATEGORIES = [
+    "onboarding",
+    "campus_life",
+    "academics",
+    "organizations",
+    "procedures",
+    "other",
+  ];
+  const AUDIENCES = [
+    "all_students",
+    "new_students",
+    "undergraduate",
+    "graduate",
+    "organization_members",
+  ];
+  const SOURCE_KINDS = [
+    "firsthand_experience",
+    "official_announcement",
+    "group_chat",
+    "discussion",
+    "unspecified",
+  ];
+
+  /// Mirrors crates/domain: trimmed, lowercased, deduped, bounded.
+  function normalizeTags(input: unknown): string[] | "invalid" {
+    if (input === undefined) {
+      return [];
+    }
+
+    if (!Array.isArray(input)) {
+      return "invalid";
+    }
+
+    const tags: string[] = [];
+
+    for (const raw of input) {
+      const tag = String(raw).trim().toLowerCase();
+
+      if (!tag) {
+        continue;
+      }
+
+      if ([...tag].length > 32) {
+        return "invalid";
+      }
+
+      if (!tags.includes(tag)) {
+        tags.push(tag);
+      }
+    }
+
+    return tags.length > 10 ? "invalid" : tags;
+  }
+
+  /// Mirrors the domain permission matrix for the two moderation actions.
+  function mayChangeStatus(
+    viewer: CurrentUser,
+    entry: KnowledgeEntry,
+    target: ModerationStatus,
+  ): boolean {
+    const isModeration =
+      viewer.systemRole === "moderator" || viewer.systemRole === "admin";
+
+    if (isModeration) {
+      return true;
+    }
+
+    // An author may publish their own draft; everything else is moderation.
+    return (
+      target === "published" &&
+      entry.moderationStatus === "draft" &&
+      entry.authorId === viewer.id
+    );
+  }
+
+  /// EditOwnDraft: author, assigned maintainer, moderator, admin. The mock has
+  /// no maintainer concept, so it models the other three.
+  function mayEdit(viewer: CurrentUser, entry: KnowledgeEntry): boolean {
+    return (
+      entry.authorId === viewer.id ||
+      viewer.systemRole === "moderator" ||
+      viewer.systemRole === "admin"
+    );
   }
 
   function isPersona(value: unknown): value is MockLoginRequest["persona"] {
@@ -261,11 +354,28 @@ export function createCampusAgoraMockFetch(
 
     if (archiveMatch) {
       const [, entryId, subresource, correctionId] = archiveMatch;
-      const viewer = viewerFor(request);
+      const resolved = viewerFor(request);
       const unauthorized = () =>
         errorResponse(401, "unauthorized", "Authentication is required", requestId);
+      const forbidden = () => errorResponse(403, "forbidden", "Not allowed", requestId);
       const notFound = () =>
         errorResponse(404, "not_found", "Resource not found", requestId);
+      const badBody = () =>
+        errorResponse(
+          400,
+          "invalid_request_body",
+          "Request body is invalid",
+          requestId,
+        );
+      const unprocessable = (message: string) =>
+        errorResponse(422, "validation_failed", message, requestId);
+
+      // A token the server cannot resolve is an error on every archive path.
+      if (resolved === "invalid") {
+        return unauthorized();
+      }
+
+      const viewer = resolved;
 
       // Collection.
       if (!entryId) {
@@ -334,21 +444,36 @@ export function createCampusAgoraMockFetch(
             typeof body.title !== "string" ||
             typeof body.body !== "string"
           ) {
-            return errorResponse(
-              400,
-              "invalid_request_body",
-              "Request body is invalid",
-              requestId,
-            );
+            return badBody();
+          }
+
+          // The three metadata fields are required and enum-constrained, so an
+          // unknown value is a malformed body rather than a validation failure
+          // — matching how the server's serde layer rejects it.
+          if (
+            !CATEGORIES.includes(String(body.category)) ||
+            !AUDIENCES.includes(String(body.applicableAudience)) ||
+            !SOURCE_KINDS.includes(String(body.sourceKind))
+          ) {
+            return badBody();
+          }
+
+          const tags = normalizeTags(body.tags);
+
+          if (tags === "invalid") {
+            return unprocessable("tags are invalid");
           }
 
           if (body.title.trim().length === 0) {
-            return errorResponse(
-              422,
-              "validation_failed",
-              "title must not be empty",
-              requestId,
-            );
+            return unprocessable("title must not be empty");
+          }
+
+          if ([...body.title.trim()].length > 200) {
+            return unprocessable("title is too long");
+          }
+
+          if (body.body.trim().length === 0) {
+            return unprocessable("body must not be empty");
           }
 
           const timestamp = new Date().toISOString();
@@ -357,16 +482,15 @@ export function createCampusAgoraMockFetch(
             authorId: viewer.id,
             title: body.title.trim(),
             body: body.body,
-            summary: typeof body.summary === "string" ? body.summary : undefined,
-            tags: Array.isArray(body.tags)
-              ? [...new Set(body.tags.map((tag) => String(tag).trim().toLowerCase()))]
-              : [],
-            category: (body.category as KnowledgeEntry["category"]) ?? "other",
+            summary:
+              typeof body.summary === "string"
+                ? body.summary.trim() || undefined
+                : undefined,
+            tags,
+            category: body.category as KnowledgeEntry["category"],
             applicableAudience:
-              (body.applicableAudience as KnowledgeEntry["applicableAudience"]) ??
-              "all_students",
-            sourceKind:
-              (body.sourceKind as KnowledgeEntry["sourceKind"]) ?? "unspecified",
+              body.applicableAudience as KnowledgeEntry["applicableAudience"],
+            sourceKind: body.sourceKind as KnowledgeEntry["sourceKind"],
             sourceReference:
               typeof body.sourceReference === "string"
                 ? body.sourceReference
@@ -412,8 +536,8 @@ export function createCampusAgoraMockFetch(
             return unauthorized();
           }
 
-          if (entry.authorId !== viewer.id && viewer.systemRole === "student") {
-            return errorResponse(403, "forbidden", "Not allowed", requestId);
+          if (!mayEdit(viewer, entry)) {
+            return forbidden();
           }
 
           const body = (await request.json().catch(() => undefined)) as
@@ -421,30 +545,86 @@ export function createCampusAgoraMockFetch(
             | undefined;
 
           if (!body) {
-            return errorResponse(
-              400,
-              "invalid_request_body",
-              "Request body is invalid",
-              requestId,
-            );
+            return badBody();
+          }
+
+          for (const [field, allowed] of [
+            ["category", CATEGORIES],
+            ["applicableAudience", AUDIENCES],
+            ["sourceKind", SOURCE_KINDS],
+          ] as const) {
+            if (body[field] !== undefined && !allowed.includes(String(body[field]))) {
+              return badBody();
+            }
+          }
+
+          const patchedTags =
+            body.tags === undefined ? entry.tags : normalizeTags(body.tags);
+
+          if (patchedTags === "invalid") {
+            return unprocessable("tags are invalid");
+          }
+
+          if (typeof body.title === "string" && body.title.trim().length === 0) {
+            return unprocessable("title must not be empty");
+          }
+
+          if (typeof body.body === "string" && body.body.trim().length === 0) {
+            return unprocessable("body must not be empty");
           }
 
           const timestamp = new Date().toISOString();
+          // The server merges all eight fields; dropping any of them here
+          // would make the editor's save path untestable.
           const updated: KnowledgeEntry = {
             ...entry,
             title: typeof body.title === "string" ? body.title.trim() : entry.title,
             body: typeof body.body === "string" ? body.body : entry.body,
+            summary:
+              typeof body.summary === "string"
+                ? body.summary.trim() || undefined
+                : entry.summary,
+            tags: patchedTags,
+            category: (body.category as KnowledgeEntry["category"]) ?? entry.category,
+            applicableAudience:
+              (body.applicableAudience as KnowledgeEntry["applicableAudience"]) ??
+              entry.applicableAudience,
+            sourceKind:
+              (body.sourceKind as KnowledgeEntry["sourceKind"]) ?? entry.sourceKind,
+            sourceReference:
+              typeof body.sourceReference === "string"
+                ? body.sourceReference.trim() || undefined
+                : entry.sourceReference,
             updatedAt: timestamp,
-            // A published entry gains a revision; a draft updates in place.
+            // Only a private draft is rewritten in place.
             currentRevision:
-              entry.moderationStatus === "published"
-                ? entry.currentRevision + 1
-                : entry.currentRevision,
+              entry.moderationStatus === "draft"
+                ? entry.currentRevision
+                : entry.currentRevision + 1,
           };
           entries.set(entry.id, updated);
 
-          if (entry.moderationStatus === "published") {
-            revisions.get(entry.id)?.push({
+          const history = revisions.get(entry.id) ?? [];
+
+          if (entry.moderationStatus === "draft") {
+            // Rewrite the draft's single revision rather than leaving the
+            // original text behind for publication to expose.
+            const current = history.find(
+              (snapshot) => snapshot.revision === updated.currentRevision,
+            );
+
+            if (current) {
+              Object.assign(current, {
+                editorId: viewer.id,
+                title: updated.title,
+                body: updated.body,
+                summary: updated.summary,
+                tags: updated.tags,
+                createdAt: timestamp,
+              });
+            }
+          } else {
+            history.push({
               id: mockUuid(),
               revision: updated.currentRevision,
               editorId: viewer.id,
@@ -486,6 +666,14 @@ export function createCampusAgoraMockFetch(
 
         const target = body.status as ModerationStatus;
 
+        if (!ALLOWED_TRANSITIONS.some(([, to]) => to === target)) {
+          return badBody();
+        }
+
+        if (!mayChangeStatus(viewer, entry, target)) {
+          return forbidden();
+        }
+
         if (!canTransition(entry.moderationStatus, target)) {
           return errorResponse(
             409,
@@ -525,17 +713,14 @@ export function createCampusAgoraMockFetch(
 
         const correction = corrections.get(correctionId);
 
-        if (!correction) {
+        // Scoped to the entry in the path: resolving a correction that belongs
+        // elsewhere must not succeed, and must not disclose its contents.
+        if (!correction || correction.postId !== entry.id) {
           return notFound();
         }
 
-        const canResolve =
-          entry.authorId === viewer.id ||
-          viewer.systemRole === "moderator" ||
-          viewer.systemRole === "admin";
-
-        if (!canResolve) {
-          return errorResponse(403, "forbidden", "Not allowed", requestId);
+        if (!mayEdit(viewer, entry)) {
+          return forbidden();
         }
 
         // Idempotent: the first resolution wins, matching the server.
@@ -552,6 +737,16 @@ export function createCampusAgoraMockFetch(
       }
 
       if (request.method === "GET") {
+        if (!viewer) {
+          return unauthorized();
+        }
+
+        // privacy.md limits reporter identities to people with a stake in the
+        // entry.
+        if (!mayEdit(viewer, entry)) {
+          return forbidden();
+        }
+
         return jsonResponse(
           {
             items: [...corrections.values()].filter(

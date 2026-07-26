@@ -29,6 +29,11 @@ regenerate the contract and review the diff before committing.
 - Protected endpoints declare the `bearerAuth` security scheme
   (`Authorization: Bearer <session token>`); missing or invalid tokens answer
   `401` with error code `unauthorized`.
+- Some reads take optional auth: no token means guest, and a token widens the
+  result set rather than being required. Those declare
+  `security: [{}, {"bearerAuth": []}]`. A token that is present but unusable is
+  still `401` — an expired session must not silently degrade to a guest view
+  and hide the reader's own drafts.
 - Business endpoints live under `/api/v1`.
 - `/healthz`, `/readyz`, and OpenAPI tooling stay outside `/api/v1`.
 - Errors use flat `ErrorResponse` fields:
@@ -47,8 +52,12 @@ regenerate the contract and review the diff before committing.
 - Error codes use stable `snake_case` names.
 - Resource paths use plural nouns and kebab-case. Auth action endpoints
   (`/api/v1/auth/mock-login`, `/api/v1/auth/logout`) are the documented
-  exception: an authentication action does not model as a CRUD resource. New
-  exceptions must be recorded here.
+  exception: an authentication action does not model as a CRUD resource. The
+  archive adds two more: `POST /api/v1/knowledge-entries/{id}/status` is a
+  state transition rather than a sub-resource, and
+  `.../corrections/{correctionId}/resolve` is an explicit close action that
+  deliberately is not a `PATCH` of the correction. New exceptions must be
+  recorded here.
 - Frontend code imports API types through `@campus-agora/api-client`, not by
   reaching into generated internals.
 

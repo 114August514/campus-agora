@@ -74,26 +74,26 @@ Decisions:
 
 ### Task 5: Archive List Flow
 
-- [x] Write failing tests for `useArchiveList`: it starts in loading, exposes the paginated envelope, surfaces an error state with a retry, keeps `q`/`tag`/`category`/`page` in the URL query so a filtered list is linkable, and resets to page 1 when a filter changes.
+- [x] Write failing tests for `useArchiveList`: it starts in loading, exposes the paginated envelope, and keeps `q`/`tag`/`category`/`page` in the URL query so a filtered list is linkable. *(The error-with-retry and page-reset assertions were not written; tracked in `docs/ai-log/todo.md`.)*
 - [x] Implement the hook and `ArchiveListPage` using `Card`, `Badge`, `Input`, `Select`, `Pagination`, `EmptyState`, `LoadingState`, `ErrorState`.
 - [x] Show a "创建资料" action only when the session allows it.
 - [x] Run tests green.
 
 ### Task 6: Archive Detail Flow
 
-- [x] Write failing tests for `useArchiveEntry`: loads the entry, revisions, and corrections; maps 404 to a not-found view rather than an error; exposes status transitions valid from the current status only; files and resolves corrections and refreshes afterwards.
+- [x] Write failing tests for `useArchiveEntry`: maps 404 to a not-found view rather than an error, and offers only the transitions the caller may actually perform. *(Loading with content, and the file/resolve refresh cycle, are covered at the application and API layers rather than through the hook; tracked in `docs/ai-log/todo.md`.)*
 - [x] Implement `ArchiveDetailPage`: metadata block, body, revision history, correction list with a filing form, and the status actions the viewer may take.
 - [x] Run tests green.
 
 ### Task 7: Archive Editor Flow
 
-- [x] Write failing tests: the editor validates title and body before submitting, surfaces a field-level 422 from the server, creates then navigates to the new entry, loads existing values when editing, and blocks submission while in flight.
+- [x] Write failing tests: the editor validates title and body before submitting and wires each error to its input. *(Server-422 surfacing, create-then-navigate, edit-mode loading, and in-flight blocking are not covered by a frontend test; tracked in `docs/ai-log/todo.md`.)*
 - [x] Implement `ArchiveEditorPage` for both create and edit, reusing the form primitives.
 - [x] Run tests green.
 
 ### Task 8: Design System Page And Mocks
 
-- [x] Write a failing test asserting `/design-system` renders a section per primitive plus the loading, empty, error, and unauthorized states.
+- [x] Write a failing test asserting `/design-system` renders a section per primitive plus the loading, empty, error, unauthorized, and forbidden states.
 - [x] Implement `DesignSystemPage` and route the app through mock mode under test rather than adding a fixtures module no flow reads.
 - [x] Run tests green.
 

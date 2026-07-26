@@ -150,7 +150,7 @@ select {
 }
 
 h1 {
-  font-size: 24px;
+  font-size: var(--font-size-xxl);
   margin: 0 0 var(--space-3);
 }
 
@@ -183,7 +183,7 @@ h1 {
 .button-primary {
   background: var(--color-primary);
   border-color: var(--color-primary);
-  color: #ffffff;
+  color: var(--color-on-primary);
 }
 
 .button-primary:hover {
@@ -289,7 +289,7 @@ h1 {
 .button-danger {
   background: var(--color-danger);
   border-color: var(--color-danger);
-  color: var(--color-surface);
+  color: var(--color-on-primary);
 }
 
 .button-danger:hover {
@@ -402,4 +402,133 @@ h1 {
 .paginationStatus {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
+}
+
+/* Archive flow layout. Composition and spacing only — colour, size, radius,
+   and timing all come from tokens. */
+.pageHeader {
+  align-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  justify-content: space-between;
+}
+
+.pageHeader h1 {
+  margin: 0 0 var(--space-2);
+}
+
+.filters {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.entryList {
+  display: grid;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.entryHead {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+}
+
+.entryHead h1 {
+  margin: 0;
+}
+
+.entryTitle {
+  color: var(--color-text);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  margin: 0;
+}
+
+a.entryTitle:hover {
+  color: var(--color-primary);
+}
+
+.entryMeta {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  margin: 0;
+}
+
+.entryTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.tag {
+  background: var(--color-hover);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+/* Entry bodies are prose typed into a textarea. Without pre-wrap every
+   paragraph break collapses and the product's core content becomes one
+   unreadable block. */
+.entryBody {
+  line-height: 1.8;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.detailSection {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.detailSection h2 {
+  font-size: var(--font-size-lg);
+  margin: 0;
+}
+
+.backLink {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
+.backLink:hover {
+  color: var(--color-text);
+}
+
+.correctionForm,
+.editorForm {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 720px;
+}
+
+.navLink {
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  display: block;
+  padding: var(--space-2) var(--space-3);
+}
+
+.navLink:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.navLink-active {
+  background: var(--color-selected);
+  color: var(--color-text);
+  font-weight: 500;
 }

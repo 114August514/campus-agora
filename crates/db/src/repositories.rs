@@ -7,8 +7,8 @@ use campus_agora_application::ports::{
     ArchiveEntryRecord, ArchiveEntryUpdate, ArchiveListQuery, ArchiveRepository,
     AuditEventRepository, CorrectionRecord, CorrectionRepository, MembershipSummary,
     NewArchiveEntry, NewAuditEvent, NewCorrection, NewSession, NewUser, OrganizationRecord,
-    OrganizationRepository, Page, RevisionRecord, SessionRecord, SessionRepository, UserRecord,
-    UserRepository, VisibilityScope,
+    OrganizationRepository, Page, RevisionRecord, RevisionWrite, SessionRecord, SessionRepository,
+    UserRecord, UserRepository, VisibilityScope,
 };
 use campus_agora_domain::{
     ApplicableAudience, ArchiveCategory, AuthProviderKind, CorrectionId, ModerationStatus,
@@ -486,8 +486,9 @@ impl ArchiveRepository for PgAuthStore {
         // $3 q, $4 tag, $5 category; NULL means "no filter" so one statement
         // serves every combination without string-building user input in.
         let filters = "
-            and ($3::text is null or p.title ilike '%' || $3 || '%'
-                 or coalesce(p.summary, '') ilike '%' || $3 || '%')
+            and ($3::text is null
+                 or p.title ilike '%' || $3 || '%' escape '\\'
+                 or coalesce(p.summary, '') ilike '%' || $3 || '%' escape '\\')
             and ($4::text is null or $4 = any(p.tags))
             and ($5::text is null or p.category = $5)
         ";
@@ -546,10 +547,10 @@ impl ArchiveRepository for PgAuthStore {
     ) -> Result<ArchiveEntryRecord, ApplicationError> {
         let mut tx = self.pool.begin().await.map_err(internal)?;
 
-        let revision = update
-            .new_revision
-            .as_ref()
-            .map(|revision| revision.revision);
+        let appended = match &update.revision {
+            RevisionWrite::Append(revision) => Some(revision.revision),
+            RevisionWrite::RewriteCurrent { .. } => None,
+        };
         let row = sqlx::query(
             r#"
             update posts
@@ -573,33 +574,65 @@ impl ArchiveRepository for PgAuthStore {
         .bind(update.source_kind.as_str())
         .bind(&update.source_reference)
         .bind(update.updated_at)
-        .bind(revision)
+        .bind(appended)
         .fetch_optional(&mut *tx)
         .await
         .map_err(internal)?
         .ok_or_else(|| ApplicationError::NotFound("archive entry not found".to_owned()))?;
 
-        if let Some(new_revision) = update.new_revision {
-            sqlx::query(
-                r#"
-                insert into post_revisions (post_id, revision, editor_id, title, body, summary, tags, created_at)
-                values ($1, $2, $3, $4, $5, $6, $7, $8)
-                "#,
-            )
-            .bind(id.into_uuid())
-            .bind(new_revision.revision)
-            .bind(new_revision.editor_id.into_uuid())
-            .bind(&update.title)
-            .bind(&update.body)
-            .bind(&update.summary)
-            .bind(&update.tags)
-            .bind(update.updated_at)
-            .execute(&mut *tx)
-            .await
-            .map_err(internal)?;
-        }
-
         let record = archive_from_row(&row)?;
+
+        match update.revision {
+            RevisionWrite::Append(new_revision) => {
+                sqlx::query(
+                    r#"
+                    insert into post_revisions (post_id, revision, editor_id, title, body, summary, tags, created_at)
+                    values ($1, $2, $3, $4, $5, $6, $7, $8)
+                    "#,
+                )
+                .bind(id.into_uuid())
+                .bind(new_revision.revision)
+                .bind(new_revision.editor_id.into_uuid())
+                .bind(&update.title)
+                .bind(&update.body)
+                .bind(&update.summary)
+                .bind(&update.tags)
+                .bind(update.updated_at)
+                .execute(&mut *tx)
+                .await
+                .map_err(|error| match &error {
+                    sqlx::Error::Database(db_error) if db_error.is_unique_violation() => {
+                        // Two concurrent edits computed the same next revision.
+                        // That is a conflict for the loser, not a server fault.
+                        ApplicationError::Conflict(
+                            "the entry was revised concurrently; reload and retry".to_owned(),
+                        )
+                    }
+                    _ => internal(error),
+                })?;
+            }
+            RevisionWrite::RewriteCurrent { editor_id } => {
+                sqlx::query(
+                    r#"
+                    update post_revisions
+                    set editor_id = $3, title = $4, body = $5, summary = $6, tags = $7,
+                        created_at = $8
+                    where post_id = $1 and revision = $2
+                    "#,
+                )
+                .bind(id.into_uuid())
+                .bind(record.current_revision)
+                .bind(editor_id.into_uuid())
+                .bind(&update.title)
+                .bind(&update.body)
+                .bind(&update.summary)
+                .bind(&update.tags)
+                .bind(update.updated_at)
+                .execute(&mut *tx)
+                .await
+                .map_err(internal)?;
+            }
+        }
         tx.commit().await.map_err(internal)?;
 
         Ok(record)
@@ -608,14 +641,18 @@ impl ArchiveRepository for PgAuthStore {
     async fn set_status(
         &self,
         id: PostId,
+        expected: ModerationStatus,
         status: ModerationStatus,
         updated_at: DateTime<Utc>,
     ) -> Result<ArchiveEntryRecord, ApplicationError> {
+        // `moderation_status = $4` makes this a compare-and-swap. Without it an
+        // author looping publish requests could overwrite a moderator's reject
+        // that landed between the permission check and this write.
         let row = sqlx::query(
             r#"
             update posts
             set moderation_status = $2, updated_at = $3
-            where id = $1 and deleted_at is null
+            where id = $1 and deleted_at is null and moderation_status = $4
             returning id, author_id, title, body, summary, tags, category,
                 applicable_audience, source_kind, source_reference, moderation_status,
                 current_revision, created_at, updated_at
@@ -624,10 +661,15 @@ impl ArchiveRepository for PgAuthStore {
         .bind(id.into_uuid())
         .bind(status.as_str())
         .bind(updated_at)
+        .bind(expected.as_str())
         .fetch_optional(&self.pool)
         .await
         .map_err(internal)?
-        .ok_or_else(|| ApplicationError::NotFound("archive entry not found".to_owned()))?;
+        .ok_or_else(|| {
+            ApplicationError::Conflict(
+                "the entry changed state concurrently; reload and retry".to_owned(),
+            )
+        })?;
 
         archive_from_row(&row)
     }
@@ -712,6 +754,7 @@ impl CorrectionRepository for PgAuthStore {
     /// row instead of a 404.
     async fn resolve(
         &self,
+        post_id: PostId,
         id: CorrectionId,
         resolved_by: UserId,
         resolved_at: DateTime<Utc>,
@@ -719,25 +762,30 @@ impl CorrectionRepository for PgAuthStore {
         sqlx::query(
             r#"
             update post_corrections
-            set resolved_at = $2, resolved_by = $3
-            where id = $1 and resolved_at is null
+            set resolved_at = $3, resolved_by = $4
+            where id = $1 and post_id = $2 and resolved_at is null
             "#,
         )
         .bind(id.into_uuid())
+        .bind(post_id.into_uuid())
         .bind(resolved_at)
         .bind(resolved_by.into_uuid())
         .execute(&self.pool)
         .await
         .map_err(internal)?;
 
+        // The read-back carries the same predicate, so a correction that
+        // belongs to another entry is reported as missing rather than having
+        // its contents disclosed.
         let row = sqlx::query(
             r#"
             select id, post_id, reporter_id, message, created_at, resolved_at, resolved_by
             from post_corrections
-            where id = $1
+            where id = $1 and post_id = $2
             "#,
         )
         .bind(id.into_uuid())
+        .bind(post_id.into_uuid())
         .fetch_optional(&self.pool)
         .await
         .map_err(internal)?

@@ -1,6 +1,7 @@
 import type {
   ApplicableAudience,
   ArchiveCategory,
+  CurrentUser,
   ModerationStatus,
   SourceKind,
 } from "@campus-agora/api-client";
@@ -67,6 +68,19 @@ export const TRANSITION_LABELS: Record<ModerationStatus, string> = {
   rejected: "退回",
 };
 
-export function allowedTransitions(from: ModerationStatus): ModerationStatus[] {
-  return TRANSITIONS[from];
+/// Mirrors the backend rule: an author may publish their own draft, and every
+/// other transition is a moderation action. Offering a button the server will
+/// reject is worse than offering none.
+export function allowedTransitions(
+  from: ModerationStatus,
+  viewer: { systemRole: CurrentUser["systemRole"]; isAuthor: boolean },
+): ModerationStatus[] {
+  const isModeration =
+    viewer.systemRole === "moderator" || viewer.systemRole === "admin";
+
+  if (isModeration) {
+    return TRANSITIONS[from];
+  }
+
+  return from === "draft" && viewer.isAuthor ? ["published"] : [];
 }

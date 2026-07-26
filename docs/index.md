@@ -1,5 +1,7 @@
 # Campus Agora 文档
 
+Last updated: 2026-07-26
+
 Campus Agora 是面向校园公共讨论与知识归档的平台。当前仓库阶段是 M2，重点是知识归档核心。
 
 ## 快速入口

@@ -561,8 +561,8 @@ pub fn openapi_document() -> Value {
                 "get": {
                     "operationId": "listKnowledgeEntries",
                     "summary": "List visible knowledge entries",
-                    "description": "Guests see published entries. An authenticated caller also sees entries they authored or maintain; moderators and admins see all.",
-                    "security": [],
+                    "description": "Optional auth: guests see published entries, an authenticated caller also sees entries they authored or maintain, and moderators and admins see all. A token that is present but unusable is still 401.",
+                    "security": [{}, { "bearerAuth": [] }],
                     "parameters": [
                         { "name": "q", "in": "query", "required": false, "schema": { "type": "string" }, "description": "Case-insensitive match over title and summary." },
                         { "name": "tag", "in": "query", "required": false, "schema": { "type": "string" } },
@@ -650,14 +650,6 @@ pub fn openapi_document() -> Value {
                                 }
                             }
                         },
-                        "403": {
-                            "description": "Not allowed to create entries",
-                            "content": {
-                                "application/json": {
-                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
-                                }
-                            }
-                        },
                         "422": {
                             "description": "Field validation failed",
                             "content": {
@@ -688,8 +680,8 @@ pub fn openapi_document() -> Value {
                 "get": {
                     "operationId": "getKnowledgeEntry",
                     "summary": "Read one knowledge entry",
-                    "description": "An entry the caller may not see returns 404 rather than 403, so a private draft does not leak its existence.",
-                    "security": [],
+                    "description": "Optional auth; the token widens what is visible. An entry the caller may not see returns 404 rather than 403, so a private draft does not leak its existence.",
+                    "security": [{}, { "bearerAuth": [] }],
                     "responses": {
                         "200": {
                             "description": "The knowledge entry",
@@ -897,7 +889,8 @@ pub fn openapi_document() -> Value {
                 "get": {
                     "operationId": "listKnowledgeEntryRevisions",
                     "summary": "Read the version history of an entry",
-                    "security": [],
+                    "description": "Optional auth; the token widens what is visible.",
+                    "security": [{}, { "bearerAuth": [] }],
                     "responses": {
                         "200": {
                             "description": "Revisions ordered oldest first",
@@ -953,7 +946,8 @@ pub fn openapi_document() -> Value {
                 "get": {
                     "operationId": "listKnowledgeEntryCorrections",
                     "summary": "List corrections filed against an entry",
-                    "security": [],
+                    "description": "Restricted to the entry author, its maintainers, moderators, and admins, because a correction names its reporter.",
+                    "security": [{ "bearerAuth": [] }],
                     "responses": {
                         "200": {
                             "description": "Corrections ordered oldest first",
@@ -972,7 +966,15 @@ pub fn openapi_document() -> Value {
                             }
                         },
                         "401": {
-                            "description": "Invalid or expired session token",
+                            "description": "Authentication required",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }
+                                }
+                            }
+                        },
+                        "403": {
+                            "description": "No stake in this entry",
                             "content": {
                                 "application/json": {
                                     "schema": { "$ref": "#/components/schemas/ApiErrorResponse" }

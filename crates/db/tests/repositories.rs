@@ -4,7 +4,8 @@ use std::sync::Arc;
 use campus_agora_application::ports::{
     ArchiveEntryUpdate, ArchiveListQuery, ArchiveRepository, AuditEventRepository,
     CorrectionRepository, NewArchiveEntry, NewAuditEvent, NewCorrection, NewRevision, NewSession,
-    NewUser, OrganizationRepository, SessionRepository, UserRepository, VisibilityScope,
+    NewUser, OrganizationRepository, RevisionWrite, SessionRepository, UserRepository,
+    VisibilityScope,
 };
 use campus_agora_application::ApplicationError;
 use campus_agora_db::{PgAuthStore, MIGRATIONS_DIR};
@@ -338,9 +339,15 @@ async fn pg_archive_repository_enforces_visibility_and_versioning() {
     .is_some());
 
     // Publishing makes it public; updating then writes revision 2 atomically.
-    ArchiveRepository::set_status(store.as_ref(), entry.id, ModerationStatus::Published, now)
-        .await
-        .expect("publish");
+    ArchiveRepository::set_status(
+        store.as_ref(),
+        entry.id,
+        ModerationStatus::Draft,
+        ModerationStatus::Published,
+        now,
+    )
+    .await
+    .expect("publish");
     assert!(
         ArchiveRepository::find_visible(store.as_ref(), entry.id, VisibilityScope::Public)
             .await
@@ -361,7 +368,7 @@ async fn pg_archive_repository_enforces_visibility_and_versioning() {
             source_kind: SourceKind::OfficialAnnouncement,
             source_reference: Some("https://example.test".to_owned()),
             updated_at: now + Duration::minutes(1),
-            new_revision: Some(NewRevision {
+            revision: RevisionWrite::Append(NewRevision {
                 revision: 2,
                 editor_id: author.id,
             }),
@@ -430,11 +437,18 @@ async fn pg_archive_repository_enforces_visibility_and_versioning() {
     assert!(correction.resolved_at.is_none());
 
     let first_resolution = now + Duration::minutes(2);
-    CorrectionRepository::resolve(store.as_ref(), correction.id, author.id, first_resolution)
-        .await
-        .expect("resolve correction");
+    CorrectionRepository::resolve(
+        store.as_ref(),
+        entry.id,
+        correction.id,
+        author.id,
+        first_resolution,
+    )
+    .await
+    .expect("resolve correction");
     let repeat = CorrectionRepository::resolve(
         store.as_ref(),
+        entry.id,
         correction.id,
         stranger.id,
         now + Duration::minutes(3),

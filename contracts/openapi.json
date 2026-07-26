@@ -704,7 +704,7 @@
     },
     "/api/v1/knowledge-entries": {
       "get": {
-        "description": "Guests see published entries. An authenticated caller also sees entries they authored or maintain; moderators and admins see all.",
+        "description": "Optional auth: guests see published entries, an authenticated caller also sees entries they authored or maintain, and moderators and admins see all. A token that is present but unusable is still 401.",
         "operationId": "listKnowledgeEntries",
         "parameters": [
           {
@@ -803,7 +803,12 @@
             "description": "Unexpected server error"
           }
         },
-        "security": [],
+        "security": [
+          {},
+          {
+            "bearerAuth": []
+          }
+        ],
         "summary": "List visible knowledge entries"
       },
       "post": {
@@ -849,16 +854,6 @@
             },
             "description": "Authentication required"
           },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Not allowed to create entries"
-          },
           "422": {
             "content": {
               "application/json": {
@@ -890,7 +885,7 @@
     },
     "/api/v1/knowledge-entries/{id}": {
       "get": {
-        "description": "An entry the caller may not see returns 404 rather than 403, so a private draft does not leak its existence.",
+        "description": "Optional auth; the token widens what is visible. An entry the caller may not see returns 404 rather than 403, so a private draft does not leak its existence.",
         "operationId": "getKnowledgeEntry",
         "responses": {
           "200": {
@@ -944,7 +939,12 @@
             "description": "Unexpected server error"
           }
         },
-        "security": [],
+        "security": [
+          {},
+          {
+            "bearerAuth": []
+          }
+        ],
         "summary": "Read one knowledge entry"
       },
       "parameters": [
@@ -1053,6 +1053,7 @@
     },
     "/api/v1/knowledge-entries/{id}/corrections": {
       "get": {
+        "description": "Restricted to the entry author, its maintainers, moderators, and admins, because a correction names its reporter.",
         "operationId": "listKnowledgeEntryCorrections",
         "responses": {
           "200": {
@@ -1083,7 +1084,17 @@
                 }
               }
             },
-            "description": "Invalid or expired session token"
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "No stake in this entry"
           },
           "404": {
             "content": {
@@ -1106,7 +1117,11 @@
             "description": "Unexpected server error"
           }
         },
-        "security": [],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "summary": "List corrections filed against an entry"
       },
       "parameters": [
@@ -1309,6 +1324,7 @@
     },
     "/api/v1/knowledge-entries/{id}/revisions": {
       "get": {
+        "description": "Optional auth; the token widens what is visible.",
         "operationId": "listKnowledgeEntryRevisions",
         "responses": {
           "200": {
@@ -1362,7 +1378,12 @@
             "description": "Unexpected server error"
           }
         },
-        "security": [],
+        "security": [
+          {},
+          {
+            "bearerAuth": []
+          }
+        ],
         "summary": "Read the version history of an entry"
       },
       "parameters": [

@@ -16,8 +16,8 @@ use crate::ports::{
     ArchiveEntryRecord, ArchiveEntryUpdate, ArchiveListQuery, ArchiveRepository,
     AuditEventRepository, CorrectionRecord, CorrectionRepository, MembershipSummary,
     NewArchiveEntry, NewAuditEvent, NewCorrection, NewSession, NewUser, OrganizationRecord,
-    OrganizationRepository, Page, RevisionRecord, SessionRecord, SessionRepository, UserRecord,
-    UserRepository, VisibilityScope,
+    OrganizationRepository, Page, RevisionRecord, RevisionWrite, SessionRecord, SessionRepository,
+    UserRecord, UserRepository, VisibilityScope,
 };
 
 #[derive(Default)]
@@ -382,30 +382,50 @@ impl ArchiveRepository for InMemoryAuthStore {
         entry.source_reference = update.source_reference;
         entry.updated_at = update.updated_at;
 
-        if let Some(revision) = update.new_revision {
-            entry.current_revision = revision.revision;
-            let snapshot = RevisionRecord {
-                id: RevisionId::from_uuid(Uuid::new_v4()),
-                post_id: id,
-                revision: revision.revision,
-                editor_id: revision.editor_id,
-                title: update.title,
-                body: update.body,
-                summary: update.summary,
-                tags: update.tags,
-                created_at: update.updated_at,
-            };
-            let updated = entry.clone();
-            state.revisions.push(snapshot);
-            return Ok(updated);
-        }
+        match update.revision {
+            RevisionWrite::Append(revision) => {
+                entry.current_revision = revision.revision;
+                let snapshot = RevisionRecord {
+                    id: RevisionId::from_uuid(Uuid::new_v4()),
+                    post_id: id,
+                    revision: revision.revision,
+                    editor_id: revision.editor_id,
+                    title: update.title,
+                    body: update.body,
+                    summary: update.summary,
+                    tags: update.tags,
+                    created_at: update.updated_at,
+                };
+                let updated = entry.clone();
+                state.revisions.push(snapshot);
+                Ok(updated)
+            }
+            RevisionWrite::RewriteCurrent { editor_id } => {
+                let current = entry.current_revision;
+                let updated = entry.clone();
 
-        Ok(entry.clone())
+                if let Some(snapshot) = state
+                    .revisions
+                    .iter_mut()
+                    .find(|snapshot| snapshot.post_id == id && snapshot.revision == current)
+                {
+                    snapshot.editor_id = editor_id;
+                    snapshot.title = update.title;
+                    snapshot.body = update.body;
+                    snapshot.summary = update.summary;
+                    snapshot.tags = update.tags;
+                    snapshot.created_at = update.updated_at;
+                }
+
+                Ok(updated)
+            }
+        }
     }
 
     async fn set_status(
         &self,
         id: PostId,
+        expected: ModerationStatus,
         status: ModerationStatus,
         updated_at: DateTime<Utc>,
     ) -> Result<ArchiveEntryRecord, ApplicationError> {
@@ -416,6 +436,13 @@ impl ArchiveRepository for InMemoryAuthStore {
             .iter_mut()
             .find(|entry| entry.id == id)
             .ok_or_else(|| ApplicationError::NotFound("archive entry not found".to_owned()))?;
+
+        if entry.moderation_status != expected {
+            return Err(ApplicationError::Conflict(
+                "the entry changed state concurrently; reload and retry".to_owned(),
+            ));
+        }
+
         entry.moderation_status = status;
         entry.updated_at = updated_at;
 
@@ -483,6 +510,7 @@ impl CorrectionRepository for InMemoryAuthStore {
     /// concurrent resolve cannot rewrite who closed the report.
     async fn resolve(
         &self,
+        post_id: PostId,
         id: CorrectionId,
         resolved_by: UserId,
         resolved_at: DateTime<Utc>,
@@ -492,7 +520,7 @@ impl CorrectionRepository for InMemoryAuthStore {
         let correction = state
             .corrections
             .iter_mut()
-            .find(|correction| correction.id == id)
+            .find(|correction| correction.id == id && correction.post_id == post_id)
             .ok_or_else(|| ApplicationError::NotFound("correction not found".to_owned()))?;
 
         if correction.resolved_at.is_none() {

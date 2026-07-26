@@ -11,6 +11,9 @@
   --color-primary: #8aa8ff;
   --color-primary-hover: #a4bbff;
   --color-primary-active: #cad7ff;
+  /* The dark primary is a light blue, so on-primary text must be dark to
+     stay readable; white on it measures about 2.3:1. */
+  --color-on-primary: #111318;
   --color-success: #6cd39a;
   --color-warning: #e5b567;
   --color-info: #85c2ea;

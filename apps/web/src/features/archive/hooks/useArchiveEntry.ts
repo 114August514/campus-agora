@@ -24,9 +24,11 @@ export type ArchiveEntryState =
 export interface ArchiveEntryController {
   state: ArchiveEntryState;
   reload: () => void;
-  changeStatus: (status: ModerationStatus) => Promise<void>;
-  fileCorrection: (message: string) => Promise<void>;
-  resolveCorrection: (correctionId: string) => Promise<void>;
+  /// Each resolves to whether the action succeeded, so callers can keep the
+  /// user's input when it did not.
+  changeStatus: (status: ModerationStatus) => Promise<boolean>;
+  fileCorrection: (message: string) => Promise<boolean>;
+  resolveCorrection: (correctionId: string) => Promise<boolean>;
   actionError: string | undefined;
   actionPending: boolean;
 }
@@ -69,7 +71,15 @@ export function useArchiveEntry(id: string): ArchiveEntryController {
           return;
         }
 
-        setState({ status: "error", message: "资料加载失败，请重试。" });
+        // A 401 means the session expired; retrying without logging in again
+        // can never succeed, so say what actually helps.
+        setState({
+          status: "error",
+          message:
+            error instanceof CampusAgoraApiError && error.status === 401
+              ? "登录状态已失效，请重新登录后重试。"
+              : "资料加载失败，请重试。",
+        });
       });
   }, [id]);
 
@@ -78,19 +88,21 @@ export function useArchiveEntry(id: string): ArchiveEntryController {
   }, [load]);
 
   const runAction = useCallback(
-    async (action: () => Promise<unknown>, fallback: string) => {
+    async (action: () => Promise<unknown>, fallback: string): Promise<boolean> => {
       setActionPending(true);
       setActionError(undefined);
 
       try {
         await action();
         load();
+        return true;
       } catch (error) {
         setActionError(
           error instanceof CampusAgoraApiError
             ? messageForActionError(error, fallback)
             : fallback,
         );
+        return false;
       } finally {
         setActionPending(false);
       }

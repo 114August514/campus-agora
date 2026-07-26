@@ -20,12 +20,17 @@ use crate::errors::ApplicationError;
 use crate::ports::{
     ArchiveEntryRecord, ArchiveEntryUpdate, ArchiveListQuery, ArchiveRepository,
     AuditEventRepository, CorrectionRecord, CorrectionRepository, NewArchiveEntry, NewAuditEvent,
-    NewCorrection, NewRevision, Page, RevisionRecord, VisibilityScope,
+    NewCorrection, NewRevision, Page, RevisionRecord, RevisionWrite, VisibilityScope,
 };
 
 pub const MAX_PAGE_SIZE: u32 = 100;
 const DEFAULT_PAGE_SIZE: u32 = 20;
 const CORRECTION_MESSAGE_MAX_CHARS: usize = 1000;
+const SEARCH_QUERY_MAX_CHARS: usize = 100;
+/// Revisions and corrections are returned whole rather than paged, so both
+/// need a ceiling: an entry edited thousands of times must not turn a single
+/// read into an unbounded response.
+const MAX_COLLECTION_ITEMS: usize = 200;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NewArchiveEntryInput {
@@ -174,10 +179,10 @@ impl ArchiveService {
                 // Tags are stored normalized, so the filter must normalize too
                 // or an uppercase query would never match.
                 tag: query.tag.map(|tag| tag.trim().to_lowercase()),
-                q: query
-                    .q
-                    .map(|q| q.trim().to_owned())
-                    .filter(|q| !q.is_empty()),
+                // Bounded and escaped: `%` and `_` are LIKE wildcards, and an
+                // unbounded pattern on an unauthenticated endpoint is a cheap
+                // way to force a scan over every visible row.
+                q: normalized_query(query.q)?,
                 category: query.category,
                 page: query.page,
                 page_size: query.page_size,
@@ -191,7 +196,15 @@ impl ArchiveService {
         id: PostId,
     ) -> Result<Vec<RevisionRecord>, ApplicationError> {
         self.visible_entry(user, id).await?;
-        self.entries.list_revisions(id).await
+
+        let mut revisions = self.entries.list_revisions(id).await?;
+        // Newest history is the useful end, so an over-long list drops its
+        // oldest entries rather than truncating what readers came for.
+        if revisions.len() > MAX_COLLECTION_ITEMS {
+            revisions.drain(..revisions.len() - MAX_COLLECTION_ITEMS);
+        }
+
+        Ok(revisions)
     }
 
     pub async fn update_entry(
@@ -223,13 +236,18 @@ impl ArchiveService {
             None => entry.tags.clone(),
         };
 
-        // A published entry has history worth preserving, so every edit lands
-        // as a new revision. A draft has none, so it updates in place.
-        let new_revision =
-            (entry.moderation_status == ModerationStatus::Published).then(|| NewRevision {
+        // Only a draft is private and unreviewed, so only a draft may be
+        // rewritten in place. Once an entry has been published — including
+        // while it is hidden or rejected pending review — every edit gets its
+        // own revision, so a moderator can see what changed after they acted.
+        let revision = if entry.moderation_status == ModerationStatus::Draft {
+            RevisionWrite::RewriteCurrent { editor_id: user.id }
+        } else {
+            RevisionWrite::Append(NewRevision {
                 revision: entry.current_revision + 1,
                 editor_id: user.id,
-            });
+            })
+        };
 
         let updated = self
             .entries
@@ -250,18 +268,22 @@ impl ArchiveService {
                         None => entry.source_reference.clone(),
                     },
                     updated_at: now,
-                    new_revision,
+                    revision,
                 },
             )
             .await?;
 
-        if updated.moderation_status == ModerationStatus::Published {
+        // A private draft changes nothing anyone else has seen. Anything else
+        // has been visible or reviewed, so the edit is auditable — including an
+        // edit made while the entry is hidden pending moderation.
+        if entry.moderation_status != ModerationStatus::Draft {
             self.record_audit(
                 "archive.revised",
                 user,
                 id,
                 serde_json::json!({
                     "revision": updated.current_revision,
+                    "status": updated.moderation_status.as_str(),
                     "requestId": audit.request_id,
                 }),
             )
@@ -300,7 +322,10 @@ impl ArchiveService {
             )));
         }
 
-        let updated = self.entries.set_status(id, target, now).await?;
+        let updated = self
+            .entries
+            .set_status(id, entry.moderation_status, target, now)
+            .await?;
 
         self.record_audit(
             "archive.status_changed",
@@ -366,13 +391,31 @@ impl ArchiveService {
         Ok(correction)
     }
 
+    /// Restricted rather than public: a correction names its reporter and is
+    /// inherently accusatory, so `docs/product/privacy.md` limits the listing
+    /// to the entry author, its maintainers, moderators, and admins. Filing
+    /// one stays open to any authenticated reader.
     pub async fn list_corrections(
         &self,
         user: Option<&CurrentUser>,
         id: PostId,
     ) -> Result<Vec<CorrectionRecord>, ApplicationError> {
-        self.visible_entry(user, id).await?;
-        self.corrections.list_for_post(id).await
+        let Some(user) = user else {
+            return Err(ApplicationError::Unauthorized);
+        };
+
+        let entry = self.visible_entry(Some(user), id).await?;
+        require(
+            Action::ResolveCorrection,
+            &self.actor_for(user, &entry).await?,
+        )?;
+
+        let mut corrections = self.corrections.list_for_post(id).await?;
+        if corrections.len() > MAX_COLLECTION_ITEMS {
+            corrections.truncate(MAX_COLLECTION_ITEMS);
+        }
+
+        Ok(corrections)
     }
 
     pub async fn resolve_correction(
@@ -391,7 +434,7 @@ impl ArchiveService {
 
         let correction = self
             .corrections
-            .resolve(correction_id, user.id, now)
+            .resolve(id, correction_id, user.id, now)
             .await?;
 
         self.record_audit(
@@ -457,6 +500,33 @@ impl ArchiveService {
             })
             .await
     }
+}
+
+/// Trims, bounds, and escapes a search term. LIKE metacharacters are escaped
+/// so `%` searches for a literal percent sign instead of matching every row.
+fn normalized_query(input: Option<String>) -> Result<Option<String>, ApplicationError> {
+    let Some(value) = input else {
+        return Ok(None);
+    };
+
+    let trimmed = value.trim();
+
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    if trimmed.chars().count() > SEARCH_QUERY_MAX_CHARS {
+        return Err(ApplicationError::Validation(format!(
+            "q must be at most {SEARCH_QUERY_MAX_CHARS} characters"
+        )));
+    }
+
+    Ok(Some(
+        trimmed
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_"),
+    ))
 }
 
 fn scope_for(user: Option<&CurrentUser>) -> VisibilityScope {

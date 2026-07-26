@@ -63,6 +63,12 @@ export function ArchiveDetailPage({ session }: { session: SessionController }) {
       viewer.systemRole === "moderator" ||
       viewer.systemRole === "admin");
   const canResolve = canEdit;
+  const transitions = viewer
+    ? allowedTransitions(entry.moderationStatus, {
+        systemRole: viewer.systemRole,
+        isAuthor: viewer.id === entry.authorId,
+      })
+    : [];
 
   return (
     <section className="workspace">
@@ -106,9 +112,9 @@ export function ArchiveDetailPage({ session }: { session: SessionController }) {
         <p className="entryMeta">来源引用：{entry.sourceReference}</p>
       )}
 
-      {canEdit && allowedTransitions(entry.moderationStatus).length > 0 && (
+      {transitions.length > 0 && (
         <div className="actions">
-          {allowedTransitions(entry.moderationStatus).map((status) => (
+          {transitions.map((status) => (
             <Button
               key={status}
               variant={status === "published" ? "primary" : "secondary"}
@@ -174,9 +180,13 @@ export function ArchiveDetailPage({ session }: { session: SessionController }) {
             onSubmit={(event) => {
               event.preventDefault();
               if (correction.trim()) {
-                void controller
-                  .fileCorrection(correction)
-                  .then(() => setCorrection(""));
+                // Only clear on success: a failed submission that wiped the
+                // textarea would lose what the reader typed.
+                void controller.fileCorrection(correction).then((ok) => {
+                  if (ok) {
+                    setCorrection("");
+                  }
+                });
               }
             }}
           >

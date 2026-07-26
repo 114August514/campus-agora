@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { CurrentUser } from "@campus-agora/api-client";
+import { allowedTransitions } from "../src/features/archive/labels";
 import {
   visibleNavigationItems,
   visibleNavigationLabels,
@@ -41,5 +42,33 @@ describe("shell navigation visibility", () => {
     for (const item of visibleNavigationItems(user("admin"))) {
       expect(item.to.startsWith("/")).toBe(true);
     }
+  });
+});
+
+describe("archive status transitions offered in the UI", () => {
+  const student = { systemRole: "student" as const, isAuthor: true };
+  const stranger = { systemRole: "student" as const, isAuthor: false };
+  const moderator = { systemRole: "moderator" as const, isAuthor: false };
+
+  test("an author is offered only publishing their own draft", () => {
+    // The backend maps every other transition to ChangeModerationState, which
+    // a student never holds, so showing those buttons guarantees a 403.
+    expect(allowedTransitions("draft", student)).toEqual(["published"]);
+    expect(allowedTransitions("published", student)).toEqual([]);
+    expect(allowedTransitions("hidden", student)).toEqual([]);
+    expect(allowedTransitions("rejected", student)).toEqual([]);
+  });
+
+  test("a non-author student is offered nothing", () => {
+    for (const status of ["draft", "published", "hidden", "rejected"] as const) {
+      expect(allowedTransitions(status, stranger)).toEqual([]);
+    }
+  });
+
+  test("a moderator gets the full state machine", () => {
+    expect(allowedTransitions("draft", moderator)).toEqual(["published", "rejected"]);
+    expect(allowedTransitions("published", moderator)).toEqual(["hidden"]);
+    expect(allowedTransitions("hidden", moderator)).toEqual(["published"]);
+    expect(allowedTransitions("rejected", moderator)).toEqual(["draft"]);
   });
 });

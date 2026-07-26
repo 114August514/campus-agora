@@ -1,5 +1,7 @@
 # Quality Gates
 
+Last updated: 2026-07-26
+
 M0.1 turns the repository skeleton into a checked engineering loop.
 
 ## Required Local Checks

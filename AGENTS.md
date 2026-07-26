@@ -17,6 +17,8 @@ Current implementation scope:
 - M0.2 adds governance docs and risk boundaries.
 - M1 adds the auth provider abstraction, mock campus login, session lifecycle,
   permission policy, and the guarded frontend shell.
+- M2 adds the knowledge archive: entry lifecycle, revisions, corrections,
+  SQL-enforced visibility, and the archive UI on a shared component system.
 
 `docs/product/milestones.md` is the authoritative status; update it in the same
 change whenever a milestone's meaning or state moves.

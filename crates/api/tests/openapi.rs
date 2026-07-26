@@ -93,11 +93,13 @@ fn openapi_document_covers_m2_archive_endpoints() {
     let json: Value = serde_json::to_value(document).unwrap();
     let bearer = serde_json::json!([{ "bearerAuth": [] }]);
 
+    let optional_auth = serde_json::json!([{}, { "bearerAuth": [] }]);
     let collection = &json["paths"]["/api/v1/knowledge-entries"];
     assert_eq!(collection["get"]["operationId"], "listKnowledgeEntries");
-    // Reading is public; visibility narrows the result set rather than
-    // rejecting the request.
-    assert_eq!(collection["get"]["security"], serde_json::json!([]));
+    // Optional auth rather than public: a guest may read, but a generated
+    // client must still send the token so an authenticated reader sees their
+    // own drafts.
+    assert_eq!(collection["get"]["security"], optional_auth);
     assert_eq!(collection["post"]["operationId"], "createKnowledgeEntry");
     assert_eq!(collection["post"]["security"], bearer);
     assert!(collection["post"]["responses"]["201"].is_object());
@@ -124,6 +126,17 @@ fn openapi_document_covers_m2_archive_endpoints() {
         "fileKnowledgeEntryCorrection"
     );
     assert_eq!(corrections["post"]["security"], bearer);
+    // Reporter identities are restricted, so the listing requires a session.
+    assert_eq!(corrections["get"]["security"], bearer);
+    assert!(corrections["get"]["responses"]["403"].is_object());
+    assert_eq!(
+        json["paths"]["/api/v1/knowledge-entries/{id}"]["get"]["security"],
+        optional_auth
+    );
+    assert_eq!(
+        json["paths"]["/api/v1/knowledge-entries/{id}/revisions"]["get"]["security"],
+        optional_auth
+    );
     assert_eq!(
         json["paths"]["/api/v1/knowledge-entries/{id}/corrections/{correctionId}/resolve"]["post"]
             ["operationId"],

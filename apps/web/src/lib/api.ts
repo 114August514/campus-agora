@@ -13,6 +13,14 @@ const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8080";
  * never depends on a live server.
  */
 function shouldUseMock(): boolean {
+  // Never in a production build, whatever the environment says. A stray
+  // VITE_API_MOCK in a CI or build shell would otherwise ship a bundle that
+  // never contacts the server and presents fabricated content — including a
+  // fabricated admin login — as real.
+  if (import.meta.env.PROD) {
+    return false;
+  }
+
   if (import.meta.env.VITE_API_MOCK === "true") {
     return true;
   }

@@ -500,6 +500,97 @@ async fn corrections_are_filed_by_readers_and_resolved_by_the_author() {
 }
 
 #[tokio::test]
+async fn correction_listing_requires_a_stake_in_the_entry() {
+    // A correction names its reporter, so docs/product/privacy.md limits the
+    // listing to the entry author, maintainers, moderators, and admins.
+    let app = app();
+    let author = login(&app, "student").await;
+    let bystander = login(&app, "organization_member").await;
+
+    let entry = create_entry(&app, &author, "受关注条目").await;
+    let id = entry["id"].as_str().unwrap().to_owned();
+    publish(&app, &author, &id).await;
+
+    let anonymous = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/knowledge-entries/{id}/corrections"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
+
+    let unrelated = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/api/v1/knowledge-entries/{id}/corrections"),
+            &bystander,
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(unrelated.status(), StatusCode::FORBIDDEN);
+
+    let owner = app
+        .oneshot(authed(
+            "GET",
+            &format!("/api/v1/knowledge-entries/{id}/corrections"),
+            &author,
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(owner.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn a_correction_cannot_be_resolved_through_an_unrelated_entry() {
+    // The caller is authorized against the entry in the path, so a correction
+    // that belongs elsewhere must not be reachable — resolving it would also
+    // disclose its contents.
+    let app = app();
+    let victim = login(&app, "student").await;
+    let attacker = login(&app, "organization_member").await;
+
+    let victim_entry = create_entry(&app, &victim, "受害条目").await;
+    let victim_id = victim_entry["id"].as_str().unwrap().to_owned();
+    publish(&app, &victim, &victim_id).await;
+
+    let filed = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/v1/knowledge-entries/{victim_id}/corrections"),
+            &attacker,
+            Some(json!({ "message": "内容已过期" })),
+        ))
+        .await
+        .unwrap();
+    let correction_id = response_json(filed).await["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let attacker_entry = create_entry(&app, &attacker, "攻击者条目").await;
+    let attacker_id = attacker_entry["id"].as_str().unwrap();
+
+    let response = app
+        .oneshot(authed(
+            "POST",
+            &format!("/api/v1/knowledge-entries/{attacker_id}/corrections/{correction_id}/resolve"),
+            &attacker,
+            None,
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn filing_a_correction_requires_authentication() {
     let app = app();
     let author = login(&app, "student").await;

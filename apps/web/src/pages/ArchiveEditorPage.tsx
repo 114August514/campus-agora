@@ -131,12 +131,15 @@ export function ArchiveEditorPage() {
     const payload = {
       title: form.title,
       body: form.body,
-      summary: form.summary || undefined,
+      // Trimmed rather than omitted: omitting means "unchanged" to the API,
+      // so an emptied field would silently keep its old value. The server
+      // normalizes a blank string to absent.
+      summary: form.summary.trim(),
       tags,
       category: form.category,
       applicableAudience: form.applicableAudience,
       sourceKind: form.sourceKind,
-      sourceReference: form.sourceReference || undefined,
+      sourceReference: form.sourceReference.trim(),
     };
 
     try {

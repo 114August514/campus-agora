@@ -28,6 +28,23 @@ export interface ArchiveListController {
   reload: () => void;
 }
 
+function messageForLoadError(error: unknown): string {
+  if (!(error instanceof CampusAgoraApiError)) {
+    return "资料加载失败，请重试。";
+  }
+
+  if (error.code === "network_error") {
+    return "无法连接后端服务，请确认 API 已启动后重试。";
+  }
+
+  // Retrying a 401 without logging in again can never succeed.
+  if (error.status === 401) {
+    return "登录状态已失效，请重新登录后重试。";
+  }
+
+  return "资料加载失败，请重试。";
+}
+
 function readFilters(params: URLSearchParams): ArchiveFilters {
   const page = Number(params.get("page") ?? "1");
 
@@ -72,10 +89,7 @@ export function useArchiveList(): ArchiveListController {
 
         setState({
           status: "error",
-          message:
-            error instanceof CampusAgoraApiError && error.code === "network_error"
-              ? "无法连接后端服务，请确认 API 已启动后重试。"
-              : "资料加载失败，请重试。",
+          message: messageForLoadError(error),
         });
       });
   }, [q, tag, category, page]);
