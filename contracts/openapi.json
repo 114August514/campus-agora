@@ -12,6 +12,24 @@
         },
         "type": "object"
       },
+      "AiDraft": {
+        "properties": {
+          "entry": {
+            "$ref": "#/components/schemas/KnowledgeEntry"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/ArchiveSource"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "entry",
+          "sources"
+        ],
+        "type": "object"
+      },
       "ApiErrorResponse": {
         "properties": {
           "code": {
@@ -142,6 +160,69 @@
         ],
         "type": "object"
       },
+      "ContentReport": {
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/ReportCategory"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "postId": {
+            "type": "string"
+          },
+          "reporterId": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resolvedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resolvedBy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "postId",
+          "reporterId",
+          "category",
+          "message",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "ContentReportCollection": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ContentReport"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "Correction": {
         "properties": {
           "createdAt": {
@@ -246,6 +327,25 @@
           "category",
           "applicableAudience",
           "sourceKind"
+        ],
+        "type": "object"
+      },
+      "CreateReportRequest": {
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/ReportCategory"
+          },
+          "message": {
+            "type": "string"
+          },
+          "postId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "postId",
+          "category",
+          "message"
         ],
         "type": "object"
       },
@@ -428,6 +528,12 @@
       },
       "KnowledgeEntry": {
         "properties": {
+          "aiProvider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "applicableAudience": {
             "$ref": "#/components/schemas/ApplicableAudience"
           },
@@ -549,13 +655,57 @@
         ],
         "type": "object"
       },
+      "ModerationQueueItem": {
+        "properties": {
+          "authorId": {
+            "type": "string"
+          },
+          "moderationStatus": {
+            "$ref": "#/components/schemas/ModerationStatus"
+          },
+          "openReportCount": {
+            "type": "integer"
+          },
+          "postId": {
+            "type": "string"
+          },
+          "postKind": {
+            "enum": [
+              "knowledge",
+              "discussion"
+            ],
+            "type": "string"
+          },
+          "queuedAt": {
+            "type": "string"
+          },
+          "risk": {
+            "$ref": "#/components/schemas/RiskLevel"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "postId",
+          "postKind",
+          "title",
+          "authorId",
+          "moderationStatus",
+          "risk",
+          "openReportCount",
+          "queuedAt"
+        ],
+        "type": "object"
+      },
       "ModerationStatus": {
         "enum": [
           "draft",
           "published",
           "hidden",
           "rejected",
-          "archived"
+          "archived",
+          "pending_review"
         ],
         "type": "string"
       },
@@ -613,6 +763,36 @@
           "items": {
             "items": {
               "$ref": "#/components/schemas/KnowledgeEntry"
+            },
+            "type": "array"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "pageSize": {
+            "type": "integer"
+          },
+          "totalItems": {
+            "type": "integer"
+          },
+          "totalPages": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "totalItems",
+          "totalPages"
+        ],
+        "type": "object"
+      },
+      "PaginatedModerationQueue": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModerationQueueItem"
             },
             "type": "array"
           },
@@ -748,6 +928,35 @@
         ],
         "type": "object"
       },
+      "ReportCategory": {
+        "enum": [
+          "spam",
+          "harassment",
+          "privacy_violation",
+          "misinformation",
+          "illegal",
+          "other"
+        ],
+        "type": "string"
+      },
+      "ReportResolution": {
+        "enum": [
+          "upheld",
+          "dismissed"
+        ],
+        "type": "string"
+      },
+      "ResolveReportRequest": {
+        "properties": {
+          "resolution": {
+            "$ref": "#/components/schemas/ReportResolution"
+          }
+        },
+        "required": [
+          "resolution"
+        ],
+        "type": "object"
+      },
       "Revision": {
         "properties": {
           "body": {
@@ -802,6 +1011,15 @@
           "items"
         ],
         "type": "object"
+      },
+      "RiskLevel": {
+        "enum": [
+          "none",
+          "low",
+          "medium",
+          "high"
+        ],
+        "type": "string"
       },
       "SessionResponse": {
         "properties": {
@@ -1370,6 +1588,110 @@
           }
         ],
         "summary": "Mark or clear the accepted answer"
+      }
+    },
+    "/api/v1/discussions/{id}/ai-draft": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "id",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Always produces a draft owned by the caller. There is no path by which the result can publish itself; publishing runs the ordinary human flow.",
+        "operationId": "generateAiDraft",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiDraft"
+                }
+              }
+            },
+            "description": "The drafted entry and its recorded sources"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed id"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "AI drafting is disabled, or guests cannot draft"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Discussion missing or not visible to the caller"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Only a publicly readable discussion can be drafted from"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "The discussion has no usable source text"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Unexpected server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Compose an archive draft from a public discussion"
       }
     },
     "/api/v1/discussions/{id}/derived-entries": {
@@ -2738,6 +3060,384 @@
         },
         "security": [],
         "summary": "Application metadata and capability flags"
+      }
+    },
+    "/api/v1/moderation/content/{id}/reports": {
+      "get": {
+        "operationId": "listContentReports",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentReportCollection"
+                }
+              }
+            },
+            "description": "The reports"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed id"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Reporter identities are restricted to moderation"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Content missing or not visible to the caller"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Unexpected server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The reports filed against one piece of content"
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "id",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/api/v1/moderation/content/{id}/reports/{reportId}/resolve": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "id",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "in": "path",
+          "name": "reportId",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "resolveContentReport",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentReport"
+                }
+              }
+            },
+            "description": "The resolved report"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed body or id, or an unknown resolution"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Only moderators and admins may review reports"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "The report does not belong to this content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Unexpected server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Record a finding on one report"
+      }
+    },
+    "/api/v1/moderation/queue": {
+      "get": {
+        "operationId": "listModerationQueue",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedModerationQueue"
+                }
+              }
+            },
+            "description": "A page of queued content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Query parameters are invalid"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Only moderators and admins may review reports"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "page or pageSize is out of range"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Unexpected server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Content awaiting a moderation decision, worst first"
+      }
+    },
+    "/api/v1/reports": {
+      "post": {
+        "operationId": "createReport",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentReport"
+                }
+              }
+            },
+            "description": "The filed report"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed body, or an unknown category"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Guests cannot report"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Content missing or not visible to the caller"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "You already have an open report on this content"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "The report message failed validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Unexpected server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Report content of any kind"
       }
     },
     "/healthz": {

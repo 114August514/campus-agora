@@ -41,6 +41,7 @@ export const STATUS_LABELS: Record<ModerationStatus, string> = {
   hidden: "已隐藏",
   rejected: "已退回",
   archived: "已归档",
+  pending_review: "待审核",
 };
 
 function toOptions<T extends string>(labels: Record<T, string>) {
@@ -56,11 +57,14 @@ export const SOURCE_OPTIONS = toOptions(SOURCE_LABELS);
 
 /** Transitions the state machine allows, mirroring crates/domain. */
 const TRANSITIONS: Record<ModerationStatus, ModerationStatus[]> = {
-  draft: ["published", "rejected"],
-  published: ["hidden", "archived"],
+  draft: ["published", "rejected", "pending_review"],
+  published: ["hidden", "archived", "pending_review"],
   hidden: ["published"],
   rejected: ["draft"],
   archived: ["published", "hidden"],
+  // A reviewer decides. Archiving or hiding content still under review would
+  // settle the open question by side effect.
+  pending_review: ["published", "rejected", "draft"],
 };
 
 export const TRANSITION_LABELS: Record<ModerationStatus, string> = {
@@ -69,6 +73,7 @@ export const TRANSITION_LABELS: Record<ModerationStatus, string> = {
   hidden: "隐藏",
   rejected: "退回",
   archived: "归档",
+  pending_review: "提交审核",
 };
 
 /// Mirrors the backend rule: an author may publish their own draft, and every
@@ -92,8 +97,10 @@ export function allowedTransitions(
   // An author may publish their own draft, and may retire or restore their own
   // published work — archiving leaves it readable and is reversible. Hiding
   // stays a moderation action.
+  // An author may publish their own draft, or ask for review instead when
+  // they are unsure. Submitting asks for less than publishing does.
   if (from === "draft") {
-    return ["published"];
+    return ["published", "pending_review"];
   }
 
   if (from === "published") {

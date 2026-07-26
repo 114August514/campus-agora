@@ -17,6 +17,45 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-27 - Deliver M4.1 moderation and AI drafting backend
+
+- Result: Abuse reports, a moderation queue, audit coverage, and an AI drafting
+  interface whose output is source-backed, editable, and structurally unable to
+  publish itself. M4 stays 进行中 — M4.2 is the frontend.
+- Changed:
+  - Domain: `ModerationStatus::PendingReview` and its transitions,
+    `ReportCategory`, `RiskLevel`, `risk_for`, report-message validation, and
+    the `ReportContent` / `ReviewReports` actions.
+  - Application: `ModerationService` over a post lookup that spans both content
+    kinds; `ArchiveDraftProvider` with `DeterministicDraftProvider` and
+    `AiDraftService`.
+  - Database: `content_reports` with a partial unique index over open reports,
+    two CHECKs pairing a resolution with its resolver, `posts.ai_provider`, and
+    the widened status constraint.
+  - API: `POST /api/v1/reports`, the `/api/v1/moderation/*` namespace, and
+    `POST /api/v1/discussions/{id}/ai-draft`, with an `openapi_m4` fragment.
+  - Client and mock: `moderation.ts`, and mock routes that go through the
+    shared `LIMITS`/`boundedText` helpers rather than validating by hand.
+- Verification: full gate set with a disposable PostgreSQL 16 container. Rust
+  219, apps/web 65, api-client 68. The migration was applied to a real database
+  and its constraint and indexes inspected before the repositories were written.
+- Decisions:
+  - **Reporting changes no status.** The plan said otherwise; writing the test
+    exposed that it would hand every authenticated user a takedown control, and
+    that hiding the content would stop anyone else corroborating or disputing
+    it. There is now exactly one path by which what the campus sees changes.
+  - Review is opt-in. Making every publish require review would reverse a rule
+    M2 and M3 pinned with tests and change what the product is.
+  - `ReviewReports` is `Deny` for `Author` and `Maintainer` deliberately.
+    Columns combine as a union of grants, so those cells are what stop the
+    accused closing the case about themselves.
+  - The drafting port receives text and returns text. It holds no repository,
+    so the exit criterion is met by there being no publish path to review.
+  - The provider is deterministic: a draft that changed on every request would
+    make human review harder, not easier.
+- Follow-up: M4.2 frontend — the queue UI, the report flow, and the AI-draft
+  review surface.
+
 ### 2026-07-27 - Resolve M3 review findings
 
 - Result: Five independent review lenses over the M3 diff produced 25 findings;

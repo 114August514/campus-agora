@@ -281,17 +281,21 @@ fn openapi_document_covers_m3_discussion_endpoints() {
     }
 }
 
-/// M3 adds `archived`. The generated client's union has to grow with it, or
-/// the frontend cannot represent a state the server will send.
+/// M3 adds `archived`. The generated client's union has to grow with every
+/// status the server can send, or the frontend cannot represent one of them.
+/// The exact set is asserted by the M4 test; this one pins that the milestone's
+/// own addition survived.
 #[test]
 fn moderation_status_enum_includes_archived() {
     let document = campus_agora_api::openapi_document();
     let json: Value = serde_json::to_value(document).unwrap();
 
-    assert_eq!(
-        json["components"]["schemas"]["ModerationStatus"]["enum"],
-        serde_json::json!(["draft", "published", "hidden", "rejected", "archived"])
-    );
+    let statuses = json["components"]["schemas"]["ModerationStatus"]["enum"]
+        .as_array()
+        .expect("ModerationStatus is an enum")
+        .clone();
+
+    assert!(statuses.contains(&serde_json::json!("archived")));
 }
 
 /// The contract has to declare every status a handler can actually return.
@@ -337,6 +341,33 @@ fn every_operation_declares_exactly_the_statuses_it_returns() {
             "post",
             &["200", "400", "401", "403", "404", "409", "500"],
         ),
+        // M4. Added to the same table so an omission fails here rather than
+        // being noticed by a reviewer, which is what caught M3's missing 422.
+        (
+            "/api/v1/reports",
+            "post",
+            &["201", "400", "401", "403", "404", "409", "422", "500"],
+        ),
+        (
+            "/api/v1/moderation/queue",
+            "get",
+            &["200", "400", "401", "403", "422", "500"],
+        ),
+        (
+            "/api/v1/moderation/content/{id}/reports",
+            "get",
+            &["200", "400", "401", "403", "404", "500"],
+        ),
+        (
+            "/api/v1/moderation/content/{id}/reports/{reportId}/resolve",
+            "post",
+            &["200", "400", "401", "403", "404", "500"],
+        ),
+        (
+            "/api/v1/discussions/{id}/ai-draft",
+            "post",
+            &["201", "400", "401", "403", "404", "409", "422", "500"],
+        ),
     ];
 
     for (path, method, expected) in expectations {
@@ -355,4 +386,67 @@ fn every_operation_declares_exactly_the_statuses_it_returns() {
             "{method} {path} declares the wrong status set"
         );
     }
+}
+
+#[test]
+fn openapi_document_covers_m4_moderation_and_drafting() {
+    let document = campus_agora_api::openapi_document();
+    let json: Value = serde_json::to_value(document).unwrap();
+    let bearer = serde_json::json!([{ "bearerAuth": [] }]);
+
+    // Every M4 endpoint is moderation or a write, so none of them is a
+    // public read: all require a session.
+    for (path, method) in [
+        ("/api/v1/reports", "post"),
+        ("/api/v1/moderation/queue", "get"),
+        ("/api/v1/moderation/content/{id}/reports", "get"),
+        (
+            "/api/v1/moderation/content/{id}/reports/{reportId}/resolve",
+            "post",
+        ),
+        ("/api/v1/discussions/{id}/ai-draft", "post"),
+    ] {
+        assert_eq!(
+            json["paths"][path][method]["security"], bearer,
+            "{method} {path} must require a session"
+        );
+    }
+
+    let schemas = &json["components"]["schemas"];
+    for name in [
+        "ReportCategory",
+        "RiskLevel",
+        "ReportResolution",
+        "CreateReportRequest",
+        "ResolveReportRequest",
+        "ContentReport",
+        "ContentReportCollection",
+        "ModerationQueueItem",
+        "PaginatedModerationQueue",
+        "AiDraft",
+    ] {
+        assert!(schemas[name].is_object(), "{name} schema must exist");
+    }
+
+    assert_eq!(
+        schemas["ModerationStatus"]["enum"],
+        serde_json::json!([
+            "draft",
+            "published",
+            "hidden",
+            "rejected",
+            "archived",
+            "pending_review"
+        ])
+    );
+
+    // An entry has to be able to say a provider composed it.
+    assert!(schemas["KnowledgeEntry"]["properties"]["aiProvider"].is_object());
+
+    // The drafting response carries an entry and its sources, and nothing that
+    // could ask for publication.
+    assert_eq!(
+        schemas["AiDraft"]["required"],
+        serde_json::json!(["entry", "sources"])
+    );
 }

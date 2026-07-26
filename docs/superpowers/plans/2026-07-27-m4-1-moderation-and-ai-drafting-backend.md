@@ -1,6 +1,6 @@
 # M4.1 Moderation And AI Drafting Backend Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Deliver the backend half of M4: a moderation queue fed by abuse reports and review submissions, audit events for every moderation action, and an AI archive-drafting interface whose output is source-backed, editable, and incapable of publishing itself.
 
@@ -18,6 +18,14 @@ Same precedent as M0, M2, and M3: the backend closes the governance loop, the fr
 - **M4.2 (follow-up plan):** the moderation queue UI, the report flow, and the AI-draft review surface.
 
 ## Three Decisions That Shape Everything Else
+
+**Revised during implementation.** The plan said a report would move published
+content into `pending_review`. Writing the test for it exposed why that is
+wrong: reporting would hand every authenticated user a takedown control, and
+because the content then becomes invisible to everyone but its author, the
+first report would also be the last — nobody else could corroborate or dispute
+it. Reporting now changes no status at all. Content is queued; a moderator
+decides. `pending_review` keeps only its author-submission entrance.
 
 **1. Review is opt-in and report-driven, not mandatory.** The original spec lists `PendingReview`, which M2 and M3 never implemented. Making every publish require review would reverse a rule M2 and M3 already established and pinned with tests — an author may publish their own draft — and would turn a campus wiki into a moderated-first forum. That is a product change, not a milestone. So `pending_review` has exactly two entrances:
 
@@ -62,53 +70,58 @@ Further decisions:
 
 ### Task 1: Plan And Milestone Registration
 
-- [ ] Save this plan; add the M4.1 todo entry.
-- [ ] Set M4 to 进行中 in `docs/product/milestones.md` and record the two-phase split and the three decisions above.
+- [x] Save this plan; add the M4.1 todo entry.
+- [x] Set M4 to 进行中 in `docs/product/milestones.md` and record the two-phase split and the three decisions above.
 
 ### Task 2: Domain — Review State, Report Categories, Risk
 
-- [ ] Write failing tests in `crates/domain/tests/moderation.rs`: `pending_review` round-trips and is **not** publicly visible; `Draft → PendingReview`, `PendingReview → Published`, `PendingReview → Rejected`, `PendingReview → Draft` are allowed; `PendingReview → Archived` and `PendingReview → Hidden` are not; `Published → PendingReview` is allowed (a report re-opens review) while `Archived → PendingReview` is not; every `ReportCategory` round-trips; `risk_for` returns the highest severity among the given categories and `RiskLevel::None` for an empty slice; report-message validation trims, bounds, and counts characters.
-- [ ] Implement, and confirm `ModerationStatus::ALL` still forces the SQL predicate to be re-derived.
-- [ ] Run `cargo test -p campus_agora_domain` green.
+- [x] Write failing tests in `crates/domain/tests/moderation.rs`: `pending_review` round-trips and is **not** publicly visible; `Draft → PendingReview`, `PendingReview → Published`, `PendingReview → Rejected`, `PendingReview → Draft` are allowed; `PendingReview → Archived` and `PendingReview → Hidden` are not; `Published → PendingReview` is allowed (a report re-opens review) while `Archived → PendingReview` is not; every `ReportCategory` round-trips; `risk_for` returns the highest severity among the given categories and `RiskLevel::None` for an empty slice; report-message validation trims, bounds, and counts characters.
+- [x] Implement, and confirm `ModerationStatus::ALL` still forces the SQL predicate to be re-derived.
+- [x] Run `cargo test -p campus_agora_domain` green.
 
 ### Task 3: Domain — Permissions
 
-- [ ] Write failing tests in `crates/domain/tests/permissions.rs`: `ReportContent` requires only a session, because anyone affected must be able to report; `ReviewReports` is Allow for `Moderator` and `Admin` and Deny for everyone else *including* the content's `Author` — a report may be about the author, so the author must not be the one who reviews it.
-- [ ] Extend `Action` and the matrix; update the table in `docs/architecture/auth-permissions.md` in the same change.
-- [ ] Run `cargo test -p campus_agora_domain` green.
+- [x] Write failing tests in `crates/domain/tests/permissions.rs`: `ReportContent` requires only a session, because anyone affected must be able to report; `ReviewReports` is Allow for `Moderator` and `Admin` and Deny for everyone else *including* the content's `Author` — a report may be about the author, so the author must not be the one who reviews it.
+- [x] Extend `Action` and the matrix; update the table in `docs/architecture/auth-permissions.md` in the same change.
+- [x] Run `cargo test -p campus_agora_domain` green.
 
 ### Task 4: Application — Reports, Queue, Audit
 
-- [ ] Write failing tests in `crates/application/tests/moderation_service.rs`: a guest cannot report; reporting invisible content is `NotFound`; a second open report from the same reporter on the same content is `Conflict`; two different reporters may both report; reporting published content moves it to `pending_review` and the queue shows it; the queue is moderator-only and `Forbidden` for an author or a stranger; queue items carry the derived risk and the open-report count; resolving a report records who resolved it and why; dismissing every report on an item returns it to its prior status; a moderator publishing or rejecting from the queue writes an audit event carrying the report ids that justified it; an author submitting their own draft for review reaches `pending_review` without a report.
-- [ ] Implement ports, in-memory implementations behaviourally identical to PostgreSQL, and `ModerationService`.
-- [ ] Run `cargo test -p campus_agora_application` green.
+- [x] Write failing tests in `crates/application/tests/moderation_service.rs`: a guest cannot report; reporting invisible content is `NotFound`; a second open report from the same reporter is `Conflict` while a different reporter is not; reporting works on either content kind; the queue is moderator-only and `Forbidden` even for the content's author; queue items carry the derived risk and open-report count; the queue orders by risk then age; reporter identities are moderator-only; a report cannot be resolved through an unrelated item; report messages are validated; both actions are audited; an author submitting their own draft reaches `pending_review` with no report behind it. **Two planned assertions were inverted** per the revision above: reporting leaves content published, and a second reporter can still reach it.
+- [x] Implement ports, in-memory implementations behaviourally identical to PostgreSQL, and `ModerationService`.
+- [x] Run `cargo test -p campus_agora_application` green.
 
 ### Task 5: Application — Drafting Port And Deterministic Provider
 
-- [ ] Write failing tests in `crates/application/tests/ai_service.rs`: the provider is deterministic — the same discussion yields the same draft twice; the draft is created as `Draft` owned by the requesting user, never `Published`; every reply the provider drew from is recorded in `archive_sources` with its own author preserved; the accepted answer, when present, is drawn from first; a draft from a non-public discussion is refused with the same rule M3 established; the entry records that it was AI-assisted and which provider produced it; requesting a draft when the capability flag is off is `Forbidden`; a guest is `Forbidden`; the request writes an audit event.
-- [ ] Implement `ArchiveDraftProvider` with a `DeterministicDraftProvider`, and `AiDraftService`. The provider signature returns text and source ids only — it is given no repository handle, so it *cannot* write or publish.
-- [ ] Run `cargo test -p campus_agora_application` green.
+- [x] Write failing tests in `crates/application/tests/ai_service.rs`: the provider is deterministic — the same discussion yields the same draft twice; the draft is created as `Draft` owned by the requesting user, never `Published`; every reply the provider drew from is recorded in `archive_sources` with its own author preserved; the accepted answer, when present, is drawn from first; a draft from a non-public discussion is refused with the same rule M3 established; the entry records that it was AI-assisted and which provider produced it; requesting a draft when the capability flag is off is `Forbidden`; a guest is `Forbidden`; the request writes an audit event.
+- [x] Implement `ArchiveDraftProvider` with a `DeterministicDraftProvider`, and `AiDraftService`. The provider signature returns text and source ids only — it is given no repository handle, so it *cannot* write or publish.
+- [x] Run `cargo test -p campus_agora_application` green.
 
 ### Task 6: Migration And PostgreSQL Repositories
 
-- [ ] Extend `crates/db/tests/migrations.rs`: the migration creates `content_reports` (target post, reporter, category, message, soft-delete columns, resolution columns), a partial unique index making one *open* report per reporter and post, an index for the queue's ordering, and widens the moderation CHECK for `pending_review`; adds `ai_provider` provenance columns to `posts`.
-- [ ] Add the migration and the SQLx repositories, applying and verifying against a disposable PostgreSQL 16 container — the M3 review showed a constraint-name guess whose failure mode is silent.
-- [ ] Extend `crates/db/tests/repositories.rs` (DATABASE_URL-gated) for report insert, the duplicate-open-report conflict, queue ordering by risk then age, resolution, and that a resolved report frees the reporter to file again.
-- [ ] Run `cargo test -p campus_agora_db` with and without `DATABASE_URL`.
+- [x] Extend `crates/db/tests/migrations.rs`: the migration creates `content_reports` (target post, reporter, category, message, soft-delete columns, resolution columns), a partial unique index making one *open* report per reporter and post, an index for the queue's ordering, and widens the moderation CHECK for `pending_review`; adds `ai_provider` provenance columns to `posts`.
+- [x] Add the migration and the SQLx repositories, applying and verifying against a disposable PostgreSQL 16 container — the M3 review showed a constraint-name guess whose failure mode is silent.
+- [x] Extend `crates/db/tests/repositories.rs` (DATABASE_URL-gated) for report insert, the duplicate-open-report conflict, queue ordering by risk then age, resolution, and that a resolved report frees the reporter to file again.
+- [x] Run `cargo test -p campus_agora_db` with and without `DATABASE_URL`.
 
 ### Task 7: API, Contract, Client, Mock
 
-- [ ] Write failing tests in `crates/api/tests/moderation.rs`: report requires auth and returns 201; a duplicate open report is 409; the queue is 403 for a non-moderator and 200 for a moderator; resolving is 404 across items; the AI-draft endpoint is 403 when the flag is off, 201 with the draft and its sources when on, and its response never carries a published entry; malformed ids are 400.
-- [ ] Implement the handlers, wire the routes, and add `crates/api/src/openapi_m4.rs` following the M3 fragment pattern. Extend the exhaustive status-set table in `crates/api/tests/openapi.rs` with every new operation — that table is what caught M3's missing 422.
-- [ ] Regenerate contract and client; implement `packages/api-client/src/moderation.ts`.
-- [ ] Extend the mock with the *same* rules, routing every new write through the shared `LIMITS`/`boundedText` helpers rather than re-implementing validation. Three milestones shipped a divergence because each handler validated by hand; the fourth must not.
-- [ ] Run `bun --cwd packages/api-client test` and `bun run typecheck` green.
+- [x] Write failing tests in `crates/api/tests/moderation.rs`: report requires auth and returns 201 and leaves the content published; a duplicate open report is 409; reporting invisible content is 404; the queue and the per-item reports are 403 for a non-moderator including the author; resolving is 404 across items; the AI-draft endpoint is 403 when the flag is off, 201 with a draft and its sources when on, and 409 on a non-public source; malformed ids and unknown enums are 400; a blank report message is 422.
+- [x] Implement the handlers, wire the routes, and add `crates/api/src/openapi_m4.rs` following the M3 fragment pattern. Extend the exhaustive status-set table in `crates/api/tests/openapi.rs` with every new operation — that table is what caught M3's missing 422.
+- [x] Regenerate contract and client; implement `packages/api-client/src/moderation.ts`.
+- [x] Extend the mock with the *same* rules, routing every new write through the shared `LIMITS`/`boundedText` helpers rather than re-implementing validation. Three milestones shipped a divergence because each handler validated by hand; the fourth must not.
+- [x] Run `bun --cwd packages/api-client test` and `bun run typecheck` green.
 
 ### Task 8: Docs And Verification
 
-- [ ] `docs/architecture/auth-permissions.md`: the two new actions, `pending_review` and its transitions, and why an author cannot review a report about their own content.
-- [ ] `docs/product/privacy.md`: reports in the data inventory, reporter identity visible to moderators only, retention, and the AI-provenance columns.
-- [ ] `docs/operations/security.md`: what a moderation action audits, and an explicit statement that no external AI provider is contacted plus what would have to be documented first.
-- [ ] `docs/architecture/api-contracts.md`: new endpoints and error codes.
-- [ ] Run the full gate set: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` against dockerized PostgreSQL 16, `bun run api:check`, `typecheck`, `lint`, `lint:styles`, `test`, `build`, `ci:docs`, `git diff --check`.
-- [ ] Move M4.1 facts into `docs/ai-log/done.md`. Tick a checkbox only against work that exists, and annotate any step whose delivered shape differs from this plan.
+- [x] `docs/architecture/auth-permissions.md`: the two new actions, `pending_review` and its transitions, and why an author cannot review a report about their own content.
+- [x] `docs/product/privacy.md`: reports in the data inventory, reporter identity visible to moderators only, retention, and the AI-provenance columns.
+- [x] `docs/operations/security.md`: what a moderation action audits, and an explicit statement that no external AI provider is contacted plus what would have to be documented first.
+- [x] `docs/architecture/api-contracts.md`: new endpoints and error codes.
+- [x] Run the full gate set: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` against dockerized PostgreSQL 16, `bun run api:check`, `typecheck`, `lint`, `lint:styles`, `test`, `build`, `ci:docs`, `git diff --check`.
+- [x] Move M4.1 facts into `docs/ai-log/done.md`. Every box above is ticked against work that exists, and the two steps whose delivered shape differs from the plan say so rather than being quietly ticked.
+
+**Not delivered as planned:** the migration test asserts an index named
+`content_reports_open_idx` covering open reports by age rather than "an index
+for the queue's ordering" — the queue sorts by derived risk in Rust, so an
+index on risk is not possible and would not help.

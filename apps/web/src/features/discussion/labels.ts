@@ -12,6 +12,7 @@ export const DISCUSSION_STATUS_LABELS: Record<ModerationStatus, string> = {
   hidden: "已隐藏",
   rejected: "已退回",
   archived: "已归档",
+  pending_review: "待审核",
 };
 
 export const DISCUSSION_STATUS_HINTS: Record<ModerationStatus, string> = {
@@ -20,15 +21,17 @@ export const DISCUSSION_STATUS_HINTS: Record<ModerationStatus, string> = {
   hidden: "已被审核隐藏，仅作者与审核者可见。",
   rejected: "已被退回，可以修改后重新发布。",
   archived: "讨论已结束，内容保留可读，但不再接受新回复。",
+  pending_review: "正在等待审核，期间不公开显示，也不接受新回复。",
 };
 
 /** Transitions the state machine allows, mirroring crates/domain. */
 const TRANSITIONS: Record<ModerationStatus, ModerationStatus[]> = {
-  draft: ["published", "rejected"],
-  published: ["hidden", "archived"],
+  draft: ["published", "rejected", "pending_review"],
+  published: ["hidden", "archived", "pending_review"],
   hidden: ["published"],
   rejected: ["draft"],
   archived: ["published", "hidden"],
+  pending_review: ["published", "rejected", "draft"],
 };
 
 export const DISCUSSION_TRANSITION_LABELS: Record<ModerationStatus, string> = {
@@ -37,6 +40,7 @@ export const DISCUSSION_TRANSITION_LABELS: Record<ModerationStatus, string> = {
   hidden: "隐藏",
   rejected: "退回",
   archived: "结束讨论",
+  pending_review: "提交审核",
 };
 
 /**
@@ -58,7 +62,7 @@ export function allowedDiscussionTransitions(
   }
 
   if (from === "draft") {
-    return ["published"];
+    return ["published", "pending_review"];
   }
 
   if (from === "published") {

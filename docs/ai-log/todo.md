@@ -115,7 +115,7 @@ Keep entries short, dated, and actionable.
 
 - Source: M4 milestone, split into a backend and a frontend phase.
 - Milestone: M4.
-- Status: in progress — M4.1 backend under way, M4.2 frontend not started.
+- Status: in progress — M4.1 backend delivered, M4.2 frontend not started.
 - Acceptance: AI output is traceable, editable, reviewable, and cannot reach
   publication without a human action; every moderation action writes an audit
   event; no third-party provider is contacted, and the boundary is documented.

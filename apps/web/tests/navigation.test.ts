@@ -55,7 +55,12 @@ describe("archive status transitions offered in the UI", () => {
     // Mirrors the backend matrix: publishing a draft and archiving or
     // restoring one's own content are author privileges. Hiding is not, and
     // showing a button the server refuses guarantees a 403.
-    expect(allowedTransitions("draft", student)).toEqual(["published"]);
+    // Submitting for review asks for less than publishing, so an author gets
+    // both — M4 added the second one.
+    expect(allowedTransitions("draft", student)).toEqual([
+      "published",
+      "pending_review",
+    ]);
     expect(allowedTransitions("published", student)).toEqual(["archived"]);
     expect(allowedTransitions("archived", student)).toEqual(["published"]);
     expect(allowedTransitions("hidden", student)).toEqual([]);
@@ -69,14 +74,29 @@ describe("archive status transitions offered in the UI", () => {
       "hidden",
       "rejected",
       "archived",
+      "pending_review",
     ] as const) {
       expect(allowedTransitions(status, stranger)).toEqual([]);
     }
   });
 
   test("a moderator gets the full state machine", () => {
-    expect(allowedTransitions("draft", moderator)).toEqual(["published", "rejected"]);
-    expect(allowedTransitions("published", moderator)).toEqual(["hidden", "archived"]);
+    expect(allowedTransitions("draft", moderator)).toEqual([
+      "published",
+      "rejected",
+      "pending_review",
+    ]);
+    expect(allowedTransitions("published", moderator)).toEqual([
+      "hidden",
+      "archived",
+      "pending_review",
+    ]);
+    // A reviewer decides; archiving or hiding would settle it by side effect.
+    expect(allowedTransitions("pending_review", moderator)).toEqual([
+      "published",
+      "rejected",
+      "draft",
+    ]);
     expect(allowedTransitions("hidden", moderator)).toEqual(["published"]);
     expect(allowedTransitions("rejected", moderator)).toEqual(["draft"]);
     // Archiving must not put content beyond moderation reach.

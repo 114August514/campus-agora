@@ -12,14 +12,16 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use campus_agora_application::ai::{AiDraftConfig, AiDraftService, DeterministicDraftProvider};
 use campus_agora_application::archive::ArchiveService;
 use campus_agora_application::auth::{AuthConfig, AuthService, MockCampusAuthProvider};
 use campus_agora_application::discussion::DiscussionService;
 use campus_agora_application::memory::InMemoryAuthStore;
+use campus_agora_application::moderation::ModerationService;
 use campus_agora_application::ports::{
     ArchiveRepository, ArchiveSourceRepository, AuditEventRepository, CommentRepository,
-    CorrectionRepository, DiscussionRepository, OrganizationRepository, SessionRepository,
-    UserRepository,
+    CorrectionRepository, DiscussionRepository, OrganizationRepository, PostRepository,
+    ReportRepository, SessionRepository, UserRepository,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -30,7 +32,9 @@ use tower_http::trace::TraceLayer;
 mod archive;
 mod auth;
 mod discussion;
+mod moderation;
 mod openapi_m3;
+mod openapi_m4;
 
 pub const API_BOUNDARY: &str = "campus-agora-api";
 const DEFAULT_REQUEST_BODY_LIMIT_BYTES: usize = 1024 * 1024;
@@ -48,6 +52,12 @@ pub struct ApiState {
     pub(crate) auth: Arc<AuthService>,
     pub(crate) archive: Arc<ArchiveService>,
     pub(crate) discussions: Arc<DiscussionService>,
+    pub(crate) moderation: Arc<ModerationService>,
+    pub(crate) ai: Arc<AiDraftService>,
+    /// Set only by `for_tests`, so a test can rebuild a service against the
+    /// same store. Production builds leave it `None` and cannot reach the
+    /// builders that need it.
+    test_store: Option<Arc<InMemoryAuthStore>>,
 }
 
 impl fmt::Debug for ApiState {
@@ -63,57 +73,67 @@ impl ApiState {
     pub fn from_env() -> Self {
         let session_ttl_seconds = session_ttl_seconds_from_env();
 
-        let (readiness, auth, archive, discussions) = match std::env::var("DATABASE_URL") {
-            Ok(database_url) if !database_url.trim().is_empty() => {
-                let pool = campus_agora_db::connect_lazy(&database_url).unwrap_or_else(|_| {
-                    panic!("DATABASE_URL is not a valid PostgreSQL connection string")
-                });
-                let store = Arc::new(campus_agora_db::PgAuthStore::new(pool));
+        let ai_enabled = bool_env("AI_ARCHIVE_ENABLED", false);
 
-                (
-                    ReadinessProbe::Postgres { database_url },
-                    auth_service_with_store(store.clone(), session_ttl_seconds),
-                    archive_service_with_store(store.clone()),
-                    discussion_service_with_store(store),
-                )
-            }
-            // The in-memory store holds real sessions in volatile per-process
-            // state, so reaching it by accident (a missing secret, a typo in
-            // the variable name) would serve auth from a store that loses every
-            // session on restart and disagrees between replicas. Require an
-            // explicit opt-in instead of falling back silently.
-            _ if bool_env("AUTH_STORE_MEMORY", false) => {
-                tracing::warn!(
-                    "AUTH_STORE_MEMORY is set; auth runtime uses a non-persistent in-memory \
+        let (readiness, auth, archive, discussions, moderation, ai) =
+            match std::env::var("DATABASE_URL") {
+                Ok(database_url) if !database_url.trim().is_empty() => {
+                    let pool = campus_agora_db::connect_lazy(&database_url).unwrap_or_else(|_| {
+                        panic!("DATABASE_URL is not a valid PostgreSQL connection string")
+                    });
+                    let store = Arc::new(campus_agora_db::PgAuthStore::new(pool));
+
+                    (
+                        ReadinessProbe::Postgres { database_url },
+                        auth_service_with_store(store.clone(), session_ttl_seconds),
+                        archive_service_with_store(store.clone()),
+                        discussion_service_with_store(store.clone()),
+                        moderation_service_with_store(store.clone()),
+                        ai_service_with_store(store, ai_enabled),
+                    )
+                }
+                // The in-memory store holds real sessions in volatile per-process
+                // state, so reaching it by accident (a missing secret, a typo in
+                // the variable name) would serve auth from a store that loses every
+                // session on restart and disagrees between replicas. Require an
+                // explicit opt-in instead of falling back silently.
+                _ if bool_env("AUTH_STORE_MEMORY", false) => {
+                    tracing::warn!(
+                        "AUTH_STORE_MEMORY is set; auth runtime uses a non-persistent in-memory \
                      store. This is for local development and tests only."
-                );
+                    );
 
-                let store = Arc::new(InMemoryAuthStore::default());
+                    let store = Arc::new(InMemoryAuthStore::default());
 
-                (
-                    ReadinessProbe::Unavailable,
-                    auth_service_with_store(store.clone(), session_ttl_seconds),
-                    archive_service_with_store(store.clone()),
-                    discussion_service_with_store(store),
-                )
-            }
-            _ => panic!(
-                "DATABASE_URL must be set. To run without a database, set \
+                    (
+                        ReadinessProbe::Unavailable,
+                        auth_service_with_store(store.clone(), session_ttl_seconds),
+                        archive_service_with_store(store.clone()),
+                        discussion_service_with_store(store.clone()),
+                        moderation_service_with_store(store.clone()),
+                        ai_service_with_store(store, ai_enabled),
+                    )
+                }
+                _ => panic!(
+                    "DATABASE_URL must be set. To run without a database, set \
                  AUTH_STORE_MEMORY=true for local development only."
-            ),
-        };
+                ),
+            };
 
         Self {
             readiness,
             capabilities: CapabilityFlags {
                 auth_mock_enabled: bool_env("AUTH_MOCK_ENABLED", true),
                 desktop_enabled: bool_env("DESKTOP_ENABLED", true),
-                ai_archive_enabled: bool_env("AI_ARCHIVE_ENABLED", false),
+                ai_archive_enabled: ai_enabled,
                 attachments_enabled: bool_env("ATTACHMENTS_ENABLED", false),
             },
             auth,
             archive,
             discussions,
+            moderation,
+            ai,
+            test_store: None,
         }
     }
 
@@ -135,12 +155,29 @@ impl ApiState {
             },
             auth: auth_service_with_store(store.clone(), DEFAULT_SESSION_TTL_SECONDS),
             archive: archive_service_with_store(store.clone()),
-            discussions: discussion_service_with_store(store),
+            discussions: discussion_service_with_store(store.clone()),
+            moderation: moderation_service_with_store(store.clone()),
+            // Off by default in tests too, so a test that exercises the AI path
+            // has to say so and the default stays the safe one.
+            ai: ai_service_with_store(store.clone(), false),
+            test_store: Some(store),
         }
     }
 
     pub fn with_auth_mock_enabled(mut self, enabled: bool) -> Self {
         self.capabilities.auth_mock_enabled = enabled;
+        self
+    }
+
+    /// Rebuilds the drafting service with the capability on. Used by tests and
+    /// nothing else; production reads `AI_ARCHIVE_ENABLED`.
+    pub fn with_ai_archive_enabled(mut self, enabled: bool) -> Self {
+        self.capabilities.ai_archive_enabled = enabled;
+        let store = self
+            .test_store
+            .clone()
+            .expect("with_ai_archive_enabled is only available on a test state");
+        self.ai = ai_service_with_store(store, enabled);
         self
     }
 }
@@ -174,6 +211,33 @@ where
         store.clone(),
         store.clone(),
         store,
+    ))
+}
+
+fn moderation_service_with_store<S>(store: Arc<S>) -> Arc<ModerationService>
+where
+    S: PostRepository + ReportRepository + AuditEventRepository + 'static,
+{
+    Arc::new(ModerationService::new(store.clone(), store.clone(), store))
+}
+
+fn ai_service_with_store<S>(store: Arc<S>, enabled: bool) -> Arc<AiDraftService>
+where
+    S: DiscussionRepository
+        + CommentRepository
+        + ArchiveRepository
+        + ArchiveSourceRepository
+        + AuditEventRepository
+        + 'static,
+{
+    Arc::new(AiDraftService::new(
+        store.clone(),
+        store.clone(),
+        store.clone(),
+        store.clone(),
+        store,
+        Arc::new(DeterministicDraftProvider),
+        AiDraftConfig { enabled },
     ))
 }
 
@@ -383,6 +447,23 @@ pub fn build_router_with_state_and_config(state: ApiState, config: ApiRuntimeCon
         .route(
             "/api/v1/discussions/:id/derived-entries",
             get(discussion::list_derived_entries),
+        )
+        .route(
+            "/api/v1/discussions/:id/ai-draft",
+            post(moderation::ai_draft),
+        )
+        .route("/api/v1/reports", post(moderation::create_report))
+        .route(
+            "/api/v1/moderation/queue",
+            get(moderation::moderation_queue),
+        )
+        .route(
+            "/api/v1/moderation/content/:id/reports",
+            get(moderation::list_reports),
+        )
+        .route(
+            "/api/v1/moderation/content/:id/reports/:report_id/resolve",
+            post(moderation::resolve_report),
         )
         .fallback(not_found)
         .with_state(state)
@@ -1377,7 +1458,10 @@ pub fn openapi_document() -> Value {
                 },
                 "ModerationStatus": {
                     "type": "string",
-                    "enum": ["draft", "published", "hidden", "rejected", "archived"]
+                    "enum": [
+                        "draft", "published", "hidden", "rejected",
+                        "archived", "pending_review"
+                    ]
                 },
                 "KnowledgeEntry": {
                     "type": "object",
@@ -1399,6 +1483,7 @@ pub fn openapi_document() -> Value {
                         "sourceReference": { "type": "string" },
                         "moderationStatus": { "$ref": "#/components/schemas/ModerationStatus" },
                         "currentRevision": { "type": "integer" },
+                        "aiProvider": { "type": ["string", "null"] },
                         "createdAt": { "type": "string" },
                         "updatedAt": { "type": "string" }
                     }
@@ -1517,6 +1602,11 @@ pub fn openapi_document() -> Value {
     merge_object(
         &mut document["components"]["schemas"],
         openapi_m3::schemas(),
+    );
+    merge_object(&mut document["paths"], openapi_m4::paths());
+    merge_object(
+        &mut document["components"]["schemas"],
+        openapi_m4::schemas(),
     );
 
     document
