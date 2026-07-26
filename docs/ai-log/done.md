@@ -57,10 +57,13 @@ them to commits, files, and verification commands where possible.
   directory at runtime rather than through `sqlx::migrate!`.
   `packages/api-client` now resolves through its TypeScript source rather than
   `dist/`, because CI runs `typecheck` before `build`.
-- Follow-up: `./scripts/ci/desktop.sh` could not run inside the nested
-  worktree; see the open AI LOG todo. Publishing, moderation, and export
-  actions remain `Conditional` or unimplemented until M2 and later milestones
-  bind the resource state they need.
+- Follow-up: `./scripts/ci/desktop.sh` could not run inside the nested worktree,
+  because the parent repository workspace claims `apps/desktop/src-tauri` and
+  its `exclude` entry resolves to the main checkout path only. The CI desktop
+  job passed on PR #4, confirming this was an environment limitation rather
+  than a code defect. Publishing, moderation, and export actions remain
+  `Conditional` or unimplemented until M2 and later milestones bind the
+  resource state they need.
 
 ### 2026-07-06 - 明确工具目录和文档时效规则
 
