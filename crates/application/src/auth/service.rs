@@ -1,3 +1,4 @@
+use std::fmt;
 use std::sync::Arc;
 
 use campus_agora_domain::{validate_display_name, SessionId, SystemRole, UserId};
@@ -26,12 +27,24 @@ pub struct CurrentUser {
     pub organizations: Vec<MembershipSummary>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct LoginOutcome {
     /// The opaque session token, returned to the caller exactly once.
     pub token: String,
     pub expires_at: DateTime<Utc>,
     pub user: CurrentUser,
+}
+
+/// Hand-written so the one-time token cannot reach a log line or a panic
+/// message through an accidental `{:?}`.
+impl fmt::Debug for LoginOutcome {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LoginOutcome")
+            .field("token", &"[redacted]")
+            .field("expires_at", &self.expires_at)
+            .field("user", &self.user)
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
