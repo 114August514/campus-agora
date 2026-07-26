@@ -1,11 +1,14 @@
 import { ICON_DEFAULTS, Loader2 } from "../icons";
 
-/** `role="status"` so assistive technology announces the wait. */
+/**
+ * `<output>` carries an implicit `status` role, so assistive technology
+ * announces the wait without a hand-written role attribute.
+ */
 export function LoadingState({ label = "正在加载" }: { label?: string }) {
   return (
-    <div className="stateBlock" role="status">
+    <output className="stateBlock">
       <Loader2 {...ICON_DEFAULTS} className="stateSpinner" aria-hidden="true" />
       <p className="stateTitle">{label}</p>
-    </div>
+    </output>
   );
 }

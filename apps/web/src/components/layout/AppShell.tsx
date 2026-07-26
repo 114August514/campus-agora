@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
+import { NavLink } from "react-router-dom";
+import type { NavigationItem } from "../../features/auth/navigation";
 
 interface AppShellProps {
   title: string;
-  sidebarItems: readonly string[];
+  sidebarItems: readonly NavigationItem[];
   topbarContent?: ReactNode;
   children: ReactNode;
 }
@@ -19,15 +21,22 @@ export function AppShell({
         <div className="brand">{title}</div>
         <nav>
           {sidebarItems.map((item) => (
-            <a href="/" key={item}>
-              {item}
-            </a>
+            <NavLink
+              className={({ isActive }) =>
+                isActive ? "navLink navLink-active" : "navLink"
+              }
+              key={item.label}
+              to={item.to}
+              end={item.to === "/"}
+            >
+              {item.label}
+            </NavLink>
           ))}
         </nav>
       </aside>
       <main className="main">
         <header className="topbar">
-          <span>身份、权限与认证外壳</span>
+          <span>校园资料存档</span>
           {topbarContent}
         </header>
         {children}

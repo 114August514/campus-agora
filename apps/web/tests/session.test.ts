@@ -27,7 +27,17 @@ function installWindow(): {
   const sessionStorage = new MemoryStorage();
   const localStorage = new MemoryStorage();
 
-  (globalThis as { window?: unknown }).window = { sessionStorage, localStorage };
+  // Only the storage slots are swapped. Replacing the whole `window` would
+  // strip happy-dom's DOM constructors for every test file that runs after
+  // this one, since the global is shared.
+  Object.defineProperty(globalThis.window, "sessionStorage", {
+    value: sessionStorage,
+    configurable: true,
+  });
+  Object.defineProperty(globalThis.window, "localStorage", {
+    value: localStorage,
+    configurable: true,
+  });
 
   return { sessionStorage, localStorage };
 }
