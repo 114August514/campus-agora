@@ -4,8 +4,9 @@
 
 use async_trait::async_trait;
 use campus_agora_domain::{
-    ApplicableAudience, ArchiveCategory, AuthProviderKind, CorrectionId, ModerationStatus,
-    OrganizationId, PostId, RevisionId, SessionId, SourceKind, SystemRole, UserId,
+    ApplicableAudience, ArchiveCategory, AuthProviderKind, CommentId, CorrectionId,
+    ModerationStatus, OrganizationId, PostId, RevisionId, SessionId, SourceKind, SystemRole,
+    UserId,
 };
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -309,4 +310,170 @@ pub trait CorrectionRepository: Send + Sync {
         resolved_by: UserId,
         resolved_at: DateTime<Utc>,
     ) -> Result<CorrectionRecord, ApplicationError>;
+}
+
+// ---------------------------------------------------------------------------
+// M3: discussions, replies, and the link from a discussion to an archive entry.
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DiscussionRecord {
+    pub id: PostId,
+    pub author_id: UserId,
+    pub title: String,
+    pub body: String,
+    pub tags: Vec<String>,
+    pub moderation_status: ModerationStatus,
+    pub accepted_comment_id: Option<CommentId>,
+    pub reply_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NewDiscussion {
+    pub author_id: UserId,
+    pub title: String,
+    pub body: String,
+    pub tags: Vec<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DiscussionListQuery {
+    pub scope: VisibilityScope,
+    pub q: Option<String>,
+    pub tag: Option<String>,
+    pub page: u32,
+    pub page_size: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommentRecord {
+    pub id: CommentId,
+    pub post_id: PostId,
+    pub author_id: UserId,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NewComment {
+    pub post_id: PostId,
+    pub author_id: UserId,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// One direction of the loop: where an archive entry's content came from.
+/// `source_author_id` is the person who wrote the quoted text, which is not
+/// the entry's author when a reply was promoted — the attribution would
+/// otherwise be lost the moment the entry is saved.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ArchiveSourceRecord {
+    pub entry_id: PostId,
+    pub source_post_id: PostId,
+    pub source_comment_id: Option<CommentId>,
+    pub source_author_id: UserId,
+    pub source_title: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NewArchiveSource {
+    pub entry_id: PostId,
+    pub source_post_id: PostId,
+    pub source_comment_id: Option<CommentId>,
+    pub source_author_id: UserId,
+    pub created_at: DateTime<Utc>,
+}
+
+/// The other direction: what a discussion produced.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DerivedEntryRecord {
+    pub entry_id: PostId,
+    pub title: String,
+    pub moderation_status: ModerationStatus,
+    pub created_at: DateTime<Utc>,
+}
+
+#[async_trait]
+pub trait DiscussionRepository: Send + Sync {
+    async fn insert(&self, discussion: NewDiscussion)
+        -> Result<DiscussionRecord, ApplicationError>;
+
+    /// Same contract as `ArchiveRepository::find_visible`: `None` when the
+    /// scope may not see it, so callers turn it into `NotFound` and a draft
+    /// never leaks its existence.
+    async fn find_visible(
+        &self,
+        id: PostId,
+        scope: VisibilityScope,
+    ) -> Result<Option<DiscussionRecord>, ApplicationError>;
+
+    async fn list(
+        &self,
+        query: DiscussionListQuery,
+    ) -> Result<Page<DiscussionRecord>, ApplicationError>;
+
+    async fn set_status(
+        &self,
+        id: PostId,
+        expected: ModerationStatus,
+        status: ModerationStatus,
+        updated_at: DateTime<Utc>,
+    ) -> Result<DiscussionRecord, ApplicationError>;
+
+    /// `comment_id` must belong to `id`; implementations enforce that in the
+    /// same statement so a caller authorized against one discussion cannot
+    /// mark an answer on another.
+    async fn set_accepted_comment(
+        &self,
+        id: PostId,
+        comment_id: Option<CommentId>,
+        updated_at: DateTime<Utc>,
+    ) -> Result<DiscussionRecord, ApplicationError>;
+
+    async fn is_maintainer(&self, id: PostId, user_id: UserId) -> Result<bool, ApplicationError>;
+}
+
+#[async_trait]
+pub trait CommentRepository: Send + Sync {
+    async fn insert(&self, comment: NewComment) -> Result<CommentRecord, ApplicationError>;
+
+    async fn list_for_post(&self, post_id: PostId) -> Result<Vec<CommentRecord>, ApplicationError>;
+
+    /// Scoped to `post_id` rather than looking up by id alone: the caller was
+    /// authorized against a discussion, so a comment from a different one must
+    /// resolve to `None`.
+    async fn find_in_post(
+        &self,
+        post_id: PostId,
+        id: CommentId,
+    ) -> Result<Option<CommentRecord>, ApplicationError>;
+}
+
+#[async_trait]
+pub trait ArchiveSourceRepository: Send + Sync {
+    async fn insert(
+        &self,
+        source: NewArchiveSource,
+    ) -> Result<ArchiveSourceRecord, ApplicationError>;
+
+    /// Scoped: a source pointing at a discussion the reader cannot see is
+    /// omitted, so the backlink cannot be used to read hidden titles.
+    async fn list_for_entry(
+        &self,
+        entry_id: PostId,
+        scope: VisibilityScope,
+    ) -> Result<Vec<ArchiveSourceRecord>, ApplicationError>;
+
+    /// Scoped for the same reason in the other direction: an unpublished entry
+    /// derived from a public discussion must not be listed to strangers.
+    async fn list_derived_entries(
+        &self,
+        source_post_id: PostId,
+        scope: VisibilityScope,
+    ) -> Result<Vec<DerivedEntryRecord>, ApplicationError>;
 }

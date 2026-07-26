@@ -31,3 +31,4 @@ define_id!(SessionId);
 define_id!(PostId);
 define_id!(RevisionId);
 define_id!(CorrectionId);
+define_id!(CommentId);

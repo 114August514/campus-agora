@@ -18,6 +18,7 @@ pub enum Action {
     ReplyToDiscussion,
     AcceptAnswer,
     PromoteToArchive,
+    ArchiveContent,
     ChangeModerationState,
     ChangeRoles,
     ExportData,
@@ -173,6 +174,12 @@ fn cell(
         Action::PromoteToArchive => match column {
             Guest => Deny,
             _ => Allow,
+        },
+        // Retiring content leaves it readable and is reversible, so it sits
+        // with the people who own or curate it rather than with moderation.
+        Action::ArchiveContent => match column {
+            Author | Maintainer | Moderator | Admin => Allow,
+            _ => Deny,
         },
         Action::ChangeModerationState => match column {
             Moderator | Admin => Allow,

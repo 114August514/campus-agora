@@ -16,8 +16,8 @@ use campus_agora_application::archive::ArchiveService;
 use campus_agora_application::auth::{AuthConfig, AuthService, MockCampusAuthProvider};
 use campus_agora_application::memory::InMemoryAuthStore;
 use campus_agora_application::ports::{
-    ArchiveRepository, AuditEventRepository, CorrectionRepository, OrganizationRepository,
-    SessionRepository, UserRepository,
+    ArchiveRepository, ArchiveSourceRepository, AuditEventRepository, CorrectionRepository,
+    OrganizationRepository, SessionRepository, UserRepository,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -154,9 +154,18 @@ where
 
 fn archive_service_with_store<S>(store: Arc<S>) -> Arc<ArchiveService>
 where
-    S: ArchiveRepository + CorrectionRepository + AuditEventRepository + 'static,
+    S: ArchiveRepository
+        + CorrectionRepository
+        + ArchiveSourceRepository
+        + AuditEventRepository
+        + 'static,
 {
-    Arc::new(ArchiveService::new(store.clone(), store.clone(), store))
+    Arc::new(ArchiveService::new(
+        store.clone(),
+        store.clone(),
+        store.clone(),
+        store,
+    ))
 }
 
 #[derive(Clone, Debug)]

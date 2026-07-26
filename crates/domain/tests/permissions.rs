@@ -622,3 +622,53 @@ fn promotion_permission_does_not_imply_visibility() {
         )
     );
 }
+
+/// Retiring content is curation, not moderation: it stays readable, and the
+/// person who owns or maintains it may do it. Taking content *out of view*
+/// remains `ChangeModerationState`, which only moderators hold.
+#[test]
+fn archiving_content_belongs_to_its_owner_and_curators() {
+    let mut author = actor(SystemRole::Student);
+    author.is_resource_author = true;
+    assert!(is_allowed(Action::ArchiveContent, &authenticated(author)));
+
+    let mut maintainer = actor(SystemRole::Student);
+    maintainer.is_assigned_maintainer = true;
+    assert!(is_allowed(
+        Action::ArchiveContent,
+        &authenticated(maintainer)
+    ));
+
+    for system_role in [SystemRole::Moderator, SystemRole::Admin] {
+        assert!(is_allowed(
+            Action::ArchiveContent,
+            &authenticated(actor(system_role))
+        ));
+    }
+
+    for system_role in [SystemRole::Student, SystemRole::OrganizationMember] {
+        assert!(!is_allowed(
+            Action::ArchiveContent,
+            &authenticated(actor(system_role))
+        ));
+    }
+
+    assert!(!is_allowed(Action::ArchiveContent, &Actor::Guest));
+}
+
+/// Archiving must not become a back door to the moderation powers it sits
+/// next to: an author who may retire their own thread still may not hide it.
+#[test]
+fn archiving_does_not_confer_moderation() {
+    let mut author = actor(SystemRole::Student);
+    author.is_resource_author = true;
+
+    assert!(is_allowed(
+        Action::ArchiveContent,
+        &authenticated(author.clone())
+    ));
+    assert!(!is_allowed(
+        Action::ChangeModerationState,
+        &authenticated(author)
+    ));
+}

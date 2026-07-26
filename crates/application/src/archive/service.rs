@@ -19,8 +19,9 @@ use crate::auth::{AuditContext, CurrentUser};
 use crate::errors::ApplicationError;
 use crate::ports::{
     ArchiveEntryRecord, ArchiveEntryUpdate, ArchiveListQuery, ArchiveRepository,
-    AuditEventRepository, CorrectionRecord, CorrectionRepository, NewArchiveEntry, NewAuditEvent,
-    NewCorrection, NewRevision, Page, RevisionRecord, RevisionWrite, VisibilityScope,
+    ArchiveSourceRecord, ArchiveSourceRepository, AuditEventRepository, CorrectionRecord,
+    CorrectionRepository, NewArchiveEntry, NewAuditEvent, NewCorrection, NewRevision, Page,
+    RevisionRecord, RevisionWrite, VisibilityScope,
 };
 
 pub const MAX_PAGE_SIZE: u32 = 100;
@@ -86,6 +87,7 @@ impl Default for ListArchiveQuery {
 pub struct ArchiveService {
     entries: Arc<dyn ArchiveRepository>,
     corrections: Arc<dyn CorrectionRepository>,
+    sources: Arc<dyn ArchiveSourceRepository>,
     audit_events: Arc<dyn AuditEventRepository>,
 }
 
@@ -93,11 +95,13 @@ impl ArchiveService {
     pub fn new(
         entries: Arc<dyn ArchiveRepository>,
         corrections: Arc<dyn CorrectionRepository>,
+        sources: Arc<dyn ArchiveSourceRepository>,
         audit_events: Arc<dyn AuditEventRepository>,
     ) -> Self {
         Self {
             entries,
             corrections,
+            sources,
             audit_events,
         }
     }
@@ -304,15 +308,14 @@ impl ArchiveService {
         let entry = self.visible_entry(Some(user), id).await?;
         let actor = self.actor_for(user, &entry).await?;
 
-        // Publishing one's own draft and moderating someone else's content are
-        // different privileges, so they check different actions.
-        let action = match target {
-            ModerationStatus::Published if entry.moderation_status == ModerationStatus::Draft => {
-                Action::PublishArchiveEntry
-            }
-            _ => Action::ChangeModerationState,
-        };
-        require(action, &actor)?;
+        // Publishing one's own draft, retiring content, and moderating someone
+        // else's work are different privileges, so they check different
+        // actions. Shared with the discussion service so both content kinds
+        // answer the same question the same way.
+        require(
+            crate::discussion::action_for_transition(entry.moderation_status, target),
+            &actor,
+        )?;
 
         if !can_transition(entry.moderation_status, target) {
             return Err(ApplicationError::Conflict(format!(
@@ -449,6 +452,19 @@ impl ArchiveService {
         .await?;
 
         Ok(correction)
+    }
+
+    /// Where this entry's content came from. The listing is scoped to the
+    /// reader, so a source pointing at a discussion they cannot see is omitted
+    /// rather than leaking its title through the backlink.
+    pub async fn list_sources(
+        &self,
+        user: Option<&CurrentUser>,
+        id: PostId,
+    ) -> Result<Vec<ArchiveSourceRecord>, ApplicationError> {
+        self.visible_entry(user, id).await?;
+
+        self.sources.list_for_entry(id, scope_for(user)).await
     }
 
     /// Loads an entry the caller is allowed to see, or `NotFound`. Every read

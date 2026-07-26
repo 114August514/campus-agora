@@ -6,7 +6,8 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use campus_agora_domain::{
-    CorrectionId, ModerationStatus, OrganizationId, PostId, RevisionId, SessionId, UserId,
+    CommentId, CorrectionId, ModerationStatus, OrganizationId, PostId, RevisionId, SessionId,
+    UserId,
 };
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -14,10 +15,12 @@ use uuid::Uuid;
 use crate::errors::ApplicationError;
 use crate::ports::{
     ArchiveEntryRecord, ArchiveEntryUpdate, ArchiveListQuery, ArchiveRepository,
-    AuditEventRepository, CorrectionRecord, CorrectionRepository, MembershipSummary,
-    NewArchiveEntry, NewAuditEvent, NewCorrection, NewSession, NewUser, OrganizationRecord,
-    OrganizationRepository, Page, RevisionRecord, RevisionWrite, SessionRecord, SessionRepository,
-    UserRecord, UserRepository, VisibilityScope,
+    ArchiveSourceRecord, ArchiveSourceRepository, AuditEventRepository, CommentRecord,
+    CommentRepository, CorrectionRecord, CorrectionRepository, DerivedEntryRecord,
+    DiscussionListQuery, DiscussionRecord, DiscussionRepository, MembershipSummary,
+    NewArchiveEntry, NewArchiveSource, NewAuditEvent, NewComment, NewCorrection, NewDiscussion,
+    NewSession, NewUser, OrganizationRecord, OrganizationRepository, Page, RevisionRecord,
+    RevisionWrite, SessionRecord, SessionRepository, UserRecord, UserRepository, VisibilityScope,
 };
 
 #[derive(Default)]
@@ -31,6 +34,9 @@ struct StoreState {
     revisions: Vec<RevisionRecord>,
     maintainers: Vec<(PostId, UserId)>,
     corrections: Vec<CorrectionRecord>,
+    discussions: Vec<DiscussionRecord>,
+    comments: Vec<CommentRecord>,
+    sources: Vec<ArchiveSourceRecord>,
 }
 
 #[derive(Default)]
@@ -529,5 +535,338 @@ impl CorrectionRepository for InMemoryAuthStore {
         }
 
         Ok(correction.clone())
+    }
+}
+
+/// Whether `scope` may see a discussion. Deliberately identical in shape to
+/// `scope_can_see` for entries, and to the SQL predicate: one rule with three
+/// implementations is one rule that will eventually disagree with itself.
+fn scope_can_see_discussion(
+    scope: VisibilityScope,
+    discussion: &DiscussionRecord,
+    maintainers: &[(PostId, UserId)],
+) -> bool {
+    if discussion.moderation_status.is_publicly_visible() {
+        return true;
+    }
+
+    match scope {
+        VisibilityScope::Public => false,
+        VisibilityScope::Full => true,
+        VisibilityScope::Owner(user_id) => {
+            discussion.author_id == user_id
+                || maintainers.iter().any(|(post_id, maintainer)| {
+                    *post_id == discussion.id && *maintainer == user_id
+                })
+        }
+    }
+}
+
+#[async_trait]
+impl DiscussionRepository for InMemoryAuthStore {
+    async fn insert(
+        &self,
+        discussion: NewDiscussion,
+    ) -> Result<DiscussionRecord, ApplicationError> {
+        let mut state = self.state.lock().expect("store lock");
+
+        let record = DiscussionRecord {
+            id: PostId::from_uuid(Uuid::new_v4()),
+            author_id: discussion.author_id,
+            title: discussion.title,
+            body: discussion.body,
+            tags: discussion.tags,
+            moderation_status: ModerationStatus::Draft,
+            accepted_comment_id: None,
+            reply_count: 0,
+            created_at: discussion.created_at,
+            updated_at: discussion.created_at,
+        };
+
+        state.discussions.push(record.clone());
+
+        Ok(record)
+    }
+
+    async fn find_visible(
+        &self,
+        id: PostId,
+        scope: VisibilityScope,
+    ) -> Result<Option<DiscussionRecord>, ApplicationError> {
+        let state = self.state.lock().expect("store lock");
+
+        Ok(state
+            .discussions
+            .iter()
+            .find(|discussion| discussion.id == id)
+            .filter(|discussion| scope_can_see_discussion(scope, discussion, &state.maintainers))
+            .map(|discussion| with_reply_count(discussion, &state.comments)))
+    }
+
+    async fn list(
+        &self,
+        query: DiscussionListQuery,
+    ) -> Result<Page<DiscussionRecord>, ApplicationError> {
+        let state = self.state.lock().expect("store lock");
+
+        let mut matching: Vec<DiscussionRecord> = state
+            .discussions
+            .iter()
+            .filter(|discussion| {
+                scope_can_see_discussion(query.scope, discussion, &state.maintainers)
+            })
+            .filter(|discussion| match &query.q {
+                None => true,
+                Some(needle) => {
+                    let needle = needle.to_lowercase();
+                    discussion.title.to_lowercase().contains(&needle)
+                        || discussion.body.to_lowercase().contains(&needle)
+                }
+            })
+            .filter(|discussion| match &query.tag {
+                None => true,
+                Some(tag) => discussion.tags.iter().any(|value| value == tag),
+            })
+            .map(|discussion| with_reply_count(discussion, &state.comments))
+            .collect();
+
+        // Newest activity first, matching the SQL `order by`.
+        matching.sort_by(|left, right| {
+            right
+                .updated_at
+                .cmp(&left.updated_at)
+                .then_with(|| right.id.cmp(&left.id))
+        });
+
+        let total_items = matching.len() as u64;
+        let page_size = query.page_size.max(1);
+        let total_pages = total_items.div_ceil(u64::from(page_size)) as u32;
+        let offset = ((query.page.saturating_sub(1)) as usize).saturating_mul(page_size as usize);
+
+        Ok(Page {
+            items: matching
+                .into_iter()
+                .skip(offset)
+                .take(page_size as usize)
+                .collect(),
+            page: query.page,
+            page_size,
+            total_items,
+            total_pages,
+        })
+    }
+
+    async fn set_status(
+        &self,
+        id: PostId,
+        expected: ModerationStatus,
+        status: ModerationStatus,
+        updated_at: DateTime<Utc>,
+    ) -> Result<DiscussionRecord, ApplicationError> {
+        let mut state = self.state.lock().expect("store lock");
+        let comments = state.comments.clone();
+
+        let discussion = state
+            .discussions
+            .iter_mut()
+            .find(|discussion| discussion.id == id)
+            .ok_or_else(|| ApplicationError::NotFound("discussion not found".to_owned()))?;
+
+        // Compare-and-swap, like the SQL store: the caller authorized the
+        // transition against the status they read.
+        if discussion.moderation_status != expected {
+            return Err(ApplicationError::Conflict(
+                "discussion changed since it was read".to_owned(),
+            ));
+        }
+
+        discussion.moderation_status = status;
+        discussion.updated_at = updated_at;
+
+        Ok(with_reply_count(discussion, &comments))
+    }
+
+    async fn set_accepted_comment(
+        &self,
+        id: PostId,
+        comment_id: Option<CommentId>,
+        updated_at: DateTime<Utc>,
+    ) -> Result<DiscussionRecord, ApplicationError> {
+        let mut state = self.state.lock().expect("store lock");
+        let comments = state.comments.clone();
+
+        // The comment must belong to this discussion. The SQL store enforces
+        // the same thing in its `where` clause, so a caller cannot mark an
+        // answer on a discussion they were not authorized against.
+        if let Some(comment_id) = comment_id {
+            let belongs = comments
+                .iter()
+                .any(|comment| comment.id == comment_id && comment.post_id == id);
+
+            if !belongs {
+                return Err(ApplicationError::NotFound("reply not found".to_owned()));
+            }
+        }
+
+        let discussion = state
+            .discussions
+            .iter_mut()
+            .find(|discussion| discussion.id == id)
+            .ok_or_else(|| ApplicationError::NotFound("discussion not found".to_owned()))?;
+
+        discussion.accepted_comment_id = comment_id;
+        discussion.updated_at = updated_at;
+
+        Ok(with_reply_count(discussion, &comments))
+    }
+
+    async fn is_maintainer(&self, id: PostId, user_id: UserId) -> Result<bool, ApplicationError> {
+        let state = self.state.lock().expect("store lock");
+
+        Ok(state
+            .maintainers
+            .iter()
+            .any(|(post_id, maintainer)| *post_id == id && *maintainer == user_id))
+    }
+}
+
+/// `reply_count` is derived rather than stored, so it cannot fall out of step
+/// with the comments themselves.
+fn with_reply_count(discussion: &DiscussionRecord, comments: &[CommentRecord]) -> DiscussionRecord {
+    let mut record = discussion.clone();
+    record.reply_count = comments
+        .iter()
+        .filter(|comment| comment.post_id == discussion.id)
+        .count() as i64;
+
+    record
+}
+
+#[async_trait]
+impl CommentRepository for InMemoryAuthStore {
+    async fn insert(&self, comment: NewComment) -> Result<CommentRecord, ApplicationError> {
+        let mut state = self.state.lock().expect("store lock");
+
+        let record = CommentRecord {
+            id: CommentId::from_uuid(Uuid::new_v4()),
+            post_id: comment.post_id,
+            author_id: comment.author_id,
+            body: comment.body,
+            created_at: comment.created_at,
+            updated_at: comment.created_at,
+        };
+
+        state.comments.push(record.clone());
+
+        Ok(record)
+    }
+
+    /// Oldest first: a thread reads in the order it happened.
+    async fn list_for_post(&self, post_id: PostId) -> Result<Vec<CommentRecord>, ApplicationError> {
+        let state = self.state.lock().expect("store lock");
+
+        Ok(state
+            .comments
+            .iter()
+            .filter(|comment| comment.post_id == post_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn find_in_post(
+        &self,
+        post_id: PostId,
+        id: CommentId,
+    ) -> Result<Option<CommentRecord>, ApplicationError> {
+        let state = self.state.lock().expect("store lock");
+
+        Ok(state
+            .comments
+            .iter()
+            .find(|comment| comment.id == id && comment.post_id == post_id)
+            .cloned())
+    }
+}
+
+#[async_trait]
+impl ArchiveSourceRepository for InMemoryAuthStore {
+    async fn insert(
+        &self,
+        source: NewArchiveSource,
+    ) -> Result<ArchiveSourceRecord, ApplicationError> {
+        let mut state = self.state.lock().expect("store lock");
+
+        let source_title = state
+            .discussions
+            .iter()
+            .find(|discussion| discussion.id == source.source_post_id)
+            .map(|discussion| discussion.title.clone())
+            .ok_or_else(|| ApplicationError::NotFound("source discussion not found".to_owned()))?;
+
+        let record = ArchiveSourceRecord {
+            entry_id: source.entry_id,
+            source_post_id: source.source_post_id,
+            source_comment_id: source.source_comment_id,
+            source_author_id: source.source_author_id,
+            source_title,
+            created_at: source.created_at,
+        };
+
+        state.sources.push(record.clone());
+
+        Ok(record)
+    }
+
+    async fn list_for_entry(
+        &self,
+        entry_id: PostId,
+        scope: VisibilityScope,
+    ) -> Result<Vec<ArchiveSourceRecord>, ApplicationError> {
+        let state = self.state.lock().expect("store lock");
+
+        Ok(state
+            .sources
+            .iter()
+            .filter(|source| source.entry_id == entry_id)
+            // A source pointing at a discussion the reader cannot see is
+            // omitted; otherwise the backlink would disclose its title.
+            .filter(|source| {
+                state
+                    .discussions
+                    .iter()
+                    .find(|discussion| discussion.id == source.source_post_id)
+                    .is_some_and(|discussion| {
+                        scope_can_see_discussion(scope, discussion, &state.maintainers)
+                    })
+            })
+            .cloned()
+            .collect())
+    }
+
+    async fn list_derived_entries(
+        &self,
+        source_post_id: PostId,
+        scope: VisibilityScope,
+    ) -> Result<Vec<DerivedEntryRecord>, ApplicationError> {
+        let state = self.state.lock().expect("store lock");
+
+        Ok(state
+            .sources
+            .iter()
+            .filter(|source| source.source_post_id == source_post_id)
+            .filter_map(|source| {
+                state
+                    .entries
+                    .iter()
+                    .find(|entry| entry.id == source.entry_id)
+                    .filter(|entry| scope_can_see(scope, entry, &state.maintainers))
+                    .map(|entry| DerivedEntryRecord {
+                        entry_id: entry.id,
+                        title: entry.title.clone(),
+                        moderation_status: entry.moderation_status,
+                        created_at: source.created_at,
+                    })
+            })
+            .collect())
     }
 }

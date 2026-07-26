@@ -92,7 +92,7 @@ fn comment_bodies_are_trimmed_and_bounded() {
 /// limit so that long-form content is written where it can be versioned.
 #[test]
 fn comment_bound_is_smaller_than_the_archive_body_bound() {
-    assert!(COMMENT_BODY_MAX_CHARS < campus_agora_domain::archive::BODY_MAX_CHARS);
+    const { assert!(COMMENT_BODY_MAX_CHARS < campus_agora_domain::archive::BODY_MAX_CHARS) };
 }
 
 /// Character-counted, not byte-counted: a CJK reply must not be rejected at a
