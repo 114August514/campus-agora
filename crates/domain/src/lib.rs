@@ -1,8 +1,14 @@
+pub mod archive;
 pub mod ids;
 pub mod permissions;
 pub mod roles;
 pub mod users;
 
+pub use archive::{
+    can_transition, normalize_tags, validate_body, validate_summary, validate_title,
+    ApplicableAudience, ArchiveCategory, ModerationStatus, PostKind, SourceKind, TagError,
+    TextError, BODY_MAX_CHARS, MAX_TAGS, SUMMARY_MAX_CHARS, TAG_MAX_CHARS, TITLE_MAX_CHARS,
+};
 pub use ids::{OrganizationId, SessionId, UserId};
 pub use permissions::{decide, is_allowed, Action, Actor, AuthenticatedActor, PermissionDecision};
 pub use roles::SystemRole;

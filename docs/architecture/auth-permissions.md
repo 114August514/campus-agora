@@ -94,13 +94,27 @@ action/resource matrix.
 | Action | Guest | Student | OrganizationMember | Author | Maintainer | Moderator | Admin |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Read public content | Allow | Allow | Allow | Allow | Allow | Allow | Allow |
+| View archive entry | Allow | Allow | Allow | Allow | Allow | Allow | Allow |
 | Create own draft | Deny | Allow | Allow | Allow | Allow | Allow | Allow |
 | Edit own draft | Deny | Deny | Deny | Allow | Allow if assigned | Allow | Allow |
 | Maintain organization content | Deny | Deny | Allow if member | Deny | Allow if assigned | Allow | Allow |
-| Publish archive entry | Deny | Deny | Conditional | Conditional | Allow | Allow | Allow |
+| Publish archive entry | Deny | Deny | Conditional | Allow | Allow | Allow | Allow |
+| File correction | Deny | Allow | Allow | Allow | Allow | Allow | Allow |
+| Resolve correction | Deny | Deny | Deny | Allow | Allow if assigned | Allow | Allow |
 | Change moderation state | Deny | Deny | Deny | Deny | Deny | Allow | Allow |
 | Change roles | Deny | Deny | Deny | Deny | Deny | Deny | Allow |
 | Export data | Deny | Own data only | Own data only | Own data only | Deny | Deny | Allow |
+
+`View archive entry` is `Allow` for everyone on purpose: whether a *particular*
+entry is visible is decided by the repository query (published, or owned,
+maintained, or moderated by the caller), so encoding visibility in the matrix
+as well would put the same rule in two places that can drift. An entry the
+caller may not see returns `404`, never `403`.
+
+`Publish archive entry` was `Conditional` for `Author` until M2.1, which
+resolved the condition as "an author may publish their own draft". The
+`OrganizationMember` column stays `Conditional` because organization-scoped
+entries are not modelled yet, and `is_allowed` therefore denies it.
 
 Each future endpoint must define the action it checks and the resource context
 needed for the decision.

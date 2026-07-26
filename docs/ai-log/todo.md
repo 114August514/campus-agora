@@ -18,19 +18,21 @@ Keep entries short, dated, and actionable.
 
 ## Pending
 
-### 2026-07-26 - Build the permission policy call seam in M2
+### 2026-07-26 - Implement M2.1 archive backend core
 
-- Source: M1 review finding. `decide`/`is_allowed`/`AuthenticatedActor` have no
-  callers outside `crates/domain`, and nothing constructs an `Actor` from a
-  session, so the resource-context flags have never been proven derivable.
+- Source: `docs/product/milestones.md` M2, delivered in two phases.
 - Milestone: M2.
-- Status: open.
-- Acceptance: the first protected archive endpoint builds an `Actor` from the
-  session plus resource context and calls `is_allowed`, with allow, deny, and
-  not-found tests.
-- Dependencies: M2 archive resources.
-- Notes: `CurrentUser` currently carries only a flat membership list;
-  `is_resource_author` and `is_assigned_maintainer` need resource lookups.
+- Status: in progress.
+- Acceptance: knowledge entries can be created, edited, listed, read,
+  versioned, and corrected through `/api/v1/knowledge-entries`; visibility and
+  permission checks are enforced in backend policy; the contract and generated
+  types cover the workflow.
+- Dependencies: M1 auth session (PR #4).
+- Notes: plan at
+  `docs/superpowers/plans/2026-07-26-m2-1-archive-backend-core.md`. This also
+  closes the M1 follow-up that left `decide`/`is_allowed` without a call seam:
+  `ArchiveService` builds an `Actor` from the session plus entry context and is
+  the policy's first real consumer.
 
 ### 2026-07-26 - Use a keyed digest for campus identity subjects before M6
 
