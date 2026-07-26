@@ -9,7 +9,7 @@ pub use archive::{
     ApplicableAudience, ArchiveCategory, ModerationStatus, PostKind, SourceKind, TagError,
     TextError, BODY_MAX_CHARS, MAX_TAGS, SUMMARY_MAX_CHARS, TAG_MAX_CHARS, TITLE_MAX_CHARS,
 };
-pub use ids::{OrganizationId, SessionId, UserId};
+pub use ids::{CorrectionId, OrganizationId, PostId, RevisionId, SessionId, UserId};
 pub use permissions::{decide, is_allowed, Action, Actor, AuthenticatedActor, PermissionDecision};
 pub use roles::SystemRole;
 pub use users::{

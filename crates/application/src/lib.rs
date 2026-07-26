@@ -1,3 +1,4 @@
+pub mod archive;
 pub mod auth;
 pub mod errors;
 pub mod memory;
