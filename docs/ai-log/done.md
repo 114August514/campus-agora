@@ -17,6 +17,45 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-26 - Implement M2.1 archive backend core
+
+- Result: Delivered the backend half of M2. Knowledge entries can be created,
+  edited, listed, searched, read, versioned, and corrected through
+  `/api/v1/knowledge-entries`, with visibility and permission enforced in
+  backend policy.
+- Changed: `crates/domain/src/archive.rs` plus archive tests and new archive
+  actions in `permissions.rs`; `crates/application/src/archive/*`, archive
+  ports, and in-memory implementations; `crates/db/migrations/20260727000000_m2_archive_core.sql`
+  with the PostgreSQL archive repositories and DATABASE_URL-gated tests;
+  `crates/api/src/archive.rs`, routes, and the OpenAPI paths and schemas;
+  regenerated `contracts/openapi.json` and `packages/api-client/src/generated.ts`;
+  `packages/api-client/src/archive.ts`, client wiring, and mock parity; docs
+  for the permission matrix, error codes, pagination, visibility, endpoint
+  lists, and the privacy inventory.
+- Verification: `cargo test --workspace` (100 tests) against a disposable
+  PostgreSQL 16 container, `cargo fmt --all --check`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, `bun run api:check`, `bun run typecheck`,
+  `bun run lint`, `bun run lint:styles`, `bun run test`, `bun run build`,
+  `bun run ci:docs`, `git diff --check`. The repository test proves the SQL
+  visibility predicate against a real database: a draft is invisible to the
+  public and to unrelated users, visible to its author, to an assigned
+  maintainer, and to moderation scope.
+- Decisions: Archive entries extend the existing `posts` spine rather than
+  forking a second table, so discussion (M3) keeps the same schema, revisions,
+  and moderation vocabulary. The visibility predicate lives in SQL, so an entry
+  the caller may not see is never fetched. Editing a published entry writes a
+  revision inside the same transaction as the content update; editing a draft
+  updates in place because a draft has no published history. `ArchiveService`
+  is the permission matrix's first real consumer, closing the M1 follow-up: it
+  builds a domain `Actor` from the session plus entry context. The Publish
+  row's `Author` cell moved from `Conditional` to `Allow`, defined as "an
+  author may publish their own draft"; the `OrganizationMember` cell stays
+  `Conditional` because organization-scoped entries are not modelled yet.
+- Follow-up: M2.2 delivers the `components/ui` primitives and the archive
+  list, detail, and editor flows; M2 reaches its exit criteria only when both
+  phases land. Search stays a database `ILIKE` filter, as the milestone's
+  non-goals exclude a full-text engine.
+
 ### 2026-07-26 - Resolve M1 review findings on PR #4
 
 - Result: Fixed the defects found by three independent reviews of the M1

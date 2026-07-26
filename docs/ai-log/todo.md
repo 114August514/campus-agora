@@ -18,21 +18,19 @@ Keep entries short, dated, and actionable.
 
 ## Pending
 
-### 2026-07-26 - Implement M2.1 archive backend core
+### 2026-07-26 - Implement M2.2 archive frontend flows
 
-- Source: `docs/product/milestones.md` M2, delivered in two phases.
+- Source: `docs/product/milestones.md` M2, second delivery phase.
 - Milestone: M2.
-- Status: in progress.
-- Acceptance: knowledge entries can be created, edited, listed, read,
-  versioned, and corrected through `/api/v1/knowledge-entries`; visibility and
-  permission checks are enforced in backend policy; the contract and generated
-  types cover the workflow.
-- Dependencies: M1 auth session (PR #4).
-- Notes: plan at
-  `docs/superpowers/plans/2026-07-26-m2-1-archive-backend-core.md`. This also
-  closes the M1 follow-up that left `decide`/`is_allowed` without a call seam:
-  `ArchiveService` builds an `Actor` from the session plus entry context and is
-  the policy's first real consumer.
+- Status: open.
+- Acceptance: `components/ui` gains the primitives the archive flows need
+  (Input, Textarea, Select, Card, Badge, EmptyState, LoadingState), and the web
+  app gains archive list, detail, and editor flows built from them, with no
+  page-local one-off styling. M2 reaches its exit criteria only when this
+  lands alongside M2.1.
+- Dependencies: M2.1 backend (this branch).
+- Notes: `apps/web/src/components/ui` currently holds only `Button.tsx`, which
+  is why M2 was split.
 
 ### 2026-07-26 - Use a keyed digest for campus identity subjects before M6
 

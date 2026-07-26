@@ -14,7 +14,9 @@ before real identity integration, attachments, or AI assistance are added.
 | Session records | Keep authenticated sessions alive; stored as SHA-256 token hash with expiry and revocation timestamps, never the raw token | PostgreSQL | Auth service, admins |
 | Organization memberships | Prove a user acts within a verified organization context | PostgreSQL | User, organization tooling, moderators, admins |
 | Discussion content | Community discussion and later archive source | PostgreSQL | Readers based on visibility |
-| Archive content | Durable knowledge entries | PostgreSQL | Readers based on visibility |
+| Archive content | Durable knowledge entries, including their revision history | PostgreSQL | Readers based on visibility |
+| Archive source references | Free-form provenance for an entry, which may contain third-party URLs | PostgreSQL | Readers based on visibility |
+| Corrections | Reports that an entry is out of date or wrong, with the reporter's identity | PostgreSQL | Entry author, maintainers, moderators, admins |
 | Moderation state | Review status and safety decisions | PostgreSQL | Moderators, admins |
 | Audit events | Accountability for high-risk actions | PostgreSQL | Admins, security reviewers |
 | Request logs | Debugging and abuse response | Log backend | Operators |

@@ -58,18 +58,53 @@ Frontends branch on `code`, never on `message`. Current codes:
 
 | Code | Status | Meaning |
 | --- | --- | --- |
-| `invalid_request_body` | 400 | The request body could not be parsed. |
+| `invalid_request_body` | 400 | The request body could not be parsed, or an enum value is unknown. |
+| `invalid_query` | 400 | A query parameter could not be parsed. |
+| `invalid_path` | 400 | A path id is not a UUID. |
 | `unauthorized` | 401 | Missing, invalid, expired, or revoked session token. |
 | `forbidden` | 403 | Authenticated or public caller is not allowed to act. |
 | `auth_mock_disabled` | 403 | Mock campus login is turned off by capability flag. |
 | `not_found` | 404 | Route or resource is missing or intentionally invisible. |
-| `conflict` | 409 | State or uniqueness conflict. |
+| `conflict` | 409 | State or uniqueness conflict, including an illegal moderation transition. |
 | `request_body_too_large` | 413 | Body exceeds `REQUEST_BODY_LIMIT_BYTES`. |
 | `validation_failed` | 422 | Business validation failed. |
 | `internal_error` | 500 | Unexpected server error; detail stays server-side. |
 
 Error messages must not echo caller-supplied input. Add new codes to this
 table in the same change that introduces them.
+
+## Pagination
+
+List endpoints return one envelope:
+
+```json
+{
+  "items": [],
+  "page": 1,
+  "pageSize": 20,
+  "totalItems": 135,
+  "totalPages": 7
+}
+```
+
+`page` starts at 1. `pageSize` defaults to 20 and is capped at 100; a value
+outside that range is `422 validation_failed`, while a value that is not an
+integer is `400 invalid_query`.
+
+Collections that are naturally bounded by their parent resource — an entry's
+revisions and its corrections — return `{ "items": [] }` without the paging
+fields, because they are not paged.
+
+## Visibility And Not-Found
+
+Read endpoints are public and narrow their results rather than rejecting the
+request. A guest sees published content; an authenticated caller also sees what
+they authored or maintain; moderators and admins see everything.
+
+A resource the caller may not see returns `404`, never `403`. Returning `403`
+would confirm that a private draft exists, so the two statuses mean different
+things: `404` is "no such visible resource", `403` is "you can see it but may
+not do that to it".
 
 ## Mock Parity
 
