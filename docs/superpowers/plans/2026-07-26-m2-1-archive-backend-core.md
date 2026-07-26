@@ -53,56 +53,56 @@ Decisions:
 
 ### Task 1: Plan And AI Log
 
-- [ ] Save this plan.
-- [ ] Add the M2.1 entry to `docs/ai-log/todo.md` and close the "permission policy call seam" todo by pointing at this plan.
-- [ ] Record the M2 split in `docs/product/milestones.md` and set M2 to 进行中.
+- [x] Save this plan.
+- [x] Add the M2.1 entry to `docs/ai-log/todo.md` and close the "permission policy call seam" todo by pointing at this plan.
+- [x] Record the M2 split in `docs/product/milestones.md` and set M2 to 进行中.
 
 ### Task 2: Domain Archive Types And State Machine
 
-- [ ] Write failing tests in `crates/domain/tests/archive.rs`: `ModerationStatus` string round-trip; `can_transition` allows Draft→Published, Draft→Rejected, Published→Hidden, Hidden→Published, Rejected→Draft and rejects Published→Draft, Rejected→Published, and every self-transition; title validation (trimmed, 1..=200 chars); summary validation (optional, <=500 chars); body non-empty; tag list normalization (trimmed, lowercased, deduped, <=10 tags, each 1..=32 chars); `ArchiveCategory`/`ApplicableAudience`/`SourceKind` round-trip.
-- [ ] Implement `crates/domain/src/archive.rs` and re-export from `lib.rs`.
-- [ ] Run `cargo test -p campus_agora_domain` green.
+- [x] Write failing tests in `crates/domain/tests/archive.rs`: `ModerationStatus` string round-trip; `can_transition` allows Draft→Published, Draft→Rejected, Published→Hidden, Hidden→Published, Rejected→Draft and rejects Published→Draft, Rejected→Published, and every self-transition; title validation (trimmed, 1..=200 chars); summary validation (optional, <=500 chars); body non-empty; tag list normalization (trimmed, lowercased, deduped, <=10 tags, each 1..=32 chars); `ArchiveCategory`/`ApplicableAudience`/`SourceKind` round-trip.
+- [x] Implement `crates/domain/src/archive.rs` and re-export from `lib.rs`.
+- [x] Run `cargo test -p campus_agora_domain` green.
 
 ### Task 3: Domain Permission Actions For Archive
 
-- [ ] Write failing tests in `crates/domain/tests/permissions.rs`: `ViewArchiveEntry` is Allow for everyone (visibility is enforced by the repository predicate, not by the matrix); `PublishArchiveEntry` is now Allow for an `Author` (resolving the previous `Conditional`) and still Deny for a bare Student; `FileCorrection` requires authentication; `ResolveCorrection` is Allow for Author, assigned Maintainer, Moderator, Admin and Deny for a bare Student.
-- [ ] Extend `Action` and the `cell` matrix accordingly; keep the union-of-grants fold documented in `auth-permissions.md`.
-- [ ] Update the permission matrix table in `docs/architecture/auth-permissions.md` in the same change, including removing `Conditional` from the Publish row's Author column.
-- [ ] Run `cargo test -p campus_agora_domain` green.
+- [x] Write failing tests in `crates/domain/tests/permissions.rs`: `ViewArchiveEntry` is Allow for everyone (visibility is enforced by the repository predicate, not by the matrix); `PublishArchiveEntry` is now Allow for an `Author` (resolving the previous `Conditional`) and still Deny for a bare Student; `FileCorrection` requires authentication; `ResolveCorrection` is Allow for Author, assigned Maintainer, Moderator, Admin and Deny for a bare Student.
+- [x] Extend `Action` and the `cell` matrix accordingly; keep the union-of-grants fold documented in `auth-permissions.md`.
+- [x] Update the permission matrix table in `docs/architecture/auth-permissions.md` in the same change, including removing `Conditional` from the Publish row's Author column.
+- [x] Run `cargo test -p campus_agora_domain` green.
 
 ### Task 4: Application Ports And In-Memory Store
 
-- [ ] Write failing tests in `crates/application/tests/archive_service.rs` covering the in-memory store: create draft returns revision 1 and `Draft`; a bare student cannot publish another user's draft (`Forbidden`); the author can publish their own draft; updating a published entry creates revision 2 and bumps `current_revision`; updating a draft does not create a revision; an invalid transition returns `Conflict`; listing as a guest returns only published entries; listing as the author includes their own draft; fetching an invisible entry returns `NotFound` rather than `Forbidden`; filing a correction requires auth; resolving a correction requires author/maintainer/moderator/admin.
-- [ ] Implement `ports.rs` additions (`ArchiveRepository`, `CorrectionRepository`, `ArchiveEntryRecord`, `NewArchiveEntry`, `ArchiveUpdate`, `ListArchiveQuery`, `Page<T>`, `CorrectionRecord`), the in-memory implementations, and `archive/service.rs` including `ArchiveActor` construction that calls `campus_agora_domain::is_allowed`.
-- [ ] Run `cargo test -p campus_agora_application` green.
+- [x] Write failing tests in `crates/application/tests/archive_service.rs` covering the in-memory store: create draft returns revision 1 and `Draft`; a bare student cannot publish another user's draft (`Forbidden`); the author can publish their own draft; updating a published entry creates revision 2 and bumps `current_revision`; updating a draft does not create a revision; an invalid transition returns `Conflict`; listing as a guest returns only published entries; listing as the author includes their own draft; fetching an invisible entry returns `NotFound` rather than `Forbidden`; filing a correction requires auth; resolving a correction requires author/maintainer/moderator/admin.
+- [x] Implement `ports.rs` additions (`ArchiveRepository`, `CorrectionRepository`, `ArchiveEntryRecord`, `NewArchiveEntry`, `ArchiveUpdate`, `ListArchiveQuery`, `Page<T>`, `CorrectionRecord`), the in-memory implementations, and `archive/service.rs` including `ArchiveActor` construction that calls `campus_agora_domain::is_allowed`.
+- [x] Run `cargo test -p campus_agora_application` green.
 
 ### Task 5: Migration And PostgreSQL Repositories
 
-- [ ] Extend `crates/db/tests/migrations.rs` with failing static assertions: the M2 migration adds `category`, `applicable_audience`, `source_kind`, `source_reference`, `visibility` columns to `posts`; creates `post_maintainers` with `unique (post_id, user_id)`; creates `post_corrections` with a status check and a resolver reference; adds indexes on `post_type, moderation_status`, on `tags` (GIN), and on `post_corrections(post_id)`.
-- [ ] Add `crates/db/migrations/20260727000000_m2_archive_core.sql`.
-- [ ] Implement the PostgreSQL `ArchiveRepository` and `CorrectionRepository`. Every read carries the visibility predicate in SQL; the update path runs in one transaction that writes `post_revisions` and bumps `current_revision`.
-- [ ] Extend `crates/db/tests/repositories.rs` (DATABASE_URL-gated) to exercise create, visibility filtering for guest vs author, revision creation on publish-then-update, correction insert and resolve, and the pagination total.
-- [ ] Run `cargo test -p campus_agora_db` with and without `DATABASE_URL`.
+- [x] Extend `crates/db/tests/migrations.rs` with failing static assertions: the M2 migration adds `category`, `applicable_audience`, `source_kind`, `source_reference`, `visibility` columns to `posts`; creates `post_maintainers` with `unique (post_id, user_id)`; creates `post_corrections` with a status check and a resolver reference; adds indexes on `post_type, moderation_status`, on `tags` (GIN), and on `post_corrections(post_id)`.
+- [x] Add `crates/db/migrations/20260727000000_m2_archive_core.sql`.
+- [x] Implement the PostgreSQL `ArchiveRepository` and `CorrectionRepository`. Every read carries the visibility predicate in SQL; the update path runs in one transaction that writes `post_revisions` and bumps `current_revision`.
+- [x] Extend `crates/db/tests/repositories.rs` (DATABASE_URL-gated) to exercise create, visibility filtering for guest vs author, revision creation on publish-then-update, correction insert and resolve, and the pagination total.
+- [x] Run `cargo test -p campus_agora_db` with and without `DATABASE_URL`.
 
 ### Task 6: API Resource And Contract
 
-- [ ] Write failing tests in `crates/api/tests/archive.rs`: `POST /api/v1/knowledge-entries` requires auth (401) and returns 201 with the created entry; `GET /api/v1/knowledge-entries` returns the paginated envelope and hides unpublished entries from guests; `GET /api/v1/knowledge-entries/{id}` returns 404 for an invisible entry; `PATCH` enforces permissions (403 for a non-owner student) and creates a revision for a published entry; `POST /api/v1/knowledge-entries/{id}/publish` rejects an invalid transition with 409 `invalid_moderation_transition`; `GET /api/v1/knowledge-entries/{id}/revisions` lists history; `POST /api/v1/knowledge-entries/{id}/corrections` requires auth; `PATCH .../corrections/{correctionId}` enforces the resolver permission; invalid `pageSize` returns 422.
-- [ ] Implement `crates/api/src/archive.rs` and wire the routes into `build_router_with_state_and_config`.
-- [ ] Extend `openapi_document()` with the paths, the `PaginatedKnowledgeEntries` envelope, and all new schemas; document every status each handler can return, including 500.
-- [ ] Extend `crates/api/tests/openapi.rs` to assert the new paths, security requirements, and schemas.
-- [ ] Run `cargo test -p campus_agora_api` green.
+- [x] Write failing tests in `crates/api/tests/archive.rs`: `POST /api/v1/knowledge-entries` requires auth (401) and returns 201 with the created entry; `GET /api/v1/knowledge-entries` returns the paginated envelope and hides unpublished entries from guests; `GET /api/v1/knowledge-entries/{id}` returns 404 for an invisible entry; `PATCH` enforces permissions (403 for a non-owner student) and creates a revision for a published entry; `POST /api/v1/knowledge-entries/{id}/status` rejects an invalid transition with 409 `conflict`; `GET /api/v1/knowledge-entries/{id}/revisions` lists history; `POST /api/v1/knowledge-entries/{id}/corrections` requires auth; `PATCH .../corrections/{correctionId}` enforces the resolver permission; invalid `pageSize` returns 422.
+- [x] Implement `crates/api/src/archive.rs` and wire the routes into `build_router_with_state_and_config`.
+- [x] Extend `openapi_document()` with the paths, the `PaginatedKnowledgeEntries` envelope, and all new schemas; document every status each handler can return, including 500.
+- [x] Extend `crates/api/tests/openapi.rs` to assert the new paths, security requirements, and schemas.
+- [x] Run `cargo test -p campus_agora_api` green.
 
 ### Task 7: Contract Regeneration And API Client
 
-- [ ] Run `bun run api:types`; commit the regenerated contract and types.
-- [ ] Write failing Bun tests for the archive resource client and for mock parity (the mock must reproduce 401/403/404/409/422 and the pagination envelope exactly as the server does).
-- [ ] Implement `packages/api-client/src/archive.ts`, extend the client, the mock, and `index.ts`.
-- [ ] Run `bun --cwd packages/api-client test` and `bun run typecheck` green.
+- [x] Run `bun run api:types`; commit the regenerated contract and types.
+- [x] Write failing Bun tests for the archive resource client and for mock parity (the mock must reproduce 401/403/404/409/422 and the pagination envelope exactly as the server does).
+- [x] Implement `packages/api-client/src/archive.ts`, extend the client, the mock, and `index.ts`.
+- [x] Run `bun --cwd packages/api-client test` and `bun run typecheck` green.
 
 ### Task 8: Docs And Verification
 
-- [ ] Update `docs/architecture/api-contracts.md`: new error codes (`invalid_moderation_transition`, `entry_not_found`), the pagination envelope, and the archive endpoints.
-- [ ] Update `docs/product/milestones.md` M2 progress and `docs/product/privacy.md` if the archive adds a data-inventory row (source references can carry third-party URLs).
-- [ ] Run the full gate set: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` against dockerized PostgreSQL 16, `bun run api:check`, `bun run typecheck`, `bun run lint`, `bun run lint:styles`, `bun run test`, `bun run build`, `bun run ci:docs`, `git diff --check`.
-- [ ] Move M2.1 facts into `docs/ai-log/done.md`.
-- [ ] Commit in reviewable increments.
+- [x] Update `docs/architecture/api-contracts.md`: new error codes (`invalid_query`, `invalid_path`) and the `conflict` code covering illegal moderation transitions, the pagination envelope, and the archive endpoints.
+- [x] Update `docs/product/milestones.md` M2 progress and `docs/product/privacy.md` if the archive adds a data-inventory row (source references can carry third-party URLs).
+- [x] Run the full gate set: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` against dockerized PostgreSQL 16, `bun run api:check`, `bun run typecheck`, `bun run lint`, `bun run lint:styles`, `bun run test`, `bun run build`, `bun run ci:docs`, `git diff --check`.
+- [x] Move M2.1 facts into `docs/ai-log/done.md`.
+- [x] Commit in reviewable increments.
