@@ -282,6 +282,7 @@ impl ArchiveRepository for InMemoryAuthStore {
             source_reference: entry.source_reference.clone(),
             moderation_status: ModerationStatus::Draft,
             current_revision: 1,
+            ai_provider: entry.ai_provider.clone(),
             created_at: entry.created_at,
             updated_at: entry.created_at,
         };

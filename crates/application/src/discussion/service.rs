@@ -382,6 +382,7 @@ impl DiscussionService {
                 // truth about where this came from.
                 source_kind: SourceKind::Discussion,
                 source_reference: None,
+                ai_provider: None,
                 created_at: now,
             })
             .await?;

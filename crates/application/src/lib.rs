@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod archive;
 pub mod auth;
 pub mod discussion;

@@ -137,6 +137,11 @@ pub struct ArchiveEntryRecord {
     pub source_reference: Option<String>,
     pub moderation_status: ModerationStatus,
     pub current_revision: i32,
+    /// Which drafting provider composed this entry, or `None` when a person
+    /// wrote it. Recorded so a reader can tell composed text from written
+    /// text; the marker only means something because hand-written entries
+    /// leave it empty.
+    pub ai_provider: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -152,6 +157,7 @@ pub struct NewArchiveEntry {
     pub applicable_audience: ApplicableAudience,
     pub source_kind: SourceKind,
     pub source_reference: Option<String>,
+    pub ai_provider: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 

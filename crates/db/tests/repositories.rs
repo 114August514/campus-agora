@@ -278,6 +278,7 @@ async fn pg_archive_repository_enforces_visibility_and_versioning() {
             applicable_audience: ApplicableAudience::NewStudents,
             source_kind: SourceKind::FirsthandExperience,
             source_reference: None,
+            ai_provider: None,
             created_at: now,
         },
     )
@@ -692,6 +693,7 @@ async fn pg_repositories_cover_the_m3_discussion_loop() {
             applicable_audience: ApplicableAudience::AllStudents,
             source_kind: SourceKind::Discussion,
             source_reference: None,
+            ai_provider: None,
             created_at: now,
         },
     )

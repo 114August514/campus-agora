@@ -323,6 +323,7 @@ fn archive_from_row(row: &PgRow) -> Result<ArchiveEntryRecord, ApplicationError>
         moderation_status: ModerationStatus::parse(&status)
             .ok_or_else(|| enum_error("moderation status", &status))?,
         current_revision: row.try_get("current_revision").map_err(internal)?,
+        ai_provider: row.try_get("ai_provider").map_err(internal)?,
         created_at: row
             .try_get::<DateTime<Utc>, _>("created_at")
             .map_err(internal)?,
@@ -421,7 +422,7 @@ fn scope_bindings(scope: VisibilityScope) -> (Option<Uuid>, bool) {
 
 const ARCHIVE_COLUMNS: &str = "p.id, p.author_id, p.title, p.body, p.summary, p.tags, \
      p.category, p.applicable_audience, p.source_kind, p.source_reference, \
-     p.moderation_status, p.current_revision, p.created_at, p.updated_at";
+     p.moderation_status, p.current_revision, p.ai_provider, p.created_at, p.updated_at";
 
 #[async_trait]
 impl ArchiveRepository for PgAuthStore {
@@ -433,12 +434,12 @@ impl ArchiveRepository for PgAuthStore {
             insert into posts (
                 author_id, post_type, moderation_status, title, body, summary, tags,
                 category, applicable_audience, source_kind, source_reference,
-                current_revision, created_at, updated_at
+                current_revision, ai_provider, created_at, updated_at
             )
-            values ($1, 'knowledge', 'draft', $2, $3, $4, $5, $6, $7, $8, $9, 1, $10, $10)
+            values ($1, 'knowledge', 'draft', $2, $3, $4, $5, $6, $7, $8, $9, 1, $11, $10, $10)
             returning id, author_id, title, body, summary, tags, category,
                 applicable_audience, source_kind, source_reference, moderation_status,
-                current_revision, created_at, updated_at
+                current_revision, ai_provider, created_at, updated_at
             "#,
         )
         .bind(entry.author_id.into_uuid())
@@ -451,6 +452,7 @@ impl ArchiveRepository for PgAuthStore {
         .bind(entry.source_kind.as_str())
         .bind(&entry.source_reference)
         .bind(entry.created_at)
+        .bind(&entry.ai_provider)
         .fetch_one(&mut *tx)
         .await
         .map_err(internal)?;
@@ -584,7 +586,7 @@ impl ArchiveRepository for PgAuthStore {
             where id = $1 and deleted_at is null
             returning id, author_id, title, body, summary, tags, category,
                 applicable_audience, source_kind, source_reference, moderation_status,
-                current_revision, created_at, updated_at
+                current_revision, ai_provider, created_at, updated_at
             "#,
         )
         .bind(id.into_uuid())
@@ -678,7 +680,7 @@ impl ArchiveRepository for PgAuthStore {
             where id = $1 and deleted_at is null and moderation_status = $4
             returning id, author_id, title, body, summary, tags, category,
                 applicable_audience, source_kind, source_reference, moderation_status,
-                current_revision, created_at, updated_at
+                current_revision, ai_provider, created_at, updated_at
             "#,
         )
         .bind(id.into_uuid())
