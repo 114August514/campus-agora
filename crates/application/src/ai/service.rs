@@ -9,7 +9,8 @@
 use std::sync::Arc;
 
 use campus_agora_domain::{
-    is_allowed, Action, Actor, AuthenticatedActor, PostId, SourceKind, SystemRole,
+    is_allowed, validate_body, validate_summary, validate_title, Action, Actor, AuthenticatedActor,
+    PostId, SourceKind, SystemRole, TextError,
 };
 use chrono::{DateTime, Utc};
 
@@ -21,6 +22,10 @@ use crate::ports::{
     CommentRepository, DiscussionRepository, NewArchiveEntry, NewArchiveSource, NewAuditEvent,
     VisibilityScope,
 };
+
+/// Mirrors `DiscussionService::MAX_REPLIES`: the read path already refuses to
+/// return more, so composing from more would draw on text no reader has seen.
+const MAX_SOURCE_REPLIES: usize = 200;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AiDraftConfig {
@@ -98,7 +103,10 @@ impl AiDraftService {
             )));
         }
 
-        let replies = self.comments.list_for_post(id).await?;
+        let mut replies = self.comments.list_for_post(id).await?;
+        // The same ceiling the read path uses. One request must not be able to
+        // pull an unbounded thread into memory.
+        replies.truncate(MAX_SOURCE_REPLIES);
 
         let mut request_sources = vec![DraftSource {
             comment_id: None,
@@ -120,13 +128,21 @@ impl AiDraftService {
             })
             .await?;
 
+        // Composed text goes through the same validators a person's writing
+        // does. The provider is expected to stay inside the bounds; this is
+        // what makes that a guarantee rather than an expectation, and what
+        // stops a future provider writing an entry no other path could.
+        let title = text(validate_title(&suggestion.title), "title")?;
+        let body = text(validate_body(&suggestion.body), "body")?;
+        let summary = text(validate_summary(suggestion.summary.as_deref()), "summary")?;
+
         let entry = self
             .entries
             .insert(NewArchiveEntry {
                 author_id: user.id,
-                title: suggestion.title,
-                body: suggestion.body,
-                summary: suggestion.summary,
+                title,
+                body,
+                summary,
                 tags: discussion.tags.clone(),
                 category: campus_agora_domain::ArchiveCategory::Other,
                 applicable_audience: campus_agora_domain::ApplicableAudience::AllStudents,
@@ -225,4 +241,13 @@ fn require(action: Action, actor: &Actor) -> Result<(), ApplicationError> {
     } else {
         Err(ApplicationError::Forbidden)
     }
+}
+
+fn text<T>(result: Result<T, TextError>, field: &str) -> Result<T, ApplicationError> {
+    result.map_err(|error| {
+        ApplicationError::Validation(match error {
+            TextError::Empty => format!("{field} must not be empty"),
+            TextError::TooLong => format!("{field} is too long"),
+        })
+    })
 }

@@ -375,3 +375,77 @@ async fn requesting_a_draft_is_audited() {
     assert_eq!(drafted.metadata["provider"], "deterministic-v1");
     assert_eq!(drafted.metadata["sourceCount"], 3);
 }
+
+/// Every other path into `posts` runs the domain validators. Drafting composes
+/// its body from a whole thread, so it is the one path that can *exceed* the
+/// limits without anyone typing anything — and the editor the user is sent to
+/// re-validates on save, so an over-long draft lands them in an editor that
+/// cannot save.
+#[tokio::test]
+async fn a_composed_draft_is_validated_like_any_other_entry() {
+    let fixture = Fixture::new();
+    let author = fixture.user("author", SystemRole::Student).await;
+    let helper = fixture.user("helper", SystemRole::Student).await;
+
+    let discussion = fixture
+        .discussions
+        .create(
+            &author,
+            NewDiscussionInput {
+                title: "很长的讨论".to_owned(),
+                body: "x".repeat(campus_agora_domain::BODY_MAX_CHARS),
+                tags: Vec::new(),
+            },
+            now(),
+            &audit(),
+        )
+        .await
+        .expect("create");
+
+    fixture
+        .discussions
+        .change_status(
+            &author,
+            discussion.id,
+            ModerationStatus::Published,
+            now(),
+            &audit(),
+        )
+        .await
+        .expect("publish");
+
+    // A handful of maximum-length replies is enough to push the composition
+    // past the body limit.
+    for index in 0..3 {
+        fixture
+            .discussions
+            .reply(
+                &helper,
+                discussion.id,
+                ReplyInput {
+                    body: format!("{index}").repeat(campus_agora_domain::COMMENT_BODY_MAX_CHARS),
+                },
+                now(),
+                &audit(),
+            )
+            .await
+            .expect("reply");
+    }
+
+    let drafted = fixture
+        .ai
+        .draft_from_discussion(&author, discussion.id, now(), &audit())
+        .await;
+
+    match drafted {
+        // Either the provider keeps the composition inside the limits, or the
+        // service refuses it. What must not happen is an entry no other path
+        // could have created.
+        Ok(outcome) => assert!(
+            outcome.entry.body.chars().count() <= campus_agora_domain::BODY_MAX_CHARS,
+            "a composed body must respect the same bound every other write does"
+        ),
+        Err(ApplicationError::Validation(_)) => {}
+        Err(other) => panic!("unexpected error: {other:?}"),
+    }
+}

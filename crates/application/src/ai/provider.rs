@@ -12,7 +12,7 @@
 //! be sent, and `docs/operations/security.md` records the boundary.
 
 use async_trait::async_trait;
-use campus_agora_domain::CommentId;
+use campus_agora_domain::{CommentId, BODY_MAX_CHARS, SUMMARY_MAX_CHARS};
 
 use crate::errors::ApplicationError;
 
@@ -80,12 +80,43 @@ impl ArchiveDraftProvider for DeterministicDraftProvider {
         let mut ordered = request.sources.clone();
         ordered.sort_by_key(|source| !source.accepted);
 
-        let body = ordered
-            .iter()
-            .map(|source| source.body.trim())
-            .filter(|text| !text.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n\n");
+        // A composition is the one text in the system nobody typed, so it is
+        // the one that can exceed the archive's limits without anyone trying.
+        // Stopping at the bound keeps drafting usable on exactly the busy
+        // threads most worth archiving, where refusing outright would make the
+        // feature useless.
+        let mut body = String::new();
+        let mut used_sources = Vec::new();
+
+        for source in &ordered {
+            let text = source.body.trim();
+
+            if text.is_empty() {
+                continue;
+            }
+
+            let separator = if body.is_empty() { 0 } else { 2 };
+            let projected = body.chars().count() + separator + text.chars().count();
+
+            if projected > BODY_MAX_CHARS {
+                continue;
+            }
+
+            if !body.is_empty() {
+                body.push_str("\n\n");
+            }
+
+            body.push_str(text);
+            // Only what actually made it in. A draft that listed sources it
+            // dropped would make "source-backed" a claim rather than a fact.
+            used_sources.push(source.comment_id);
+        }
+
+        if body.is_empty() {
+            return Err(ApplicationError::Validation(
+                "no source was short enough to compose a draft from".to_owned(),
+            ));
+        }
 
         // A summary a person can correct at a glance, rather than a claim the
         // draft makes on its own authority.
@@ -98,7 +129,7 @@ impl ArchiveDraftProvider for DeterministicDraftProvider {
             title: request.title,
             summary,
             body,
-            used_sources: ordered.iter().map(|source| source.comment_id).collect(),
+            used_sources,
         })
     }
 }
@@ -106,7 +137,9 @@ impl ArchiveDraftProvider for DeterministicDraftProvider {
 /// The opening sentence, bounded so a reply written as one long paragraph does
 /// not become a summary as long as the body.
 fn first_sentence(text: &str) -> String {
+    // Well under SUMMARY_MAX_CHARS: a summary as long as the body helps nobody.
     const MAX: usize = 120;
+    const _: () = assert!(MAX <= SUMMARY_MAX_CHARS);
 
     let trimmed = text.trim();
     let end = trimmed

@@ -143,6 +143,14 @@ const ALLOWED_TRANSITIONS: ReadonlyArray<[ModerationStatus, ModerationStatus]> =
   ["archived", "published"],
   // Archiving must not put content beyond moderation reach.
   ["archived", "hidden"],
+  // M4. An author may ask for review instead of publishing, and a moderator
+  // decides. Archiving or hiding content under review is deliberately absent:
+  // it would settle the open question by side effect.
+  ["draft", "pending_review"],
+  ["published", "pending_review"],
+  ["pending_review", "published"],
+  ["pending_review", "rejected"],
+  ["pending_review", "draft"],
 ];
 
 function canTransition(from: ModerationStatus, to: ModerationStatus): boolean {
@@ -289,30 +297,41 @@ export function createCampusAgoraMockFetch(
     return tags.length > LIMITS.tags ? "invalid" : tags;
   }
 
-  /// Mirrors the domain permission matrix for the two moderation actions.
+  /// Mirrors `campus_agora_application::discussion::action_for_transition`
+  /// plus the permission matrix, in one place rather than once per content
+  /// kind. Two hand-transcribed copies of a state machine is how M4 shipped a
+  /// mock that rejected its own headline transition.
+  function mayChangeStatusOf(
+    viewer: CurrentUser,
+    authorId: string,
+    from: ModerationStatus,
+    target: ModerationStatus,
+  ): boolean {
+    if (viewer.systemRole === "moderator" || viewer.systemRole === "admin") {
+      return true;
+    }
+
+    if (authorId !== viewer.id) {
+      return false;
+    }
+
+    // An author may publish their own draft, submit it for review instead,
+    // and retire or restore their own published work. Hiding, rejecting, and
+    // every exit from review stay moderation actions.
+    return (
+      (target === "published" && from === "draft") ||
+      (target === "pending_review" && from === "draft") ||
+      (target === "archived" && from === "published") ||
+      (target === "published" && from === "archived")
+    );
+  }
+
   function mayChangeStatus(
     viewer: CurrentUser,
     entry: KnowledgeEntry,
     target: ModerationStatus,
   ): boolean {
-    const isModeration =
-      viewer.systemRole === "moderator" || viewer.systemRole === "admin";
-
-    if (isModeration) {
-      return true;
-    }
-
-    if (entry.authorId !== viewer.id) {
-      return false;
-    }
-
-    // An author may publish their own draft, and may retire or restore their
-    // own published work. Hiding stays a moderation action.
-    return (
-      (target === "published" && entry.moderationStatus === "draft") ||
-      (target === "archived" && entry.moderationStatus === "published") ||
-      (target === "published" && entry.moderationStatus === "archived")
-    );
+    return mayChangeStatusOf(viewer, entry.authorId, entry.moderationStatus, target);
   }
 
   /// EditOwnDraft: author, assigned maintainer, moderator, admin. The mock has
@@ -335,24 +354,16 @@ export function createCampusAgoraMockFetch(
     );
   }
 
-  /// Same shape as `mayChangeStatus` for entries, against a discussion.
   function mayChangeDiscussionStatus(
     viewer: CurrentUser,
     discussion: Discussion,
     target: ModerationStatus,
   ): boolean {
-    if (viewer.systemRole === "moderator" || viewer.systemRole === "admin") {
-      return true;
-    }
-
-    if (discussion.authorId !== viewer.id) {
-      return false;
-    }
-
-    return (
-      (target === "published" && discussion.moderationStatus === "draft") ||
-      (target === "archived" && discussion.moderationStatus === "published") ||
-      (target === "published" && discussion.moderationStatus === "archived")
+    return mayChangeStatusOf(
+      viewer,
+      discussion.authorId,
+      discussion.moderationStatus,
+      target,
     );
   }
 

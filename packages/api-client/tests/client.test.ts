@@ -1361,3 +1361,138 @@ describe("moderation and AI drafting in the mock", () => {
     });
   });
 });
+
+/**
+ * `pending_review` is M4's headline state and, after "reporting changes
+ * nothing" was adopted, an author submitting their own draft is its *only*
+ * entrance. The mock is the only backend `apps/web` tests ever see, so a
+ * transition table that omits it leaves the whole path untested and renders a
+ * button that 400s in development.
+ */
+describe("the mock's state machine matches the domain's", () => {
+  async function authed(persona: "student" | "moderator" = "student") {
+    const fetchImpl = createCampusAgoraMockFetch();
+    const holder: { token?: string } = {};
+    const client = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder.token,
+    });
+    holder.token = (await client.mockLogin(persona)).token;
+    return { client, fetchImpl };
+  }
+
+  test("an author can submit their own draft entry for review", async () => {
+    const { client } = await authed();
+    const entry = await client.createKnowledgeEntry({
+      title: "拿不准的资料",
+      body: "正文",
+      tags: [],
+      category: "other",
+      applicableAudience: "all_students",
+      sourceKind: "unspecified",
+    });
+
+    const submitted = await client.changeKnowledgeEntryStatus(
+      entry.id,
+      "pending_review",
+    );
+    expect(submitted.moderationStatus).toBe("pending_review");
+  });
+
+  test("an author can submit their own draft discussion for review", async () => {
+    const { client } = await authed();
+    const created = await client.createDiscussion({
+      title: "拿不准的讨论",
+      body: "正文",
+      tags: [],
+    });
+
+    const submitted = await client.changeDiscussionStatus(created.id, "pending_review");
+    expect(submitted.moderationStatus).toBe("pending_review");
+  });
+
+  test("submitted content reaches the queue with no report behind it", async () => {
+    const fetchImpl = createCampusAgoraMockFetch();
+    const holder: { token?: string } = {};
+    const author = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder.token,
+    });
+    holder.token = (await author.mockLogin("student")).token;
+
+    const created = await author.createDiscussion({
+      title: "等待复核",
+      body: "正文",
+      tags: [],
+    });
+    await author.changeDiscussionStatus(created.id, "pending_review");
+
+    const holder2: { token?: string } = {};
+    const moderator = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder2.token,
+    });
+    holder2.token = (await moderator.mockLogin("moderator")).token;
+
+    const queue = await moderator.listModerationQueue();
+    const item = queue.items.find((entry) => entry.postId === created.id);
+
+    expect(item?.openReportCount).toBe(0);
+    expect(item?.risk).toBe("none");
+    expect(item?.moderationStatus).toBe("pending_review");
+  });
+
+  test("only a moderator decides what happens to content under review", async () => {
+    const fetchImpl = createCampusAgoraMockFetch();
+    const holder: { token?: string } = {};
+    const author = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder.token,
+    });
+    holder.token = (await author.mockLogin("student")).token;
+
+    const created = await author.createDiscussion({
+      title: "复核中",
+      body: "正文",
+      tags: [],
+    });
+    await author.changeDiscussionStatus(created.id, "pending_review");
+
+    // The author submitted it; they do not get to approve it.
+    await expect(
+      author.changeDiscussionStatus(created.id, "published"),
+    ).rejects.toMatchObject({ status: 403 });
+
+    const holder2: { token?: string } = {};
+    const moderator = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder2.token,
+    });
+    holder2.token = (await moderator.mockLogin("moderator")).token;
+
+    await expect(
+      moderator.changeDiscussionStatus(created.id, "published"),
+    ).resolves.toMatchObject({ moderationStatus: "published" });
+  });
+
+  test("content under review cannot be archived or hidden directly", async () => {
+    const { client } = await authed("moderator");
+    const created = await client.createDiscussion({
+      title: "不能跳过复核",
+      body: "正文",
+      tags: [],
+    });
+    await client.changeDiscussionStatus(created.id, "pending_review");
+
+    for (const target of ["archived", "hidden"] as const) {
+      await expect(
+        client.changeDiscussionStatus(created.id, target),
+      ).rejects.toMatchObject({ status: 409 });
+    }
+  });
+});

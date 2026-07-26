@@ -1483,11 +1483,24 @@ impl ReportRepository for PgAuthStore {
         // Everything awaiting a decision: content with open reports, plus
         // content an author submitted for review with none. Grouped in SQL so
         // the counts and the earliest wait are one pass rather than N+1.
+        // `risk_rank` mirrors `ReportCategory::risk` so the ordering can be
+        // applied before `limit/offset`. Sorting only the fetched page would
+        // make the queue age-ordered in practice: an attacker who fills a page
+        // with old low-risk noise would push a genuine high-risk report onto
+        // page 2, on a queue that only grows. The returned `risk` still comes
+        // from the domain function, so that stays the single definition.
         let selection = "
             select p.id, p.post_type, p.author_id, p.title, p.moderation_status, p.updated_at,
                    coalesce(count(r.id), 0) as open_reports,
                    coalesce(min(r.created_at), p.updated_at) as queued_at,
-                   coalesce(array_agg(r.category) filter (where r.id is not null), '{}') as categories
+                   coalesce(array_agg(r.category) filter (where r.id is not null), '{}') as categories,
+                   case
+                     when bool_or(r.category in ('harassment', 'privacy_violation', 'illegal'))
+                       then 3
+                     when bool_or(r.category = 'misinformation') then 2
+                     when count(r.id) > 0 then 1
+                     else 0
+                   end as risk_rank
             from posts p
             left join content_reports r
               on r.post_id = p.id and r.resolved_at is null and r.deleted_at is null
@@ -1504,8 +1517,11 @@ impl ReportRepository for PgAuthStore {
 
         let page_size = page_size.max(1);
         let offset = i64::from(page.saturating_sub(1)) * i64::from(page_size);
+        // A total order, so a row cannot appear on two pages or on none when
+        // several share a `queued_at`.
         let rows = sqlx::query(&format!(
-            "select * from ({selection}) queued order by queued_at limit $1 offset $2"
+            "select * from ({selection}) queued \
+             order by risk_rank desc, queued_at asc, id asc limit $1 offset $2"
         ))
         .bind(i64::from(page_size))
         .bind(offset)
@@ -1513,20 +1529,14 @@ impl ReportRepository for PgAuthStore {
         .await
         .map_err(internal)?;
 
-        let mut items: Vec<ModerationQueueItem> = rows
+        // Already ordered by the query. The risk *value* is still derived by
+        // the domain function in `queue_item_from_row`, so `risk_rank` is only
+        // a sort key and cannot become a second definition of risk — a test
+        // asserts the two agree.
+        let items: Vec<ModerationQueueItem> = rows
             .iter()
             .map(queue_item_from_row)
             .collect::<Result<Vec<_>, _>>()?;
-
-        // Risk is derived in Rust from the same domain function the in-memory
-        // store uses, so the two orderings cannot drift.
-        items.sort_by(|left, right| {
-            right
-                .risk
-                .cmp(&left.risk)
-                .then_with(|| left.queued_at.cmp(&right.queued_at))
-                .then_with(|| left.post_id.cmp(&right.post_id))
-        });
 
         let total_items = total_items.max(0) as u64;
 

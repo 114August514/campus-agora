@@ -17,6 +17,46 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-27 - Resolve M4 review findings
+
+- Result: Five independent lenses produced 27 findings; 19 were refuted by an
+  adversarial pass and 8 survived, merging into three defects. All are fixed.
+  M4 stays 评审中.
+- Changed:
+  - **The moderation queue was not risk-ordered on PostgreSQL.** `queue()`
+    applied `order by queued_at limit/offset` in SQL and sorted by risk only
+    within the returned page, so the risk ordering was a per-page permutation.
+    With a page of noise already queued, a genuine high-risk report landed on
+    page 2 — reachable by anyone, needing no privileged access. The risk band
+    is now derived in the subquery and ordered before `limit/offset`, with a
+    total order so pagination partitions rather than samples.
+  - **The mock's transition table omitted every `pending_review` pair**, so
+    M4's only entrance into review returned 400 in the one backend `apps/web`
+    tests see, while the server returned 200. The two hand-transcribed copies
+    of the author's permissions are now one function.
+  - **AI drafting skipped the domain text validators.** A composition from a
+    busy thread could exceed `BODY_MAX_CHARS` by an order of magnitude and be
+    stored, and the editor the user is sent to re-validates on save — so the
+    flow delivered them to an editor that could not save. The provider now
+    stops at the bound and reports only the sources that actually made it in;
+    the service validates regardless.
+- Verification: full gate set with a disposable PostgreSQL 16 container. Rust
+  219, apps/web 80, api-client 73. The queue defect was reproduced against a
+  real database before it was fixed, and the new test was mutation-checked by
+  restoring the old `order by`.
+- Decisions:
+  - Truncating the composition rather than refusing it. Refusing would make
+    drafting fail on exactly the busy threads most worth archiving. Truncation
+    is only honest if `used_sources` shrinks with it, so it does.
+  - Ordering in SQL while keeping `risk_for` as the returned value, so
+    `risk_rank` is a sort key and not a second definition of risk.
+  - The recurring defect class moved rather than ended. M3's review forced the
+    content bounds into a shared table; M4's new handlers used it correctly and
+    the divergence appeared in the *state machine*, which had no shared source.
+    Consolidating the mock's two copies addresses this instance; the class is
+    still that the mock re-implements domain rules by hand.
+- Follow-up: none new.
+
 ### 2026-07-27 - Deliver M4.2 moderation frontend
 
 - Result: The governance loop is operable. M4's three exit criteria are met;

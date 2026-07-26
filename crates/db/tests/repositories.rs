@@ -12,8 +12,8 @@ use campus_agora_application::ports::{
 use campus_agora_application::ApplicationError;
 use campus_agora_db::{PgAuthStore, MIGRATIONS_DIR};
 use campus_agora_domain::{
-    ApplicableAudience, ArchiveCategory, AuthProviderKind, ModerationStatus, ReportCategory,
-    RiskLevel, SourceKind, SystemRole,
+    ApplicableAudience, ArchiveCategory, AuthProviderKind, ModerationStatus, PostId,
+    ReportCategory, RiskLevel, SourceKind, SystemRole,
 };
 use chrono::{Duration, Utc};
 use uuid::Uuid;
@@ -1026,4 +1026,188 @@ async fn pg_repositories_cover_the_m4_moderation_queue() {
         .expect("submitted content is queued");
     assert_eq!(submitted_item.open_report_count, 0);
     assert_eq!(submitted_item.risk, RiskLevel::None);
+}
+
+/// The queue's whole purpose is that the worst thing is looked at first. It is
+/// paginated, so the ordering has to be applied before the page is cut — not
+/// within it. With `page_size` items already queued, one newer high-risk
+/// report must still be on page 1, or an attacker who can add低risk noise can
+/// bury a genuine report simply by filling a page.
+#[tokio::test]
+async fn pg_queue_orders_by_risk_before_it_paginates() {
+    let Ok(database_url) = std::env::var("DATABASE_URL") else {
+        eprintln!("skipping pg queue ordering test: DATABASE_URL is not set");
+        return;
+    };
+
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(2)
+        .connect(&database_url)
+        .await
+        .expect("connect to test database");
+
+    let migrations = Path::new(env!("CARGO_MANIFEST_DIR")).join(MIGRATIONS_DIR);
+    sqlx::migrate::Migrator::new(migrations)
+        .await
+        .expect("load migrations")
+        .run(&pool)
+        .await
+        .expect("run migrations");
+
+    let store = Arc::new(PgAuthStore::new(pool.clone()));
+    let unique = Uuid::new_v4().simple().to_string();
+
+    let author = store
+        .upsert(NewUser {
+            auth_provider: AuthProviderKind::MockCampus,
+            provider_subject_hash: format!("queue-author-{unique}"),
+            display_name: "队列作者".to_owned(),
+            system_role: SystemRole::Student,
+        })
+        .await
+        .expect("author");
+
+    let base = Utc::now();
+    let mut low_risk_ids = Vec::new();
+
+    // Five old, low-risk items, each reported by its own reporter so the
+    // partial unique index is satisfied.
+    for index in 0..5 {
+        let entry = ArchiveRepository::insert(
+            store.as_ref(),
+            NewArchiveEntry {
+                author_id: author.id,
+                title: format!("低风险-{index}-{unique}"),
+                body: "正文".to_owned(),
+                summary: None,
+                tags: Vec::new(),
+                category: ArchiveCategory::Other,
+                applicable_audience: ApplicableAudience::AllStudents,
+                source_kind: SourceKind::Unspecified,
+                source_reference: None,
+                ai_provider: None,
+                created_at: base,
+            },
+        )
+        .await
+        .expect("low entry");
+
+        let reporter = store
+            .upsert(NewUser {
+                auth_provider: AuthProviderKind::MockCampus,
+                provider_subject_hash: format!("queue-low-{index}-{unique}"),
+                display_name: "举报者".to_owned(),
+                system_role: SystemRole::Student,
+            })
+            .await
+            .expect("reporter");
+
+        ReportRepository::insert(
+            store.as_ref(),
+            NewContentReport {
+                post_id: entry.id,
+                reporter_id: reporter.id,
+                category: ReportCategory::Spam,
+                message: "广告".to_owned(),
+                created_at: base - Duration::hours(24 - i64::from(index)),
+            },
+        )
+        .await
+        .expect("low report");
+
+        low_risk_ids.push(entry.id);
+    }
+
+    // One newer high-risk item — the newest thing in the queue.
+    let urgent = ArchiveRepository::insert(
+        store.as_ref(),
+        NewArchiveEntry {
+            author_id: author.id,
+            title: format!("高风险-{unique}"),
+            body: "正文".to_owned(),
+            summary: None,
+            tags: Vec::new(),
+            category: ArchiveCategory::Other,
+            applicable_audience: ApplicableAudience::AllStudents,
+            source_kind: SourceKind::Unspecified,
+            source_reference: None,
+            ai_provider: None,
+            created_at: base,
+        },
+    )
+    .await
+    .expect("urgent entry");
+
+    let urgent_reporter = store
+        .upsert(NewUser {
+            auth_provider: AuthProviderKind::MockCampus,
+            provider_subject_hash: format!("queue-high-{unique}"),
+            display_name: "举报者".to_owned(),
+            system_role: SystemRole::Student,
+        })
+        .await
+        .expect("urgent reporter");
+
+    ReportRepository::insert(
+        store.as_ref(),
+        NewContentReport {
+            post_id: urgent.id,
+            reporter_id: urgent_reporter.id,
+            category: ReportCategory::Illegal,
+            message: "违法内容".to_owned(),
+            created_at: base,
+        },
+    )
+    .await
+    .expect("urgent report");
+
+    // A page smaller than the number of low-risk items: if the ordering were
+    // applied after the cut, page 1 would be all noise. The queue is global,
+    // so the assertion is scoped to this fixture's own rows rather than to
+    // absolute positions.
+    // The narrowest page there is. This fixture's low-risk reports are the
+    // oldest rows in the database, so if the ordering were applied after the
+    // cut, the single returned row would be one of them. The assertion holds
+    // whatever else other tests have queued concurrently, which is why it is
+    // about the risk band rather than about a specific id.
+    let page = ReportRepository::queue(store.as_ref(), 1, 1)
+        .await
+        .expect("first page");
+
+    assert_eq!(
+        page.items.first().map(|item| item.risk),
+        Some(RiskLevel::High),
+        "a high-risk item must lead the queue, not be paginated behind older low-risk noise"
+    );
+    assert!(
+        !low_risk_ids.contains(&page.items[0].post_id),
+        "the oldest low-risk report must not lead a risk-ordered queue"
+    );
+
+    // Paging must partition rather than sample: a row cannot appear twice or
+    // vanish because several share a `queued_at`.
+    let mut walked: Vec<PostId> = Vec::new();
+    for page_number in 1..=((page.total_items as u32).div_ceil(2)) {
+        walked.extend(
+            ReportRepository::queue(store.as_ref(), page_number, 2)
+                .await
+                .expect("page")
+                .items
+                .iter()
+                .map(|item| item.post_id),
+        );
+    }
+    let unique_walked = {
+        let mut copy = walked.clone();
+        copy.sort_unstable();
+        copy.dedup();
+        copy.len()
+    };
+    assert_eq!(unique_walked, walked.len(), "a row appeared on two pages");
+    for id in low_risk_ids.iter().chain([&urgent.id]) {
+        assert!(
+            walked.contains(id),
+            "walking every page must reach every row"
+        );
+    }
 }
