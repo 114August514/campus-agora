@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { CampusAgoraApiClient } from "../src";
 import {
   CampusAgoraApiError,
   createCampusAgoraApiClient,
@@ -372,11 +373,212 @@ describe("mock fetch matches the real server contract", () => {
     });
 
     const login = await client.mockLogin("organization_member");
-    const uuid =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
     expect(login.user.id).toMatch(uuid);
     expect(login.user.organizations[0]?.organizationId).toMatch(uuid);
     expect(new Date(login.expiresAt).getTime()).toBeGreaterThan(Date.now());
+  });
+});
+
+// The archive mock must behave like crates/api, or frontend work builds on
+// behavior that does not exist. These mirror crates/api/tests/archive.rs.
+describe("knowledge archive client", () => {
+  async function authedClient(
+    persona: Parameters<CampusAgoraApiClient["mockLogin"]>[0],
+  ) {
+    const fetchImpl = createCampusAgoraMockFetch();
+    // Logging in needs a client, and the client needs the token the login
+    // returns, so the holder is filled in immediately after.
+    const holder: { token?: string } = {};
+    const client = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => holder.token,
+    });
+    const login = await client.mockLogin(persona);
+    holder.token = login.token;
+
+    return {
+      client,
+      user: login.user,
+      guest: createCampusAgoraApiClient({ baseUrl: "http://api.test", fetchImpl }),
+      as(otherToken: string | undefined) {
+        return createCampusAgoraApiClient({
+          baseUrl: "http://api.test",
+          fetchImpl,
+          authToken: () => otherToken,
+        });
+      },
+      fetchImpl,
+    };
+  }
+
+  const draft = {
+    title: "新生报到清单",
+    body: "正文内容",
+    summary: "摘要",
+    tags: ["新生", "报到"],
+    category: "onboarding",
+    applicableAudience: "new_students",
+    sourceKind: "firsthand_experience",
+  } as const;
+
+  test("creating an entry returns a draft at revision 1", async () => {
+    const { client } = await authedClient("student");
+
+    const entry = await client.createKnowledgeEntry(draft);
+
+    expect(entry.moderationStatus).toBe("draft");
+    expect(entry.currentRevision).toBe(1);
+    expect(entry.title).toBe("新生报到清单");
+    expect(entry.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+  });
+
+  test("creating an entry without a session is unauthorized", async () => {
+    const client = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl: createCampusAgoraMockFetch(),
+    });
+
+    await expect(client.createKnowledgeEntry(draft)).rejects.toMatchObject({
+      code: "unauthorized",
+      status: 401,
+    });
+  });
+
+  test("a blank title is 422, not 400", async () => {
+    const { client } = await authedClient("student");
+
+    await expect(
+      client.createKnowledgeEntry({ ...draft, title: "   " }),
+    ).rejects.toMatchObject({ code: "validation_failed", status: 422 });
+  });
+
+  test("drafts are hidden from guests and visible to their author", async () => {
+    const { client, guest } = await authedClient("student");
+
+    const published = await client.createKnowledgeEntry(draft);
+    await client.createKnowledgeEntry({ ...draft, title: "仍是草稿" });
+    await client.changeKnowledgeEntryStatus(published.id, "published");
+
+    const guestPage = await guest.listKnowledgeEntries();
+    expect(guestPage.totalItems).toBe(1);
+    expect(guestPage.items[0]?.title).toBe("新生报到清单");
+
+    const ownerPage = await client.listKnowledgeEntries();
+    expect(ownerPage.totalItems).toBe(2);
+
+    await expect(
+      guest.getKnowledgeEntry(
+        ownerPage.items.find((item) => item.title === "仍是草稿")?.id ?? "",
+      ),
+    ).rejects.toMatchObject({ code: "not_found", status: 404 });
+  });
+
+  test("an illegal status transition is a conflict", async () => {
+    const { client } = await authedClient("admin");
+
+    const entry = await client.createKnowledgeEntry(draft);
+
+    await expect(
+      client.changeKnowledgeEntryStatus(entry.id, "hidden"),
+    ).rejects.toMatchObject({ code: "conflict", status: 409 });
+  });
+
+  test("updating a published entry adds a revision", async () => {
+    const { client } = await authedClient("student");
+
+    const entry = await client.createKnowledgeEntry(draft);
+    await client.changeKnowledgeEntryStatus(entry.id, "published");
+    const updated = await client.updateKnowledgeEntry(entry.id, {
+      title: "新生报到清单（2026 版）",
+    });
+
+    expect(updated.currentRevision).toBe(2);
+
+    const history = await client.listKnowledgeEntryRevisions(entry.id);
+    expect(history.items).toHaveLength(2);
+    expect(history.items[0]?.revision).toBe(1);
+    expect(history.items[1]?.title).toBe("新生报到清单（2026 版）");
+  });
+
+  test("pagination reports totals and rejects an out-of-range page size", async () => {
+    const { client, guest } = await authedClient("student");
+
+    for (const title of ["条目一", "条目二", "条目三"]) {
+      const entry = await client.createKnowledgeEntry({ ...draft, title });
+      await client.changeKnowledgeEntryStatus(entry.id, "published");
+    }
+
+    const page = await guest.listKnowledgeEntries({ page: 2, pageSize: 2 });
+    expect(page.page).toBe(2);
+    expect(page.totalItems).toBe(3);
+    expect(page.totalPages).toBe(2);
+    expect(page.items).toHaveLength(1);
+
+    await expect(guest.listKnowledgeEntries({ pageSize: 101 })).rejects.toMatchObject({
+      code: "validation_failed",
+      status: 422,
+    });
+  });
+
+  test("search-lite filters by query, tag, and category", async () => {
+    const { client, guest } = await authedClient("student");
+
+    for (const [title, category] of [
+      ["宿舍生活指南", "campus_life"],
+      ["新生报到流程", "onboarding"],
+    ] as const) {
+      const entry = await client.createKnowledgeEntry({ ...draft, title, category });
+      await client.changeKnowledgeEntryStatus(entry.id, "published");
+    }
+
+    await expect(guest.listKnowledgeEntries({ q: "宿舍" })).resolves.toMatchObject({
+      totalItems: 1,
+    });
+    await expect(
+      guest.listKnowledgeEntries({ category: "onboarding" }),
+    ).resolves.toMatchObject({ totalItems: 1 });
+    await expect(guest.listKnowledgeEntries({ tag: "新生" })).resolves.toMatchObject({
+      totalItems: 2,
+    });
+  });
+
+  test("corrections are filed by readers and resolved by the author", async () => {
+    const { client, fetchImpl } = await authedClient("student");
+
+    const entry = await client.createKnowledgeEntry(draft);
+    await client.changeKnowledgeEntryStatus(entry.id, "published");
+
+    const reporterHolder: { token?: string } = {};
+    const reporter = createCampusAgoraApiClient({
+      baseUrl: "http://api.test",
+      fetchImpl,
+      authToken: () => reporterHolder.token,
+    });
+    reporterHolder.token = (await reporter.mockLogin("organization_member")).token;
+
+    const correction = await reporter.fileKnowledgeEntryCorrection(
+      entry.id,
+      "报名时间已经变了",
+    );
+    expect(correction.resolvedAt).toBeUndefined();
+
+    // The reporter has no stake in the entry, so closing it is not theirs.
+    await expect(
+      reporter.resolveKnowledgeEntryCorrection(entry.id, correction.id),
+    ).rejects.toMatchObject({ code: "forbidden", status: 403 });
+
+    const resolved = await client.resolveKnowledgeEntryCorrection(
+      entry.id,
+      correction.id,
+    );
+    expect(resolved.resolvedAt).toBeTruthy();
+
+    const listed = await client.listKnowledgeEntryCorrections(entry.id);
+    expect(listed.items).toHaveLength(1);
   });
 });

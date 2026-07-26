@@ -7,6 +7,21 @@ export interface ApiErrorResponse {
   requestId: string;
 }
 
+export type ApplicableAudience =
+  | "all_students"
+  | "new_students"
+  | "undergraduate"
+  | "graduate"
+  | "organization_members";
+
+export type ArchiveCategory =
+  | "onboarding"
+  | "campus_life"
+  | "academics"
+  | "organizations"
+  | "procedures"
+  | "other";
+
 export interface CapabilityFlags {
   aiArchiveEnabled: boolean;
   attachmentsEnabled: boolean;
@@ -14,11 +29,61 @@ export interface CapabilityFlags {
   desktopEnabled: boolean;
 }
 
+export interface ChangeStatusRequest {
+  status: ModerationStatus;
+}
+
+export interface Correction {
+  createdAt: string;
+  id: string;
+  message: string;
+  postId: string;
+  reporterId: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+}
+
+export interface CorrectionCollection {
+  items: Correction[];
+}
+
+export interface CreateKnowledgeEntryRequest {
+  applicableAudience: ApplicableAudience;
+  body: string;
+  category: ArchiveCategory;
+  sourceKind: SourceKind;
+  sourceReference?: string;
+  summary?: string;
+  tags?: string[];
+  title: string;
+}
+
 export interface CurrentUser {
   displayName: string;
   id: string;
   organizations: OrganizationMembership[];
   systemRole: "student" | "organization_member" | "moderator" | "admin";
+}
+
+export interface FileCorrectionRequest {
+  message: string;
+}
+
+export interface KnowledgeEntry {
+  applicableAudience: ApplicableAudience;
+  authorId: string;
+  body: string;
+  category: ArchiveCategory;
+  createdAt: string;
+  currentRevision: number;
+  id: string;
+  moderationStatus: ModerationStatus;
+  sourceKind: SourceKind;
+  sourceReference?: string;
+  summary?: string;
+  tags: string[];
+  title: string;
+  updatedAt: string;
 }
 
 export interface LoginResponse {
@@ -37,10 +102,20 @@ export interface MockLoginRequest {
   persona: "student" | "organization_member" | "moderator" | "admin";
 }
 
+export type ModerationStatus = "draft" | "published" | "hidden" | "rejected";
+
 export interface OrganizationMembership {
   name: string;
   organizationId: string;
   slug: string;
+}
+
+export interface PaginatedKnowledgeEntries {
+  items: KnowledgeEntry[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
 }
 
 export interface ReadinessChecks {
@@ -52,9 +127,42 @@ export interface ReadinessResponse {
   status: "ready" | "unready";
 }
 
+export interface Revision {
+  body: string;
+  createdAt: string;
+  editorId: string;
+  id: string;
+  revision: number;
+  summary?: string;
+  tags: string[];
+  title: string;
+}
+
+export interface RevisionCollection {
+  items: Revision[];
+}
+
 export interface SessionResponse {
   expiresAt: string;
   user: CurrentUser;
+}
+
+export type SourceKind =
+  | "firsthand_experience"
+  | "official_announcement"
+  | "group_chat"
+  | "discussion"
+  | "unspecified";
+
+export interface UpdateKnowledgeEntryRequest {
+  applicableAudience?: ApplicableAudience;
+  body?: string;
+  category?: ArchiveCategory;
+  sourceKind?: SourceKind;
+  sourceReference?: string;
+  summary?: string;
+  tags?: string[];
+  title?: string;
 }
 
 export type HealthResponse = "ok";
