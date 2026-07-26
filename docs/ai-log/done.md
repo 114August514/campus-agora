@@ -17,6 +17,74 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-07-26 - Resolve M1 review findings on PR #4
+
+- Result: Fixed the defects found by three independent reviews of the M1
+  branch (general code review, security review, contract/documentation
+  review) before merge.
+- Changed:
+  - Security. `AUTH_MOCK_ENABLED` no longer fails open: `bool_env` accepted
+    only exact `true`/`false`, so `AUTH_MOCK_ENABLED=0`, `False`, or a value
+    with stray whitespace silently fell back to enabled, leaving an
+    unauthenticated admin login reachable. It now accepts the common
+    spellings and panics on anything else. The API also refuses to start
+    without `DATABASE_URL` unless `AUTH_STORE_MEMORY=true` is set explicitly,
+    so a missing secret can no longer route real sessions into the volatile
+    in-memory store. `SESSION_TTL_SECONDS` is bounded to 30 days and parsed as
+    `i64`; `ReadinessProbe` and `LoginOutcome` have hand-written `Debug` impls
+    so the database password and the one-time token cannot reach a log line;
+    inbound `X-Request-Id` is length- and charset-checked before it enters
+    audit metadata; the 422 body no longer echoes the caller's persona.
+  - Correctness. Login no longer overwrites `system_role`, which would have
+    reverted admin-assigned roles on the user's next login once M4/M6 lands.
+    Soft-deleted accounts can no longer log in, which previously produced a
+    token whose every later request returned 401. `revoke` is idempotent in
+    both stores and keeps the first revocation timestamp, so concurrent
+    logouts no longer return 404 from PostgreSQL while returning 204 in
+    memory. Bearer scheme matching is case-insensitive per RFC 7235.
+  - Mock parity. `createCampusAgoraMockFetch` disagreed with the server in
+    ways that would let frontend tests pass against behavior that does not
+    exist: it never produced `403 auth_mock_disabled` (a case the web app
+    already had a UI branch for), returned 422 where the server returns 400
+    for malformed bodies, accepted `constructor` as a persona through the
+    prototype chain, answered 200 for wrong HTTP methods, never returned 503
+    for readiness failures, used non-UUID ids, and hardcoded a session expiry
+    that would go stale. All are now aligned and pinned by tests.
+  - Scope. Added the guarded shell listed in M1 core scope: navigation entries
+    are filtered by session and role, with backend policy still the security
+    boundary.
+  - Tests. `apps/web` had no test runner at all, leaving the documented
+    sessionStorage-only policy ungated; it now runs Bun tests covering that
+    policy and navigation visibility.
+  - Docs. README, `docs/index.md`, and `AGENTS.md` still announced M0.2;
+    `milestones.md` had no freshness line; endpoint lists omitted the auth
+    routes; `.env.example` omitted `VITE_API_BASE_URL` and `AUTH_STORE_MEMORY`;
+    `api-contracts.md` gained an error-code table, the auth path-convention
+    exception, and a mock-parity rule; `privacy.md` no longer overstates
+    unsalted SHA-256 and records the keyed-hash requirement for M6;
+    `auth-permissions.md` documents that matrix columns combine as a union of
+    grants, so a `Deny` cell never revokes; `security.md` mirrors the session
+    retention row.
+- Verification: `cargo test --workspace` (54 tests) against a disposable
+  PostgreSQL 16 container, `cargo fmt --all --check`, `cargo clippy
+  --workspace --all-targets -- -D warnings`, `bun run api:types`,
+  `bun run typecheck`, `bun run lint`, `bun run lint:styles`, `bun run test`,
+  `bun run build`, `bun run ci:docs`, `git diff --check`. Confirmed at runtime
+  that `AUTH_MOCK_ENABLED=0` now reports `authMockEnabled: false` and answers
+  `403 auth_mock_disabled` where it previously issued an admin token, and that
+  the API refuses to start without `DATABASE_URL`. Mutation-tested the new
+  frontend guard: swapping `sessionStorage` for `localStorage` fails two tests.
+- Decisions: Kept the permission fold as a union of grants rather than giving
+  `Deny` cells precedence. Precedence would break "Edit own draft", where a
+  Student is denied by their system-role column and allowed by the `Author`
+  column, which is the intended outcome. The union rule is now documented and
+  pinned by a test instead of changed.
+- Follow-up: The permission policy still has no call site, because M1 ships no
+  protected business resource; M2 must build the `Actor` construction seam and
+  validate that the resource-context flags are derivable. Rate limiting for
+  the unauthenticated login endpoint and a stale-session purge job remain open
+  for M7. Subject hashing must move to a keyed construction before M6.
+
 ### 2026-07-26 - Implement M1 identity, permissions, and auth shell
 
 - Result: Delivered the M1 milestone: permission matrix policy functions, an

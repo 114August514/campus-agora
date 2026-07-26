@@ -112,6 +112,25 @@ runtime until the owning milestone (M2+) binds the missing resource state.
 "Allow if member/assigned" and "own data only" cells resolve from explicit
 actor context flags supplied by the caller.
 
+### How Columns Combine
+
+An actor can match several columns at once: their system role, plus `Author`
+and `Maintainer` when they hold that resource role. The decision is the **union
+of grants** — the most permissive matching column wins. This is what makes
+"Edit own draft" work: a `Student` is denied by their system-role column but
+allowed by the `Author` column, and the author grant is the intended outcome.
+
+The consequence is that a `Deny` cell means "this column alone does not grant
+the action", not "this column revokes the action". A `Deny` can never take a
+capability away from another column. For example a `Moderator` who is also the
+`Author` of the data being exported is allowed to export it, because the
+`Author` column grants "own data only" — the `Moderator` column's `Deny` only
+means moderation status by itself confers no export right.
+
+If a future action needs a role to genuinely *revoke* a capability, that needs
+an explicit mechanism rather than a `Deny` cell, and this section must be
+updated at the same time.
+
 ## Anonymous Semantics
 
 Anonymous display can hide identity from ordinary readers. It must not prevent

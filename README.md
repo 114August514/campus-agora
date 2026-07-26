@@ -1,6 +1,6 @@
 # Campus Agora
 
-Campus Agora is a campus discussion and knowledge archive platform. This repository is currently in the M0.2 Governance Docs And Boundaries stage.
+Campus Agora is a campus discussion and knowledge archive platform. This repository is currently in the M1 Identity, Permissions And Auth Shell stage.
 
 ## Requirements
 
@@ -49,8 +49,11 @@ bun run docker:api
 Shared automation lives in `scripts/`. The CI workflow calls the same scripts so
 local failures can be reproduced without copying commands from YAML.
 
-The M0.1 API exposes:
+The API exposes:
 
 - `GET /healthz`
 - `GET /readyz`
 - `GET /api/v1/meta`
+- `POST /api/v1/auth/mock-login`
+- `GET /api/v1/auth/session`
+- `POST /api/v1/auth/logout`

@@ -10,7 +10,7 @@ before real identity integration, attachments, or AI assistance are added.
 | Data | Purpose | Storage | Access |
 | --- | --- | --- | --- |
 | Account profile | Identify authenticated users and display ownership | PostgreSQL | User, moderators, admins |
-| Campus identity reference | Link account to campus auth provider; stored as SHA-256 subject hash plus provider name, never as raw assertions | PostgreSQL | Auth service, admins |
+| Campus identity reference | Link account to campus auth provider; stored as a subject digest plus provider name, never as raw assertions | PostgreSQL | Auth service, admins |
 | Session records | Keep authenticated sessions alive; stored as SHA-256 token hash with expiry and revocation timestamps, never the raw token | PostgreSQL | Auth service, admins |
 | Organization memberships | Prove a user acts within a verified organization context | PostgreSQL | User, organization tooling, moderators, admins |
 | Discussion content | Community discussion and later archive source | PostgreSQL | Readers based on visibility |
@@ -27,6 +27,20 @@ before real identity integration, attachments, or AI assistance are added.
 - Do not store raw campus SSO assertions after login exchange.
 - Do not put secrets, tokens, passwords, or raw identity payloads in logs.
 - Do not store real student data in seed data, mock data, tests, or AI LOG.
+
+### Identity Digest Strength
+
+M1 hashes provider subjects with plain SHA-256. That is sufficient for the mock
+personas, whose subjects are public constants, but it is **not** a meaningful
+protection for real campus identifiers: student numbers are low-entropy and
+structured, so an unsalted digest over that keyspace is reversible by
+enumeration against a database or backup dump.
+
+Before M6 connects a real campus provider, subject hashing must move to a
+keyed construction (HMAC-SHA256 with a rotatable server-side pepper held in the
+secret manager, or a memory-hard KDF), and this section must be updated with
+the rotation story. Session tokens keep plain SHA-256, which is correct there:
+they are 256 bits of CSPRNG output, so enumeration is infeasible.
 
 ## Retention
 
