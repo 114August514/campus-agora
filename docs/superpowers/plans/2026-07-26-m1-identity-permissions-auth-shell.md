@@ -39,69 +39,69 @@ Decisions:
 
 ### Task 1: Plan, AI Log, Milestone State
 
-- [ ] Save this plan to `docs/superpowers/plans/2026-07-26-m1-identity-permissions-auth-shell.md`.
-- [ ] Add the M1 task entry to `docs/ai-log/todo.md`.
-- [ ] Update `docs/product/milestones.md` current-phase section and summary table: M0.2 completed, M1 in progress.
+- [x] Save this plan to `docs/superpowers/plans/2026-07-26-m1-identity-permissions-auth-shell.md`.
+- [x] Add the M1 task entry to `docs/ai-log/todo.md`.
+- [x] Update `docs/product/milestones.md` current-phase section and summary table: M0.2 completed, M1 in progress.
 
 ### Task 2: Domain Roles, IDs, Permission Matrix
 
-- [ ] Add workspace deps (`uuid`, `chrono`) and domain crate deps.
-- [ ] Write failing domain tests: `SystemRole` parse/serialize round-trip; display-name validation (trimmed, non-empty, max 64 chars); permission matrix conformance for every action row of `docs/architecture/auth-permissions.md`, covering guest, student, org member (member and non-member), author, assigned maintainer, moderator, admin, and `Conditional` cells; `is_allowed` denies `Conditional`.
-- [ ] Implement `ids.rs` (UserId/OrganizationId/SessionId newtypes over `Uuid`), `roles.rs` (`SystemRole`), `users.rs` (`AuthProviderKind`, `validate_display_name`), `permissions.rs` (`Action`, `Actor`, `AuthenticatedActor` context flags, `PermissionDecision`, `decide`, `is_allowed`).
-- [ ] Run `cargo test -p campus_agora_domain` green.
+- [x] Add workspace deps (`uuid`, `chrono`) and domain crate deps.
+- [x] Write failing domain tests: `SystemRole` parse/serialize round-trip; display-name validation (trimmed, non-empty, max 64 chars); permission matrix conformance for every action row of `docs/architecture/auth-permissions.md`, covering guest, student, org member (member and non-member), author, assigned maintainer, moderator, admin, and `Conditional` cells; `is_allowed` denies `Conditional`.
+- [x] Implement `ids.rs` (UserId/OrganizationId/SessionId newtypes over `Uuid`), `roles.rs` (`SystemRole`), `users.rs` (`AuthProviderKind`, `validate_display_name`), `permissions.rs` (`Action`, `Actor`, `AuthenticatedActor` context flags, `PermissionDecision`, `decide`, `is_allowed`).
+- [x] Run `cargo test -p campus_agora_domain` green.
 
 ### Task 3: Application Auth Provider, Use Cases, In-Memory Ports
 
-- [ ] Write failing application tests: mock provider verifies each persona and rejects unknown ones; login creates a user once and reuses it on the second login; org persona provisions organization and membership; session token is returned in plaintext exactly once while only a SHA-256 hash is stored; `current_user` resolves an active session and rejects unknown, expired, and revoked tokens with `Unauthorized`; logout revokes the session; login and logout record `auth.login`/`auth.logout` audit events without raw tokens.
-- [ ] Implement `errors.rs` (`ApplicationError`), `auth/provider.rs` (`AuthCredential`, `VerifiedCampusIdentity`, `AuthProvider` trait, `MockCampusAuthProvider`), `ports.rs` (records plus `UserRepository`, `SessionRepository`, `OrganizationRepository`, `AuditEventRepository` traits), `memory.rs` (in-memory implementations), `auth/service.rs` (`AuthService` with `login`, `current_user`, `logout`, TTL config, token generation via `rand`, hashing via `sha2`).
-- [ ] Run `cargo test -p campus_agora_application` green.
+- [x] Write failing application tests: mock provider verifies each persona and rejects unknown ones; login creates a user once and reuses it on the second login; org persona provisions organization and membership; session token is returned in plaintext exactly once while only a SHA-256 hash is stored; `current_user` resolves an active session and rejects unknown, expired, and revoked tokens with `Unauthorized`; logout revokes the session; login and logout record `auth.login`/`auth.logout` audit events without raw tokens.
+- [x] Implement `errors.rs` (`ApplicationError`), `auth/provider.rs` (`AuthCredential`, `VerifiedCampusIdentity`, `AuthProvider` trait, `MockCampusAuthProvider`), `ports.rs` (records plus `UserRepository`, `SessionRepository`, `OrganizationRepository`, `AuditEventRepository` traits), `memory.rs` (in-memory implementations), `auth/service.rs` (`AuthService` with `login`, `current_user`, `logout`, TTL config, token generation via `rand`, hashing via `sha2`).
+- [x] Run `cargo test -p campus_agora_application` green.
 
 ### Task 4: DB Migration And PostgreSQL Repositories
 
-- [ ] Extend `crates/db/tests/migrations.rs` with failing static assertions: M1 migration file exists and defines `organizations`, `organization_memberships` (unique member per org), `sessions` (`token_hash` unique, `expires_at`, `revoked_at`), and required indexes; no plaintext token column.
-- [ ] Add `20260726000000_m1_identity_sessions.sql`.
-- [ ] Implement `pool.rs` (`connect_lazy` helper) and `repositories.rs` (SQLx implementations of the four traits, runtime queries, explicit row structs).
-- [ ] Add `tests/repositories.rs`: skip with a notice when `DATABASE_URL` is unset; otherwise run embedded `sqlx::migrate!` and exercise user upsert, session insert/find/revoke/expiry, organization upsert + membership listing, audit insert.
-- [ ] Run `cargo test -p campus_agora_db` (without DB) green; full run against dockerized PostgreSQL 16 in Task 9.
+- [x] Extend `crates/db/tests/migrations.rs` with failing static assertions: M1 migration file exists and defines `organizations`, `organization_memberships` (unique member per org), `sessions` (`token_hash` unique, `expires_at`, `revoked_at`), and required indexes; no plaintext token column.
+- [x] Add `20260726000000_m1_identity_sessions.sql`.
+- [x] Implement `pool.rs` (`connect_lazy` helper) and `repositories.rs` (SQLx implementations of the four traits, runtime queries, explicit row structs).
+- [x] Add `tests/repositories.rs`: skip with a notice when `DATABASE_URL` is unset; otherwise load the migration directory at runtime through `sqlx::migrate::Migrator::new` (not the `sqlx::migrate!` macro, which would require the `macros` feature and therefore `.sqlx` offline metadata) and exercise user upsert, session insert/find/revoke/expiry, organization upsert + membership listing, audit insert.
+- [x] Run `cargo test -p campus_agora_db` (without DB) green; full run against dockerized PostgreSQL 16 in Task 9.
 
 ### Task 5: API Auth Endpoints, State Wiring, OpenAPI
 
-- [ ] Write failing API integration tests (`tests/auth.rs`): mock-login happy path returns token, expiry, and user with role and organizations; disabled flag returns `403 auth_mock_disabled`; invalid persona returns `422 validation_failed`; `GET /api/v1/auth/session` with valid bearer returns the user, and returns `401 unauthorized` JSON error with request id when the header is missing, malformed, or the token is unknown; `POST /api/v1/auth/logout` returns `204` and the token stops working afterwards.
-- [ ] Extend `tests/openapi.rs`: contract contains the three auth paths, `bearerAuth` security scheme, `security: []` on public operations, bearer security on session/logout, and the new schemas.
-- [ ] Implement `auth.rs` (DTOs with `serde(rename_all = "camelCase")`, handlers, bearer extraction, `ApplicationError` → HTTP mapping) and wire `AuthRuntime` into `ApiState` (PostgreSQL repositories when `DATABASE_URL` is set, in-memory otherwise; `SESSION_TTL_SECONDS` config; `ApiErrorResponse.message` becomes `String`).
-- [ ] Extend `openapi_document()` with securitySchemes, paths, and schemas.
-- [ ] Run `cargo test -p campus_agora_api` green.
+- [x] Write failing API integration tests (`tests/auth.rs`): mock-login happy path returns token, expiry, and user with role and organizations; disabled flag returns `403 auth_mock_disabled`; invalid persona returns `422 validation_failed`; `GET /api/v1/auth/session` with valid bearer returns the user, and returns `401 unauthorized` JSON error with request id when the header is missing, malformed, or the token is unknown; `POST /api/v1/auth/logout` returns `204` and the token stops working afterwards.
+- [x] Extend `tests/openapi.rs`: contract contains the three auth paths, `bearerAuth` security scheme, `security: []` on public operations, bearer security on session/logout, and the new schemas.
+- [x] Implement `auth.rs` (DTOs with `serde(rename_all = "camelCase")`, handlers, bearer extraction, `ApplicationError` → HTTP mapping) and wire `AuthRuntime` into `ApiState` (PostgreSQL repositories when `DATABASE_URL` is set, in-memory otherwise; `SESSION_TTL_SECONDS` config; `ApiErrorResponse.message` becomes `String`).
+- [x] Extend `openapi_document()` with securitySchemes, paths, and schemas.
+- [x] Run `cargo test -p campus_agora_api` green.
 
 ### Task 6: Contract Regeneration And API Client Auth
 
-- [ ] Extend `generate-types.ts` with array (`items`) support.
-- [ ] Run `bun run api:types`; commit regenerated `contracts/openapi.json` and `generated.ts`.
-- [ ] Write failing Bun tests: `requestJson` sends `Authorization` from `authToken`, supports POST bodies and 204 responses; auth client `mockLogin`/`getSession`/`logout` round-trip against the stateful mock fetch; session route returns 401 without a token.
-- [ ] Implement `request.ts` extensions (method/body/204/authToken), `auth.ts` resource client, `createCampusAgoraApiClient` auth options, mock fetch auth routes, `index.ts` exports.
-- [ ] Run `bun --cwd packages/api-client test` green.
+- [x] Extend `generate-types.ts` with array (`items`) support.
+- [x] Run `bun run api:types`; commit regenerated `contracts/openapi.json` and `generated.ts`.
+- [x] Write failing Bun tests: `requestJson` sends `Authorization` from `authToken`, supports POST bodies and 204 responses; auth client `mockLogin`/`getSession`/`logout` round-trip against the stateful mock fetch; session route returns 401 without a token.
+- [x] Implement `request.ts` extensions (method/body/204/authToken), `auth.ts` resource client, `createCampusAgoraApiClient` auth options, mock fetch auth routes, `index.ts` exports.
+- [x] Run `bun --cwd packages/api-client test` green.
 
 ### Task 7: Web Login-State Shell
 
-- [ ] Add `lib/api.ts` (client instance reading `VITE_API_BASE_URL`, token source from the auth session store).
-- [ ] Add `features/auth/session.ts` (sessionStorage-backed token store with subscribe; never localStorage) and `features/auth/useSession.ts` (`loading`/`guest`/`authenticated`/`error` states, `login(persona)`, `logout()`).
-- [ ] Add `features/auth/ui/AuthPanel.tsx` (persona select + 登录 when guest; display name, role, organizations, 退出登录 when authenticated; inline error message with retry) and render it in the shell; show an authenticated-state card in `App.tsx`.
-- [ ] Style with existing tokens in `globals.css`; keep copy in Chinese.
-- [ ] Run `bun run typecheck`, `bun run lint`, `bun run lint:styles`, `bun run build` green.
+- [x] Add `lib/api.ts` (client instance reading `VITE_API_BASE_URL`, token source from the auth session store).
+- [x] Add `features/auth/session.ts` (sessionStorage-backed token store with subscribe; never localStorage) and `features/auth/useSession.ts` (`loading`/`guest`/`authenticated`/`error` states, `login(persona)`, `logout()`).
+- [x] Add `features/auth/ui/AuthPanel.tsx` (persona select + 登录 when guest; display name, role, organizations, 退出登录 when authenticated; inline error message with retry) and render it in the shell; show an authenticated-state card in `App.tsx`.
+- [x] Style with existing tokens in `globals.css`; keep copy in Chinese.
+- [x] Run `bun run typecheck`, `bun run lint`, `bun run lint:styles`, `bun run build` green.
 
 ### Task 8: Docs Sync
 
-- [ ] `docs/architecture/auth-permissions.md`: M1 implementation boundaries — personas, session token policy (opaque token, SHA-256 at rest, TTL, bearer transport), Web/Tauri sessionStorage policy, endpoints, error codes, audit events; refresh `Last updated`.
-- [ ] `docs/architecture/backend.md`: add `SESSION_TTL_SECONDS` and the auth runtime fallback rule to configuration.
-- [ ] `docs/architecture/api-contracts.md`: document bearer security scheme usage for protected endpoints.
-- [ ] `docs/product/privacy.md`: add session-record row to the data inventory and retention table.
-- [ ] `.env.example`: add `SESSION_TTL_SECONDS=86400`.
-- [ ] Run `bun run ci:docs` green.
+- [x] `docs/architecture/auth-permissions.md`: M1 implementation boundaries — personas, session token policy (opaque token, SHA-256 at rest, TTL, bearer transport), Web/Tauri sessionStorage policy, endpoints, error codes, audit events; refresh `Last updated`.
+- [x] `docs/architecture/backend.md`: add `SESSION_TTL_SECONDS` and the auth runtime fallback rule to configuration.
+- [x] `docs/architecture/api-contracts.md`: document bearer security scheme usage for protected endpoints.
+- [x] `docs/product/privacy.md`: add session-record row to the data inventory and retention table.
+- [x] `.env.example`: add `SESSION_TTL_SECONDS=86400`.
+- [x] Run `bun run ci:docs` green.
 
 ### Task 9: Full Verification And Handoff
 
-- [ ] `bun install --frozen-lockfile`, `bun run api:check`, `bun run typecheck`, `bun run lint`, `bun run lint:styles`, `bun run test`, `bun run build`.
-- [ ] `cargo fmt --all --check`, `cargo check --workspace --all-targets`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`.
-- [ ] Start disposable PostgreSQL 16 via Docker; run `cargo sqlx migrate run --source crates/db/migrations` and `cargo test -p campus_agora_db` with `DATABASE_URL` set; stop the container.
-- [ ] `env UV_CACHE_DIR=/tmp/campus-agora-uv-cache bun run ci:docs`, `git diff --check`.
-- [ ] Move the M1 AI LOG entry facts into `docs/ai-log/done.md`.
-- [ ] Commit in reviewable increments.
+- [x] `bun install --frozen-lockfile`, `bun run api:check`, `bun run typecheck`, `bun run lint`, `bun run lint:styles`, `bun run test`, `bun run build`.
+- [x] `cargo fmt --all --check`, `cargo check --workspace --all-targets`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`.
+- [x] Start disposable PostgreSQL 16 via Docker; run `cargo sqlx migrate run --source crates/db/migrations` and `cargo test -p campus_agora_db` with `DATABASE_URL` set; stop the container.
+- [x] `env UV_CACHE_DIR=/tmp/campus-agora-uv-cache bun run ci:docs`, `git diff --check`.
+- [x] Move the M1 AI LOG entry facts into `docs/ai-log/done.md`.
+- [x] Commit in reviewable increments.
