@@ -3,12 +3,19 @@
   --color-surface: #ffffff;
   --color-elevated: #ffffff;
   --color-border: #d9dee8;
+  --color-border-strong: #b4bdcd;
   --color-text: #172033;
   --color-text-muted: #647086;
   --color-primary: #315fcb;
   --color-primary-hover: #234da8;
   --color-primary-active: #193b82;
+  --color-success: #1a7f4b;
+  --color-warning: #8a5a00;
+  --color-info: #2b6a9c;
   --color-danger: #b3261e;
+  --color-danger-hover: #8f1d17;
+  --color-hover: #eef1f7;
+  --color-selected: #e3ebfb;
   --color-focus: #7aa2ff;
 
   --space-1: 4px;
@@ -17,6 +24,7 @@
   --space-4: 16px;
   --space-6: 24px;
   --space-8: 32px;
+  --space-12: 48px;
 
   --radius-sm: 4px;
   --radius-md: 8px;
@@ -25,6 +33,16 @@
   --font-size-md: 14px;
   --font-size-lg: 16px;
   --font-size-xl: 20px;
+  --font-size-xxl: 24px;
+
+  /* Overlays are the only surfaces that use a shadow; everything else
+     separates with borders, so depth stays meaningful. */
+  --shadow-overlay: 0 8px 24px rgb(23 32 51 / 12%);
+
+  --z-dropdown: 10;
+  --z-toast: 20;
+  --z-modal: 30;
 
   --duration-fast: 150ms;
+  --duration-medium: 200ms;
 }

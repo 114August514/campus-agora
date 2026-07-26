@@ -70,9 +70,7 @@ describe("session token storage", () => {
   test("reads an existing token back on load", async () => {
     storages.sessionStorage.setItem("campus-agora.session-token", "restored");
 
-    const reloaded = await import(
-      `../src/features/auth/session?t=${Math.random()}`
-    );
+    const reloaded = await import(`../src/features/auth/session?t=${Math.random()}`);
 
     expect(reloaded.getSessionToken()).toBe("restored");
   });

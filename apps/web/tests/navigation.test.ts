@@ -25,9 +25,7 @@ describe("shell navigation visibility", () => {
   });
 
   test("organization members do not gain moderation access", () => {
-    expect(visibleNavigationItems(user("organization_member"))).not.toContain(
-      "审核",
-    );
+    expect(visibleNavigationItems(user("organization_member"))).not.toContain("审核");
   });
 
   test("moderators and admins see the moderation entry", () => {

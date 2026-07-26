@@ -1,13 +1,24 @@
+/* Every colour token in tokens.css is overridden here. A missing one would
+   silently keep its light value, which a test guards against. */
 :root[data-theme="dark"] {
   --color-bg: #111318;
   --color-surface: #181b22;
   --color-elevated: #202532;
   --color-border: #303746;
+  --color-border-strong: #485266;
   --color-text: #f2f5fb;
   --color-text-muted: #9ea8ba;
   --color-primary: #8aa8ff;
   --color-primary-hover: #a4bbff;
   --color-primary-active: #cad7ff;
+  --color-success: #6cd39a;
+  --color-warning: #e5b567;
+  --color-info: #85c2ea;
   --color-danger: #ffb4ab;
+  --color-danger-hover: #ffd0ca;
+  --color-hover: #232936;
+  --color-selected: #2b3448;
   --color-focus: #8aa8ff;
+
+  --shadow-overlay: 0 8px 24px rgb(0 0 0 / 45%);
 }
