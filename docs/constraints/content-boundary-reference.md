@@ -1,5 +1,9 @@
 # 内容边界参考
 
+Last updated: 2026-09-22
+
+> 状态：历史方案，已于 2026-09-22 废止。以下原文保留供回看，不是现行约束或待办。当前依据为[产品概览](../product/overview.md)与[里程碑](../product/milestones.md)。
+
 本文保存内容范围与治理边界约束。已经接受的正式边界位于 `docs/product/overview.md`、`docs/product/privacy.md` 和 `docs/operations/security.md`。
 
 Campus Agora 不应限制在几个固定校园话题里。初期定位应限制平台要解决的问题，而不是限制用户只能讨论哪些主题。

@@ -1,6 +1,18 @@
 # Campus Agora
 
-Campus Agora is a campus discussion and knowledge archive platform. This repository is currently in the M0.2 Governance Docs And Boundaries stage.
+Last updated: 2026-09-23
+
+Campus Agora is being replanned as an opportunity discovery and actionable
+guidance tool for individual student use, covering research groups, research opportunities,
+internships and competitions across institutions and disciplines.
+
+The initial product is a personal tool. Community features are only a possible
+future extension, not part of the current scope or a scheduled phase.
+
+Current stage: P1 needs and information-supply validation. See the
+[product baseline](docs/product/overview.md) and [roadmap](docs/product/milestones.md).
+The former community roadmap has been retired. Existing code remains an
+engineering baseline to evaluate for reuse; the new product is not implemented.
 
 ## Requirements
 

@@ -1,5 +1,9 @@
 # Authentication And Permissions
 
+Last updated: 2026-09-22
+
+> Planning status: this document describes the legacy community design. Its feature scope, roles and rollout assumptions are pending reassessment under the opportunity-platform plan in `docs/product/overview.md` and `docs/product/milestones.md`. It does not create implementation tasks. Applicable data-protection and engineering safeguards remain in force for existing or newly adopted capabilities. Update this document before implementing the relevant capability.
+
 Campus Agora will support real campus identity later. M0.2 defines the provider
 and permission boundaries before runtime implementation.
 

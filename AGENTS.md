@@ -1,20 +1,97 @@
 # Agent Notes
 
-Last updated: 2026-07-06
+Last updated: 2026-09-27
 
 This file is the project-level instruction sheet for AI agents and human
 collaborators. Follow it before making changes.
 
 ## Project Context
 
-Follow the repository spec in
-`docs/superpowers/specs/2026-07-06-campus-agora-init-design.md`.
+Follow `docs/product/overview.md` and `docs/product/milestones.md` for current
+product decisions and work order. The active direction is opportunity discovery
+and actionable guidance across institutions and disciplines, initially serving
+USTC students. The initial product is exclusively a personal-use tool; community
+features are a possible future extension, not current scope or a scheduled phase.
+Current planning stage: P1 needs and information-supply validation. The product
+deliverable is a reusable discovery-to-action workflow. The user's AIDS mentor
+search is its first real pilot, not a standalone advisor-list delivery goal or
+the boundary of needs research. P1 explores product-wide users and opportunities
+(research, study, internships, competitions, exchange, activities/notices); keep
+research scope separate from the first implementation slice.
 
-Current implementation scope:
+The user authorized a product reset on 2026-09-22. The initialization spec at
+`docs/superpowers/specs/2026-07-06-campus-agora-init-design.md` and the old M-series
+community roadmap are historical, not active feature requirements. Do not revive
+discussion, archival, campus-auth or desktop tasks merely because code or docs
+already exist. Evaluate reuse against the new requirements. Existing engineering
+checks still apply when relevant code is changed; this reset does not establish
+that runtime behavior or CI has been freshly verified.
 
-- M0 is a runnable repository skeleton.
-- M0.1 adds contract and quality gates.
-- M0.2 adds governance docs and risk boundaries.
+## Requirements Analysis Work Order
+
+Before prioritizing prototype or implementation work, follow the eight-part
+analysis contract in `docs/product/requirements.md`: problem background, target
+users/tasks, existing solutions, unmet needs/causes, value/positioning,
+scope/priorities, functional/use requirements, and feasibility/acceptance.
+The eight-part argument is now organized into a reviewable baseline; current
+priority is to apply its conclusions to task and information-structure design,
+filling only decision-relevant gaps. Feature lists, preparation cards and a working
+prototype do not substitute for it. Keep user needs separate from solution
+ideas and product-wide research separate from the AIDS pilot. Prototypes can
+test hypotheses without waiting for every unknown to disappear; do not claim
+unvalidated benefit or let UI migration displace the analysis by default.
+
+## Evidence Reuse and Analysis Handoff
+
+User confirmed on 2026-09-27: adopt existing evidence within its stated scope;
+do not repeat research merely because it does not prove population prevalence
+or product efficacy. `docs/product/needs-analysis.md` now has a reviewable
+requirements conclusion. Continue task/information-structure design from it.
+H1–H6/V1–V5 are targeted validation tools, not universal sequential gates.
+Only add research that could change a concrete decision; otherwise limit the
+claim, defer the optional capability, or observe during trial. Missing task
+recall or voluntary participants does not block independent planning. Do not
+claim measured benefit, full P1 validation or sustainable supply has passed.
+
+## Product Focus and Depth
+
+Follow the focus hierarchy in `docs/product/overview.md`: discovery, understanding
+and comparison are core; preparation guidance supports decisions; resources
+connect users to suitable courses, tools and services and may be searched directly.
+Keep guidance at preparation priorities, reasons and optional paths. Chapter links
+are optional details, not a per-resource requirement. Do not expand into teaching
+individual concepts, exercise grading or learning-outcome tests. The Python lesson
+walkthrough is supporting research, not an active task or P1 exit requirement.
+Before adding research or work, name the discovery/comparison/next-step decision
+it improves and the minimum depth needed. Keep cross-user research broad; this
+correction does not narrow the product to the mentor pilot.
+
+Experience-informed selection is a common problem across opportunities and
+resources, not only advisors, jobs or long-term relationships. Apply source/context,
+conflict, unknown and private-judgment handling across scenarios; vary the actual
+questions by task. Deeper examination is optional, and a simple entry-point lookup
+may end immediately. Broader scope is a user decision, not evidence that all
+scenarios have equal demand or equally available experience data.
+
+## Optional Support Principle
+
+Follow the optional-help principle in `docs/product/overview.md`. Offer resources
+without implying every opportunity matters or every student must keep advancing.
+Browsing or saving is not a commitment. Pausing or declining is valid even when
+eligible; no explanation is required. Separate official obligations from optional
+suggestions. Avoid grade-based pressure, deficit checklists, social comparison and
+unsolicited reminders. Evaluate clarity and task resolution, not activity volume;
+do not claim anxiety reduction without evidence.
+
+Participation motives (enjoyment, shared activity, formal recognition, learning
+or career goals) may overlap and change. Do not rank them or infer them from
+contest type/year; no mandatory motive questionnaire. Physics competition is one
+sample, not the contest scope. Distinguish contest prizes, comprehensive evaluation,
+credits/GPA and other recognition; only applicable rules support eligibility.
+
+## UI Rules
+
+Follow `docs/product/ui-system.md` before any UI or prototype work. Use only Primer React Product UI + Primer Primitives + Octicons. No Tailwind, handwritten CSS/CSS Modules, inline style, sx or CSS-in-JS. Use library layouts and one declarative theme configuration. Fix light neutral palette with Primer blue interaction, system sans-serif and normal letter spacing. Ban emoji icons, eyebrows, subtitles/taglines, gradients, bordered content cards, display monospace and tracking. Keep necessary field borders and keyboard focus. Existing Web and HTML prototype are pending migration, not compliant templates. Reference sites inform interaction only; they cannot override these rules.
 
 ## Collaboration Rules
 
