@@ -1,6 +1,6 @@
 # Agent Notes
 
-Last updated: 2026-07-06
+Last updated: 2026-07-26
 
 This file is the project-level instruction sheet for AI agents and human
 collaborators. Follow it before making changes.
@@ -15,6 +15,11 @@ Current implementation scope:
 - M0 is a runnable repository skeleton.
 - M0.1 adds contract and quality gates.
 - M0.2 adds governance docs and risk boundaries.
+- M1 adds the auth provider abstraction, mock campus login, session lifecycle,
+  permission policy, and the guarded frontend shell.
+
+`docs/product/milestones.md` is the authoritative status; update it in the same
+change whenever a milestone's meaning or state moves.
 
 ## Collaboration Rules
 

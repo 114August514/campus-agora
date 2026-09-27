@@ -48,6 +48,59 @@
         ],
         "type": "object"
       },
+      "CurrentUser": {
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "organizations": {
+            "items": {
+              "$ref": "#/components/schemas/OrganizationMembership"
+            },
+            "type": "array"
+          },
+          "systemRole": {
+            "enum": [
+              "student",
+              "organization_member",
+              "moderator",
+              "admin"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "systemRole",
+          "organizations"
+        ],
+        "type": "object"
+      },
+      "LoginResponse": {
+        "properties": {
+          "expiresAt": {
+            "description": "UTC ISO 8601 session expiry.",
+            "type": "string"
+          },
+          "token": {
+            "description": "Opaque session token, returned exactly once.",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/CurrentUser"
+          }
+        },
+        "required": [
+          "token",
+          "expiresAt",
+          "user"
+        ],
+        "type": "object"
+      },
       "MetaResponse": {
         "properties": {
           "appName": {
@@ -65,6 +118,43 @@
           "appName",
           "version",
           "capabilities"
+        ],
+        "type": "object"
+      },
+      "MockLoginRequest": {
+        "properties": {
+          "persona": {
+            "description": "Deterministic mock campus persona.",
+            "enum": [
+              "student",
+              "organization_member",
+              "moderator",
+              "admin"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "persona"
+        ],
+        "type": "object"
+      },
+      "OrganizationMembership": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "organizationId": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "organizationId",
+          "slug",
+          "name"
         ],
         "type": "object"
       },
@@ -101,6 +191,29 @@
           "checks"
         ],
         "type": "object"
+      },
+      "SessionResponse": {
+        "properties": {
+          "expiresAt": {
+            "description": "UTC ISO 8601 session expiry.",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/CurrentUser"
+          }
+        },
+        "required": [
+          "user",
+          "expiresAt"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "description": "Opaque session token issued by mock-login.",
+        "scheme": "bearer",
+        "type": "http"
       }
     }
   },
@@ -110,6 +223,155 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": "Session revoked"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired, or revoked session token"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Unexpected server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Revoke the current session"
+      }
+    },
+    "/api/v1/auth/mock-login": {
+      "post": {
+        "description": "Available only while the authMockEnabled capability flag is on.",
+        "operationId": "mockLogin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MockLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Session created for the mock persona"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request body"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Mock login is disabled"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Unknown persona"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Unexpected server error"
+          }
+        },
+        "security": [],
+        "summary": "Mock campus login for development, CI, and demos"
+      }
+    },
+    "/api/v1/auth/session": {
+      "get": {
+        "operationId": "getAuthSession",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "The active session and its user"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired, or revoked session token"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Unexpected server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Current authenticated session"
+      }
+    },
     "/api/v1/meta": {
       "get": {
         "operationId": "getMeta",

@@ -8,6 +8,7 @@ type JsonSchema = {
   required?: string[];
   properties?: Record<string, JsonSchema>;
   additionalProperties?: boolean | JsonSchema;
+  items?: JsonSchema;
   $ref?: string;
 };
 
@@ -65,6 +66,13 @@ function renderType(schema: JsonSchema): string {
 
   if (schema.type === "boolean") {
     return "boolean";
+  }
+
+  if (schema.type === "array") {
+    if (!schema.items) {
+      throw new Error("Array schema requires items");
+    }
+    return `${renderType(schema.items)}[]`;
   }
 
   if (schema.type === "object") {

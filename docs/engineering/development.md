@@ -1,5 +1,7 @@
 # Development
 
+Last updated: 2026-07-26
+
 ## Requirements
 
 - Bun `1.3.14`
@@ -19,8 +21,15 @@ The API exposes:
 - `GET /healthz`
 - `GET /readyz`
 - `GET /api/v1/meta`
+- `POST /api/v1/auth/mock-login`
+- `GET /api/v1/auth/session`
+- `POST /api/v1/auth/logout`
 
 `/readyz` checks PostgreSQL when `DATABASE_URL` is configured.
+
+The API refuses to start without `DATABASE_URL`. To run without a database,
+set `AUTH_STORE_MEMORY=true`; auth then uses a non-persistent in-memory store
+suitable for local development and tests only.
 
 ## API Client
 

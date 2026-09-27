@@ -9,7 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check src",
     "lint:styles": "biome check src/styles",
-    "test": "bun run typecheck"
+    "test": "bun test tests && bun run typecheck"
   },
   "dependencies": {
     "@campus-agora/api-client": "workspace:*",

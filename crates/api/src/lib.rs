@@ -1,4 +1,6 @@
+use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use axum::body::{to_bytes, Body};
@@ -6,32 +8,87 @@ use axum::extract::State;
 use axum::http::{header, header::HeaderName, HeaderMap, HeaderValue, Method, Request, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::{routing::get, Json, Router};
+use axum::{
+    routing::{get, post},
+    Json, Router,
+};
+use campus_agora_application::auth::{AuthConfig, AuthService, MockCampusAuthProvider};
+use campus_agora_application::memory::InMemoryAuthStore;
+use campus_agora_application::ports::{
+    AuditEventRepository, OrganizationRepository, SessionRepository, UserRepository,
+};
 use serde::Serialize;
 use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 
+mod auth;
+
 pub const API_BOUNDARY: &str = "campus-agora-api";
 const DEFAULT_REQUEST_BODY_LIMIT_BYTES: usize = 1024 * 1024;
+const DEFAULT_SESSION_TTL_SECONDS: i64 = 86400;
+const MAX_SESSION_TTL_SECONDS: i64 = 30 * 86400;
+const MAX_REQUEST_ID_CHARS: usize = 64;
 const DEFAULT_CORS_ALLOWED_ORIGINS: &[&str] = &["http://127.0.0.1:5173", "http://localhost:5173"];
 const REQUEST_ID_HEADER: &str = "x-request-id";
 static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(1);
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ApiState {
     readiness: ReadinessProbe,
-    capabilities: CapabilityFlags,
+    pub(crate) capabilities: CapabilityFlags,
+    pub(crate) auth: Arc<AuthService>,
+}
+
+impl fmt::Debug for ApiState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ApiState")
+            .field("readiness", &self.readiness)
+            .field("capabilities", &self.capabilities)
+            .finish_non_exhaustive()
+    }
 }
 
 impl ApiState {
     pub fn from_env() -> Self {
-        let readiness = match std::env::var("DATABASE_URL") {
+        let session_ttl_seconds = session_ttl_seconds_from_env();
+
+        let (readiness, auth) = match std::env::var("DATABASE_URL") {
             Ok(database_url) if !database_url.trim().is_empty() => {
-                ReadinessProbe::Postgres { database_url }
+                let pool = campus_agora_db::connect_lazy(&database_url).unwrap_or_else(|_| {
+                    panic!("DATABASE_URL is not a valid PostgreSQL connection string")
+                });
+                let store = Arc::new(campus_agora_db::PgAuthStore::new(pool));
+
+                (
+                    ReadinessProbe::Postgres { database_url },
+                    auth_service_with_store(store, session_ttl_seconds),
+                )
             }
-            _ => ReadinessProbe::Unavailable,
+            // The in-memory store holds real sessions in volatile per-process
+            // state, so reaching it by accident (a missing secret, a typo in
+            // the variable name) would serve auth from a store that loses every
+            // session on restart and disagrees between replicas. Require an
+            // explicit opt-in instead of falling back silently.
+            _ if bool_env("AUTH_STORE_MEMORY", false) => {
+                tracing::warn!(
+                    "AUTH_STORE_MEMORY is set; auth runtime uses a non-persistent in-memory \
+                     store. This is for local development and tests only."
+                );
+
+                (
+                    ReadinessProbe::Unavailable,
+                    auth_service_with_store(
+                        Arc::new(InMemoryAuthStore::default()),
+                        session_ttl_seconds,
+                    ),
+                )
+            }
+            _ => panic!(
+                "DATABASE_URL must be set. To run without a database, set \
+                 AUTH_STORE_MEMORY=true for local development only."
+            ),
         };
 
         Self {
@@ -42,6 +99,7 @@ impl ApiState {
                 ai_archive_enabled: bool_env("AI_ARCHIVE_ENABLED", false),
                 attachments_enabled: bool_env("ATTACHMENTS_ENABLED", false),
             },
+            auth,
         }
     }
 
@@ -57,8 +115,33 @@ impl ApiState {
                 ai_archive_enabled: false,
                 attachments_enabled: false,
             },
+            auth: auth_service_with_store(
+                Arc::new(InMemoryAuthStore::default()),
+                DEFAULT_SESSION_TTL_SECONDS,
+            ),
         }
     }
+
+    pub fn with_auth_mock_enabled(mut self, enabled: bool) -> Self {
+        self.capabilities.auth_mock_enabled = enabled;
+        self
+    }
+}
+
+fn auth_service_with_store<S>(store: Arc<S>, session_ttl_seconds: i64) -> Arc<AuthService>
+where
+    S: UserRepository + SessionRepository + OrganizationRepository + AuditEventRepository + 'static,
+{
+    Arc::new(AuthService::new(
+        Arc::new(MockCampusAuthProvider),
+        store.clone(),
+        store.clone(),
+        store.clone(),
+        store,
+        AuthConfig {
+            session_ttl: chrono::Duration::seconds(session_ttl_seconds),
+        },
+    ))
 }
 
 #[derive(Clone, Debug)]
@@ -114,11 +197,23 @@ enum CorsAllowedOrigins {
     List(Vec<HeaderValue>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 enum ReadinessProbe {
     Ready,
     Unavailable,
     Postgres { database_url: String },
+}
+
+/// Hand-written so the connection string, which carries the database
+/// password, can never reach a log line or a panic message.
+impl fmt::Debug for ReadinessProbe {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Ready => f.write_str("Ready"),
+            Self::Unavailable => f.write_str("Unavailable"),
+            Self::Postgres { .. } => f.write_str("Postgres { database_url: [redacted] }"),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -161,7 +256,7 @@ pub struct ReadinessChecks {
 #[serde(rename_all = "camelCase")]
 pub struct ApiErrorResponse {
     pub code: &'static str,
-    pub message: &'static str,
+    pub message: String,
     pub request_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<Value>,
@@ -182,6 +277,9 @@ pub fn build_router_with_state_and_config(state: ApiState, config: ApiRuntimeCon
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/api/v1/meta", get(meta))
+        .route("/api/v1/auth/mock-login", post(auth::mock_login))
+        .route("/api/v1/auth/session", get(auth::auth_session))
+        .route("/api/v1/auth/logout", post(auth::logout))
         .fallback(not_found)
         .with_state(state)
         .layer(cors_layer(&config))
@@ -277,9 +375,157 @@ pub fn openapi_document() -> Value {
                         }
                     }
                 }
+            },
+            "/api/v1/auth/mock-login": {
+                "post": {
+                    "operationId": "mockLogin",
+                    "summary": "Mock campus login for development, CI, and demos",
+                    "description": "Available only while the authMockEnabled capability flag is on.",
+                    "security": [],
+                    "requestBody": {
+                        "required": true,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MockLoginRequest"
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Session created for the mock persona",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/LoginResponse"
+                                    }
+                                }
+                            }
+                        },
+                        "400": {
+                            "description": "Malformed request body",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/ApiErrorResponse"
+                                    }
+                                }
+                            }
+                        },
+                        "403": {
+                            "description": "Mock login is disabled",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/ApiErrorResponse"
+                                    }
+                                }
+                            }
+                        },
+                        "422": {
+                            "description": "Unknown persona",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/ApiErrorResponse"
+                                    }
+                                }
+                            }
+                        },
+                        "500": {
+                            "description": "Unexpected server error",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/ApiErrorResponse"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "/api/v1/auth/session": {
+                "get": {
+                    "operationId": "getAuthSession",
+                    "summary": "Current authenticated session",
+                    "security": [{ "bearerAuth": [] }],
+                    "responses": {
+                        "200": {
+                            "description": "The active session and its user",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/SessionResponse"
+                                    }
+                                }
+                            }
+                        },
+                        "401": {
+                            "description": "Missing, invalid, expired, or revoked session token",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/ApiErrorResponse"
+                                    }
+                                }
+                            }
+                        },
+                        "500": {
+                            "description": "Unexpected server error",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/ApiErrorResponse"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "/api/v1/auth/logout": {
+                "post": {
+                    "operationId": "logout",
+                    "summary": "Revoke the current session",
+                    "security": [{ "bearerAuth": [] }],
+                    "responses": {
+                        "204": {
+                            "description": "Session revoked"
+                        },
+                        "401": {
+                            "description": "Missing, invalid, expired, or revoked session token",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/ApiErrorResponse"
+                                    }
+                                }
+                            }
+                        },
+                        "500": {
+                            "description": "Unexpected server error",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/ApiErrorResponse"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         },
         "components": {
+            "securitySchemes": {
+                "bearerAuth": {
+                    "type": "http",
+                    "scheme": "bearer",
+                    "description": "Opaque session token issued by mock-login."
+                }
+            },
             "schemas": {
                 "ApiErrorResponse": {
                     "type": "object",
@@ -354,6 +600,74 @@ pub fn openapi_document() -> Value {
                             "$ref": "#/components/schemas/ReadinessChecks"
                         }
                     }
+                },
+                "MockLoginRequest": {
+                    "type": "object",
+                    "required": ["persona"],
+                    "properties": {
+                        "persona": {
+                            "type": "string",
+                            "enum": ["student", "organization_member", "moderator", "admin"],
+                            "description": "Deterministic mock campus persona."
+                        }
+                    }
+                },
+                "OrganizationMembership": {
+                    "type": "object",
+                    "required": ["organizationId", "slug", "name"],
+                    "properties": {
+                        "organizationId": { "type": "string" },
+                        "slug": { "type": "string" },
+                        "name": { "type": "string" }
+                    }
+                },
+                "CurrentUser": {
+                    "type": "object",
+                    "required": ["id", "displayName", "systemRole", "organizations"],
+                    "properties": {
+                        "id": { "type": "string" },
+                        "displayName": { "type": "string" },
+                        "systemRole": {
+                            "type": "string",
+                            "enum": ["student", "organization_member", "moderator", "admin"]
+                        },
+                        "organizations": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/components/schemas/OrganizationMembership"
+                            }
+                        }
+                    }
+                },
+                "LoginResponse": {
+                    "type": "object",
+                    "required": ["token", "expiresAt", "user"],
+                    "properties": {
+                        "token": {
+                            "type": "string",
+                            "description": "Opaque session token, returned exactly once."
+                        },
+                        "expiresAt": {
+                            "type": "string",
+                            "description": "UTC ISO 8601 session expiry."
+                        },
+                        "user": {
+                            "$ref": "#/components/schemas/CurrentUser"
+                        }
+                    }
+                },
+                "SessionResponse": {
+                    "type": "object",
+                    "required": ["user", "expiresAt"],
+                    "properties": {
+                        "user": {
+                            "$ref": "#/components/schemas/CurrentUser"
+                        },
+                        "expiresAt": {
+                            "type": "string",
+                            "description": "UTC ISO 8601 session expiry."
+                        }
+                    }
                 }
             }
         }
@@ -391,7 +705,7 @@ async fn not_found(headers: HeaderMap) -> impl IntoResponse {
     api_error_response(
         StatusCode::NOT_FOUND,
         "not_found",
-        "Route not found",
+        "Route not found".to_owned(),
         request_id,
         None,
     )
@@ -401,8 +715,9 @@ async fn request_id_middleware(mut request: Request<Body>, next: Next) -> Respon
     let request_id = request
         .headers()
         .get(REQUEST_ID_HEADER)
-        .filter(|value| value.to_str().is_ok())
-        .cloned()
+        .and_then(|value| value.to_str().ok())
+        .and_then(sanitized_request_id)
+        .and_then(|value| HeaderValue::from_str(&value).ok())
         .unwrap_or_else(next_request_id);
 
     request.headers_mut().insert(
@@ -440,7 +755,7 @@ async fn request_body_limit_middleware(
             return api_error_response(
                 StatusCode::PAYLOAD_TOO_LARGE,
                 "request_body_too_large",
-                "Request body is too large",
+                "Request body is too large".to_owned(),
                 request_id,
                 Some(json!({ "limitBytes": limit })),
             )
@@ -455,7 +770,7 @@ fn payload_too_large_response(request: &Request<Body>, limit: usize) -> Response
     api_error_response(
         StatusCode::PAYLOAD_TOO_LARGE,
         "request_body_too_large",
-        "Request body is too large",
+        "Request body is too large".to_owned(),
         request_id_from_headers(request.headers()),
         Some(json!({ "limitBytes": limit })),
     )
@@ -494,11 +809,26 @@ async fn postgres_ready(database_url: &str) -> bool {
     sqlx::query("select 1").execute(&pool).await.is_ok()
 }
 
+/// Reads a boolean setting. A value that is present but unrecognized is a
+/// configuration error, not a reason to fall back: `AUTH_MOCK_ENABLED` is the
+/// kill switch for mock login, so `AUTH_MOCK_ENABLED=0` silently meaning
+/// "enabled" would leave an unauthenticated admin login exposed.
 fn bool_env(name: &str, default: bool) -> bool {
-    std::env::var(name)
-        .ok()
-        .and_then(|value| value.parse::<bool>().ok())
-        .unwrap_or(default)
+    match std::env::var(name) {
+        Ok(value) if value.trim().is_empty() => default,
+        Ok(value) => parse_bool_setting(&value).unwrap_or_else(|| {
+            panic!("{name} must be one of true/false/1/0/yes/no/on/off, got: {value}")
+        }),
+        Err(_) => default,
+    }
+}
+
+fn parse_bool_setting(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "true" | "1" | "yes" | "on" => Some(true),
+        "false" | "0" | "no" | "off" => Some(false),
+        _ => None,
+    }
 }
 
 fn usize_env(name: &str, default: usize) -> usize {
@@ -513,6 +843,40 @@ fn usize_env(name: &str, default: usize) -> usize {
         }
         Err(_) => default,
     }
+}
+
+fn session_ttl_seconds_from_env() -> i64 {
+    match std::env::var("SESSION_TTL_SECONDS") {
+        Ok(value) if value.trim().is_empty() => DEFAULT_SESSION_TTL_SECONDS,
+        Ok(value) => parse_session_ttl_seconds(&value).unwrap_or_else(|| {
+            panic!(
+                "SESSION_TTL_SECONDS must be an integer between 1 and \
+                 {MAX_SESSION_TTL_SECONDS}, got: {value}"
+            )
+        }),
+        Err(_) => DEFAULT_SESSION_TTL_SECONDS,
+    }
+}
+
+/// Bounded so a fat-fingered extra zero cannot mint multi-year sessions, and
+/// so an oversized value cannot wrap negative and expire every session at
+/// birth.
+fn parse_session_ttl_seconds(value: &str) -> Option<i64> {
+    let parsed = value.trim().parse::<i64>().ok()?;
+
+    (1..=MAX_SESSION_TTL_SECONDS)
+        .contains(&parsed)
+        .then_some(parsed)
+}
+
+/// Accepts an inbound `X-Request-Id` only when it is short and printable.
+/// The value is persisted into audit metadata, so an unbounded client-supplied
+/// string would let callers pad or forge the audit trail.
+fn sanitized_request_id(value: &str) -> Option<String> {
+    let is_allowed = |c: char| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':');
+
+    (!value.is_empty() && value.len() <= MAX_REQUEST_ID_CHARS && value.chars().all(is_allowed))
+        .then(|| value.to_owned())
 }
 
 fn cors_allowed_origins_from_env() -> CorsAllowedOrigins {
@@ -578,18 +942,18 @@ fn cors_layer(config: &ApiRuntimeConfig) -> CorsLayer {
     }
 }
 
-fn request_id_from_headers(headers: &HeaderMap) -> String {
+pub(crate) fn request_id_from_headers(headers: &HeaderMap) -> String {
     headers
         .get(REQUEST_ID_HEADER)
         .and_then(|value| value.to_str().ok())
-        .map(str::to_owned)
+        .and_then(sanitized_request_id)
         .unwrap_or_else(next_request_id_string)
 }
 
-fn api_error_response(
+pub(crate) fn api_error_response(
     status: StatusCode,
     code: &'static str,
-    message: &'static str,
+    message: String,
     request_id: String,
     details: Option<Value>,
 ) -> impl IntoResponse {
@@ -615,4 +979,74 @@ fn next_request_id_string() -> String {
         .to_str()
         .expect("generated request id must be visible ASCII")
         .to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn boolean_settings_accept_common_spellings() {
+        for value in ["true", "TRUE", "True", " true ", "1", "yes", "on"] {
+            assert_eq!(parse_bool_setting(value), Some(true), "value: {value}");
+        }
+
+        for value in ["false", "FALSE", "False", " false ", "0", "no", "off"] {
+            assert_eq!(parse_bool_setting(value), Some(false), "value: {value}");
+        }
+    }
+
+    #[test]
+    fn boolean_settings_reject_anything_else() {
+        // A rejected value must never silently fall back to the default:
+        // AUTH_MOCK_ENABLED is a security kill switch, so an operator typo
+        // has to fail loudly instead of leaving mock login enabled.
+        for value in ["maybe", "2", "-1", "enabled", "null", "t", "f"] {
+            assert_eq!(parse_bool_setting(value), None, "value: {value}");
+        }
+    }
+
+    #[test]
+    fn request_ids_from_clients_must_be_short_and_printable() {
+        assert_eq!(
+            sanitized_request_id("req_abc-123.4"),
+            Some("req_abc-123.4".to_owned())
+        );
+
+        assert_eq!(sanitized_request_id(""), None);
+        assert_eq!(sanitized_request_id("has space"), None);
+        assert_eq!(sanitized_request_id("emoji-🎓"), None);
+        assert_eq!(sanitized_request_id(&"a".repeat(65)), None);
+        assert_eq!(sanitized_request_id(&"a".repeat(64)), Some("a".repeat(64)));
+    }
+
+    #[test]
+    fn session_ttl_is_bounded() {
+        assert_eq!(parse_session_ttl_seconds("3600"), Some(3600));
+        assert_eq!(parse_session_ttl_seconds("1"), Some(1));
+        assert_eq!(
+            parse_session_ttl_seconds(&MAX_SESSION_TTL_SECONDS.to_string()),
+            Some(MAX_SESSION_TTL_SECONDS)
+        );
+
+        assert_eq!(parse_session_ttl_seconds("0"), None);
+        assert_eq!(
+            parse_session_ttl_seconds(&(MAX_SESSION_TTL_SECONDS + 1).to_string()),
+            None
+        );
+        // Would wrap negative through `as i64` and expire every session at birth.
+        assert_eq!(parse_session_ttl_seconds("9223372036854775808"), None);
+        assert_eq!(parse_session_ttl_seconds("abc"), None);
+    }
+
+    #[test]
+    fn api_state_debug_does_not_expose_the_database_password() {
+        let probe = ReadinessProbe::Postgres {
+            database_url: "postgres://user:sup3rs3cret@db.internal:5432/campus".to_owned(),
+        };
+
+        let rendered = format!("{probe:?}");
+        assert!(!rendered.contains("sup3rs3cret"), "rendered: {rendered}");
+        assert!(!rendered.contains("db.internal"), "rendered: {rendered}");
+    }
 }

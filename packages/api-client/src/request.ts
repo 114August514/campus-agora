@@ -2,6 +2,13 @@ export interface RequestOptions {
   baseUrl: string;
   fetchImpl: typeof fetch;
   requestId?: () => string;
+  /** Returns the current session token; omitted or undefined means guest. */
+  authToken?: () => string | undefined;
+}
+
+export interface RequestInitOptions {
+  method?: string;
+  body?: unknown;
 }
 
 export class CampusAgoraApiError extends Error {
@@ -31,12 +38,15 @@ export class CampusAgoraApiError extends Error {
 export async function requestJson<T>(
   options: RequestOptions,
   path: string,
+  init: RequestInitOptions = {},
 ): Promise<T> {
   let response: Response;
 
   try {
     response = await options.fetchImpl(`${options.baseUrl}${path}`, {
-      headers: requestHeaders(options),
+      method: init.method ?? "GET",
+      headers: requestHeaders(options, init),
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
     });
   } catch (error) {
     throw new CampusAgoraApiError(
@@ -68,13 +78,30 @@ export async function requestJson<T>(
     });
   }
 
+  if (response.status === 204) {
+    return undefined as unknown as T;
+  }
+
   return (await response.json()) as T;
 }
 
-export function requestHeaders(options: RequestOptions): Headers {
+export function requestHeaders(
+  options: RequestOptions,
+  init: RequestInitOptions = {},
+): Headers {
   const headers = new Headers({
     Accept: "application/json",
   });
+
+  if (init.body !== undefined) {
+    headers.set("content-type", "application/json");
+  }
+
+  const authToken = options.authToken?.();
+
+  if (authToken) {
+    headers.set("authorization", `Bearer ${authToken}`);
+  }
 
   const requestId = options.requestId?.();
 

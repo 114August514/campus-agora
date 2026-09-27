@@ -14,10 +14,33 @@ export interface CapabilityFlags {
   desktopEnabled: boolean;
 }
 
+export interface CurrentUser {
+  displayName: string;
+  id: string;
+  organizations: OrganizationMembership[];
+  systemRole: "student" | "organization_member" | "moderator" | "admin";
+}
+
+export interface LoginResponse {
+  expiresAt: string;
+  token: string;
+  user: CurrentUser;
+}
+
 export interface MetaResponse {
   appName: "Campus Agora";
   capabilities: CapabilityFlags;
   version: string;
+}
+
+export interface MockLoginRequest {
+  persona: "student" | "organization_member" | "moderator" | "admin";
+}
+
+export interface OrganizationMembership {
+  name: string;
+  organizationId: string;
+  slug: string;
 }
 
 export interface ReadinessChecks {
@@ -27,6 +50,11 @@ export interface ReadinessChecks {
 export interface ReadinessResponse {
   checks: ReadinessChecks;
   status: "ready" | "unready";
+}
+
+export interface SessionResponse {
+  expiresAt: string;
+  user: CurrentUser;
 }
 
 export type HealthResponse = "ok";

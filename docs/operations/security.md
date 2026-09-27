@@ -1,5 +1,7 @@
 # Security
 
+Last updated: 2026-07-26
+
 Security work starts before production. M0.2 records the boundaries that future
 features must satisfy.
 
@@ -82,9 +84,10 @@ Retention defaults are documented here and mirrored in
 retention, backup retention, audit retention, or attachment retention must
 update both privacy and operations docs.
 
-| Data Category | M0.2 Retention Boundary |
+| Data Category | Retention Boundary |
 | --- | --- |
 | Business content | Retain while published, drafted, or needed for account-visible history. Soft deletion must precede hard purge when restore or audit review is required. |
+| Session records | Valid for `SESSION_TTL_SECONDS` (default 24 hours). Only the token hash is stored, so expired and revoked rows carry no usable credential. A bulk purge of stale rows must be defined before production launch. |
 | Audit logs | Retain longer than operational request logs. Exact production duration must be set before real auth, moderation, or admin actions launch. |
 | Request logs | Keep for a short debugging and abuse-response window. Logs must include request IDs but avoid raw tokens, cookies, and raw campus identity assertions. |
 | Backups | Define per environment before deployment. Backups need owner, rotation, restore test cadence, and deletion behavior. |

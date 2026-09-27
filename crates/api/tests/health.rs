@@ -11,7 +11,10 @@ const REQUEST_ID: &str = "x-request-id";
 
 #[tokio::test]
 async fn health_endpoint_returns_ok() {
-    let app = campus_agora_api::build_router();
+    // Built from an explicit state rather than `build_router()`: the env-based
+    // constructor now refuses to start without a configured auth store, and a
+    // unit test should not depend on process environment either way.
+    let app = build_router_with_state(ApiState::for_tests(ReadinessStatus::Ready));
 
     let response = app
         .oneshot(Request::get("/healthz").body(Body::empty()).unwrap())
