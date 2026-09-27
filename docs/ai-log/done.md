@@ -19,6 +19,13 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-09-27 - Strengthen the requirements argument
+
+- Added current-process reconstruction, consequence/actionability analysis, five alternative approaches with priority rationale, and operational task-success criteria to needs-analysis.md; synchronized handoff v0.4 and requirements.md.
+- Evidence: Existing records reused; journeys are analytical models, not observed behavior. Scope and criteria remain review proposals; no invented outcomes, prevalence or time thresholds. Existing P/N/H/V identifiers retained.
+- Verification: `UV_CACHE_DIR=/tmp/campus-agora-uv-cache bash scripts/ci/docs.sh` and `git diff --check` passed; no runtime changes.
+- Follow-up: Peer review of alternative/priority choices and criteria; time budget, owner and actual user outcomes remain unresolved at their appropriate decision points. No universal new research gate.
+
 ### 2026-09-27 - Prepare complete documentation handoff for PR 10
 
 - Source: User explicitly authorized all related documentation after scope discussion.
