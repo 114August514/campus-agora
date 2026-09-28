@@ -1,6 +1,6 @@
 # AI Log Done
 
-Last updated: 2026-09-27
+Last updated: 2026-09-28
 
 This file records completed agent-visible work. Keep entries factual and link
 them to commits, files, and verification commands where possible.
@@ -18,6 +18,13 @@ them to commits, files, and verification commands where possible.
 ```
 
 ## Completed
+
+### 2026-09-28 - Research student decision psychology
+
+- Result: Added L14–L19 to student-development-literature.md (choice meta-analyses, autonomy experiment, Chinese social-comparison survey, career information experiment and JobMate v2). Recorded reading depth and noncausal/cross-context limits; reused L03/L12.
+- Applied: Added task-specific concerns and support implications to needs-analysis.md and handoff v0.5. No psychological profiling, anxiety-reduction claim, new scope or universal research gate. JobMate v2 explicitly does not establish overall superiority; older stronger search summary not adopted.
+- Verification: `UV_CACHE_DIR=/tmp/campus-agora-uv-cache bash scripts/ci/docs.sh` and `git diff --check` passed. Paper evidence is distinct from actual USTC user observations.
+- Follow-up: Evaluate optional-help interpretation, correctability and source distinctions within already-planned task trials; do not start a separate clinical assessment.
 
 ### 2026-09-27 - Strengthen the requirements argument
 
