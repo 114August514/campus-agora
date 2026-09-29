@@ -22,9 +22,16 @@ them to commits, files, and verification commands where possible.
 ### 2026-09-29 - Record advisor-guide first version and align baseline docs
 
 - Source: User reviewed handoff section 2 and confirmed the first version is a 选导师指南 without a home/external campus split; asked to fix repository-level inconsistencies.
-- Result: Handoff v0.5 restructures section 2 into advisor main path, direct tasks and maintainer tasks; summary, section 6, 7.2 and 8.3 updated; non-research sample moved to a pre-expansion check. overview.md, milestones.md, needs-analysis.md and AGENTS.md record the decision. development.md design rules and monorepo-reference.md now defer to the Primer UI spec. Handoff links N/H definitions.
+- Result: Handoff v0.6 (merged after the 2026-09-28 v0.5 research update) restructures section 2 into advisor main path, direct tasks and maintainer tasks; summary, section 6, 7.2 and 8.3 updated; non-research sample moved to a pre-expansion check. overview.md, milestones.md, needs-analysis.md and AGENTS.md record the decision. development.md design rules and monorepo-reference.md now defer to the Primer UI spec. Handoff links N/H definitions.
 - Deferred by user: trigger timing/frequency, task layering detail, stance toward advisors as information subjects.
 - Verification: `git diff --check`; docs build attempted (see commit notes).
+
+### 2026-09-28 - Research student decision psychology
+
+- Result: Added L14–L19 to student-development-literature.md (choice meta-analyses, autonomy experiment, Chinese social-comparison survey, career information experiment and JobMate v2). Recorded reading depth and noncausal/cross-context limits; reused L03/L12.
+- Applied: Added task-specific concerns and support implications to needs-analysis.md and handoff v0.5. No psychological profiling, anxiety-reduction claim, new scope or universal research gate. JobMate v2 explicitly does not establish overall superiority; older stronger search summary not adopted.
+- Verification: `UV_CACHE_DIR=/tmp/campus-agora-uv-cache bash scripts/ci/docs.sh` and `git diff --check` passed. Paper evidence is distinct from actual USTC user observations.
+- Follow-up: Evaluate optional-help interpretation, correctability and source distinctions within already-planned task trials; do not start a separate clinical assessment.
 
 ### 2026-09-27 - Strengthen the requirements argument
 
