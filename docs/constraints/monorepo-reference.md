@@ -1,5 +1,9 @@
 # Monorepo 参考
 
+Last updated: 2026-09-29
+
+> 前端样式、图标与组件库的选择已由[UI 组件与视觉规范](../product/ui-system.md)固定（Primer React＋Primer Primitives＋Octicons）。本文中关于 Tailwind、CSS Modules、tokens.css、Lucide 等候选方案的内容为历史参考，不再适用。
+
 本文保存仓库结构和质量门禁约束。已经接受的正式规则位于根工作区配置、`scripts/` 和 `docs/engineering/*`。
 
 仓库需要可执行的约定，而不是为了形式感堆框架。关键边界是 **统一技术栈、统一目录结构、统一代码分层、统一接口调用方式、统一质量检查**。

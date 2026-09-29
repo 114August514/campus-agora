@@ -1,6 +1,6 @@
 # AI Log Done
 
-Last updated: 2026-09-27
+Last updated: 2026-09-29
 
 This file records completed agent-visible work. Keep entries factual and link
 them to commits, files, and verification commands where possible.
@@ -18,6 +18,13 @@ them to commits, files, and verification commands where possible.
 ```
 
 ## Completed
+
+### 2026-09-29 - Record advisor-guide first version and align baseline docs
+
+- Source: User reviewed handoff section 2 and confirmed the first version is a 选导师指南 without a home/external campus split; asked to fix repository-level inconsistencies.
+- Result: Handoff v0.5 restructures section 2 into advisor main path, direct tasks and maintainer tasks; summary, section 6, 7.2 and 8.3 updated; non-research sample moved to a pre-expansion check. overview.md, milestones.md, needs-analysis.md and AGENTS.md record the decision. development.md design rules and monorepo-reference.md now defer to the Primer UI spec. Handoff links N/H definitions.
+- Deferred by user: trigger timing/frequency, task layering detail, stance toward advisors as information subjects.
+- Verification: `git diff --check`; docs build attempted (see commit notes).
 
 ### 2026-09-27 - Strengthen the requirements argument
 

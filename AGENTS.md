@@ -1,6 +1,6 @@
 # Agent Notes
 
-Last updated: 2026-09-27
+Last updated: 2026-09-29
 
 This file is the project-level instruction sheet for AI agents and human
 collaborators. Follow it before making changes.
@@ -17,7 +17,10 @@ deliverable is a reusable discovery-to-action workflow. The user's AIDS mentor
 search is its first real pilot, not a standalone advisor-list delivery goal or
 the boundary of needs research. P1 explores product-wide users and opportunities
 (research, study, internships, competitions, exchange, activities/notices); keep
-research scope separate from the first implementation slice.
+research scope separate from the first implementation slice. On 2026-09-29
+the user confirmed the first version is an advisor-selection guide (选导师指南)
+that does not distinguish home-campus from external advisors, plus lightweight
+entry/resource lookups; other opportunity types are not first-version scope.
 
 The user authorized a product reset on 2026-09-22. The initialization spec at
 `docs/superpowers/specs/2026-07-06-campus-agora-init-design.md` and the old M-series
