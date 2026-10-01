@@ -1,6 +1,6 @@
 # AI Log Done
 
-Last updated: 2026-09-29
+Last updated: 2026-10-01
 
 This file records completed agent-visible work. Keep entries factual and link
 them to commits, files, and verification commands where possible.
@@ -862,3 +862,110 @@ them to commits, files, and verification commands where possible.
 - Added eight required sections, evidence and completion criteria, need/solution distinction and analysis-first order to docs/product/requirements.md.
 - Synchronized AGENTS.md, overview.md, milestones.md and todo priority so prototype/UI work cannot silently displace the analysis.
 - Verification: strict docs build and git diff --check passed. This records the contract; the full analysis report remains pending.
+
+
+### 2026-09-29 - Version-aware review and advisor participation structure
+
+- Fast-forwarded local checkout to PR #10 commit feb4549 before editing; preserved teammate v0.6 decisions and the untracked legacy prototype. No remote merge or push.
+- Updated requirements-handoff.md to v0.7, synchronized overview.md and needs-analysis.md, and appended review disposition, Arno/MIT comparison, four real material cases and bounded supply proposal to mentor-workflow-evidence.md.
+- Reused the earlier browser inspection of Arno; freshly read MIT policy, HKUST visiting rules, USTC faculty intake page and official RSTAR launch notice. Existing ICT evidence reused with its original date; failed UROP/RSTAR direct fetches do not count as body evidence.
+- Separated person from participation route, scoped conditions from general school guidance, experience evidence from questions, and corrected handoff readability/status inconsistencies. No user test or sustainable supply claim.
+- Verification: UV_CACHE_DIR=/tmp/campus-agora-uv-cache bash scripts/ci/docs.sh and git diff --check passed. Documentation-only work; no runtime checks needed.
+- Follow-up: finite content trial with actual research work/usable experience material and maintenance timing; owner and release coverage remain unresolved. Changes remain local.
+
+
+### 2026-09-29 - Four-candidate advisor content pilot
+
+- Added comparable research questions, participation routes, experience gaps and optional next steps for Xiang Wang, Yingfei Xiong, Tianqi Chen and Charles Zhang to tools/prototypes/opportunity-content.md; detailed source/failed-link records in docs/constraints/mentor-source-reference.md; progress linked from requirements-handoff.md.
+- Six route checks comprise four explicit faculty statements, one institutional relationship and one unconfirmed visiting path; not six open opportunities. Alumnus self-description corroborates one advisor relationship/career record, not mentoring quality.
+- Source-reading/assembly/check interval 14:43:48–14:46:30 UTC, 162 seconds. Reused prior research; not per-record human effort or recurring maintenance measurement. No contacts, crawlers or user tests.
+- Verification: strict docs build and git diff --check passed; local Markdown links from content sample checked for file existence. No runtime changes. Changes remain local, not pushed.
+- Follow-up: actual update timing, missing individual admission/visiting links and usable first-person guidance evidence; do not expand samples just to fill counts.
+
+
+### 2026-09-30 - Advisor task and information design v0.1
+
+- Created docs/product/advisor-task-design.md with entry paths, result/detail/comparison contents, direct resource lookup, private records, conceptual relationships, six desk checks and prototype acceptance mapped to existing N identifiers.
+- Reused four-candidate specimens; separated route/eligibility from interest, source status from intake status, and records from actual mentoring experience. No new browsing, participant results, runtime implementation or data supply claims.
+- Linked design in overview.md, milestones.md, requirements-handoff.md and MkDocs navigation; next work is a finite Primer interaction prototype, not automatic sample expansion. Session-only prototype storage cannot establish return value.
+- Verification: UV_CACHE_DIR=/tmp/campus-agora-uv-cache bash scripts/ci/docs.sh; git diff --check; design relative links checked for existing files. All passed. Runtime tests not applicable to this documentation change.
+- Existing uncommitted research edits and legacy untracked HTML retained. No commit or remote push in this turn.
+
+
+### 2026-09-30 - Requirements completeness reassessed with transferable evidence
+
+- Added source-specific applicability judgments and eight-part completion matrix to needs-analysis.md; synchronized overview, milestones, handoff and active todo priority.
+- Comparable task/population evidence supports common needs without a new USTC survey. Kept actual methodological limits, local rule applicability and product efficacy distinct; did not assume elite-university labels imply population equivalence.
+- Conclusion: reviewable analysis, remaining convergence/decision work; prototype is no longer default next task. No new research or participant data claimed.
+- Verification: strict docs build and git diff --check passed. Changes remain local.
+
+
+### 2026-09-30 - Persist negotiated requirements decisions
+
+- Synchronized AGENTS.md, overview.md, needs-analysis.md, requirements.md and requirements-handoff.md (v0.8): discovery and judgment serve autonomous choice; relevant public/consented knowledgeable-contact entries support further inquiry; automation collects/organizes while the team verifies critical facts and handles exceptions/corrections.
+- Future community contribution is optional information maintenance, without a scheduled community phase or an initial dependency. No automatic outreach or particular crawler/platform implementation adopted.
+- Private-record continuity and actual team verification capacity remain open. Existing evidence reused; no new participant study or measured product benefit claimed.
+- Verification: UV_CACHE_DIR=/tmp/campus-agora-uv-cache bash scripts/ci/docs.sh and git diff --check passed. Documentation only; no runtime tests required. Changes remain local, uncommitted and not pushed.
+
+
+### 2026-09-30 - Multi-session product references
+
+- Read official Perplexity Projects, Zotero collections, Gemini Notebook and Notion Web Clipper documentation; appended facts, proposal and existing-tool substitution analysis to mentor-workflow-evidence.md; linked needs-analysis.md and overview.md.
+- User proposed multiple sessions. Persistent exploration topics versus individual queries remain a design proposal, not fully approved functionality. No product hands-on trial or student efficacy claim.
+- Verification: strict docs build and git diff --check passed after correcting section links. Documentation-only, local changes; no commit/push.
+
+
+### 2026-10-01 - Competition demo value and bounded maintenance
+
+- Updated AGENTS.md and product overview, needs-analysis, requirements, milestones and handoff (v0.9) to prioritize demonstrating relevant information discovery/organization; ongoing maintenance staffing and schedules are deferred rather than demo gates.
+- Dated information remains useful for discovery with its time/use stated; historical recruitment is not current availability. Fixed specimens and executed automated collection remain distinct. No runtime work or effectiveness claims.
+- Cleared obsolete maintenance-capacity prerequisite from current convergence todo. Long-term service remains conditional on demonstrated value and a later investment decision.
+- Verification: UV_CACHE_DIR=/tmp/campus-agora-uv-cache bash scripts/ci/docs.sh and git diff --check passed. Local documentation changes only; not committed or pushed.
+
+
+### 2026-10-01 - Requirements alignment for demo review
+
+- Unified N01–N13 adoption states in requirements.md; retained multi-session structure as proposed. Added source-reusing alternative/increment conclusions to needs-analysis.md and task-based demo checks to requirements-handoff.md v0.10.
+- Rewrote active milestone work order; P3 is the competition demo and continued service is conditional. Moved old AI-log research tasks into an explicitly conditional historical backlog; removed active maintenance timing/staffing gates from handoff and requirements sections.
+- Synchronized overview and completeness conclusions. No fresh survey, user test, runtime implementation or claim that teammate review passed. Session organization and review remain open.
+- Verification: UV_CACHE_DIR=/tmp/campus-agora-uv-cache bash scripts/ci/docs.sh and git diff --check passed; inspected remaining maintenance/gate wording. Fixed a documentation-site link warning by using a repository path for the non-published content specimen.
+- All changes remain local; existing unrelated research edits and legacy HTML retained, no commit/push.
+
+
+### 2026-10-01 - Actual discovery demo accepted; implementation layering proposed
+
+- User accepted option B. Updated overview, requirements and handoff: actual external search/read/organization is required in addition to existing-data exploration; cached fallback is identified as such.
+- Appended official Agent Skills and Anthropic workflow references plus proposed procedure/tool/data/topic separation to mentor-workflow-evidence.md. No skill, crawler, SDK or architecture chosen or implemented; multi-topic organization remains a recommendation.
+- Verification: strict docs build and git diff --check passed. Local documentation only, no push.
+
+
+### 2026-10-01 - Exploration and discovery decisions accepted
+
+- User accepted multiple persistent exploration topics and existing-data reuse plus external search/read/organization. Synchronized overview, needs-analysis, requirements, handoff, milestones, workflow evidence and AGENTS.md; removed obsolete session-confirmation todo.
+- No further product-direction decision identified as blocking requirements handoff. Providers, storage, interaction details and actual performance remain design/technical validation work; runtime is not implemented by this documentation change.
+- Verification: strict docs build and git diff --check passed. Changes local, not committed/pushed.
+
+
+### 2026-10-01 - Requirements analysis v1.0 consolidated
+
+- Rewrote requirements-handoff.md into the standalone eight-part v1.0 baseline: broad user/tasks, evidence, alternatives, P/N needs, adopted scope, multi-topic/live-discovery workflow, demo acceptance and downstream unknowns. Retained nine direct evidence entries and research reading map; no new research or effectiveness claims.
+- Replaced accumulated overview and requirements draft with concise current summary and v1.0 analysis contract/N01–N13 companion. needs-analysis.md remains detailed reasoning/history with original H/V definitions; prior convergence notes retained in its appendix.
+- Synchronized docs index, MkDocs navigation, milestones, AGENTS and task-design status. Design v0.1 explicitly requires updating for multi-topic/live discovery; v1.0 is not teammate approval, runtime completion or sustainable supply validation.
+- Verification: UV_CACHE_DIR=/tmp/campus-agora-uv-cache bash scripts/ci/docs.sh; git diff --check; checked eight headings, N01–N13 coverage, nine retained source rows and local links. All passed after EOF whitespace correction. Documentation only, no runtime tests applicable.
+- Local only, not committed/pushed. Next: teammate review and task/information design based on v1.0; preserve unrelated existing edits and legacy untracked prototype.
+
+
+### 2026-10-01 - Requirements v1.0 review and corrections
+
+- Reviewed main analysis, detailed N table, overview, milestones, design draft and existing source records. Findings corrected: old design could imply fixed samples suffice and maintenance staffing precedes demo; live-discovery criterion did not explicitly require relevant source body/content; persistence boundary and independent topic edits were underspecified; N02/N09 attribution omitted direct user decisions.
+- Updated requirements-handoff.md, requirements.md, advisor-task-design.md and milestones.md. Main v1.0 retained; changes clarify accepted behavior, not new implementation scope. Design still needs concrete multi-topic/live-discovery interaction work.
+- Existing evidence counts and study boundaries checked against local research records, not fresh external source verification. No user effect or runtime check claimed.
+- Verification: strict docs build, git diff --check, eight-part structure, N01–N13, nine source entries, local links and clarified acceptance checks passed. All changes local, no commit/push.
+
+
+### 2026-10-01 - Publish requirements analysis v1.0 on PR 10
+
+- Submitted the local v1.0 consolidation, including docs/product/advisor-task-design.md, onto branch docs/requirements-handoff for the existing requirements PR.
+- Left tools/prototypes/opportunities.html untracked. No runtime code, dependency, or product-implementation files are in this publication.
+- Peer review remains pending. Publication does not merge the PR, approve v1.0, or claim measured user benefit, completed P1 validation, or a finished supply pipeline.
+- Verification: UV_CACHE_DIR=/tmp/campus-agora-uv-cache bash scripts/ci/docs.sh and git diff --check, recorded with this commit.

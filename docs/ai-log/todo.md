@@ -1,6 +1,6 @@
 # AI Log Todo
 
-Last updated: 2026-09-28
+Last updated: 2026-10-01
 
 This file records meaningful pending work for AI agents and collaborators.
 Keep entries short, dated, and actionable.
@@ -20,10 +20,27 @@ Keep entries short, dated, and actionable.
 
 ## Pending
 
+### 2026-10-01 - Review aligned requirements and choose demo tasks
+
+- Source: Requirements alignment; requirements analysis v1.0.
+- Status: Requirements v1.0 is on PR #10 for teammate review. Multi-topic organization and hybrid external discovery are accepted. Applying handoff section 8.2 to the existing task design remains open.
+- Acceptance: Resolve actual review differences, apply adopted multi-topic/discovery requirements and handoff 8.2 outcomes to existing task design. No new broad research or long-term staffing gate.
+
+## Historical and conditional research backlog
+
+The dated entries below are retained for context, not an active queue. Run one only when it changes a specific current decision. Earlier demands for mandatory maintenance timing, full V1–V5 completion, automatic sample expansion or prototype migration are superseded by the 2026-10-01 demo priority. Preserve unvalidated claims as unknown; do not treat deferral as completion.
+
+### 2026-09-29 - Bounded advisor content and maintenance trial
+
+- Source: Screenshot review and Arno/official-rule comparison; P1 follow-up.
+- Status: Initial assembly completed on 2026-09-29; follow-up is observed updates and unresolved participation/experience evidence, not further list expansion.
+- Acceptance: Up to 4 advisor/team records, at least 2 institutions and 6 participation relationships across undergraduate research, short visits and graduate applications; record gaps rather than inventing coverage. Connect concrete research work, scoped conditions and available experience evidence; measure preparation/update effort.
+- Dependencies: Assign maintenance owner and available time before publication commitments; no default private-source collection. See mentor-source-reference.md: 4 candidate summaries, 6 route checks (4 explicit, 1 institutional, 1 unconfirmed); no independently usable mentoring-experience sample. Future update timing must be separate from initial AI-assisted assembly.
+
 ### 2026-09-27 - Apply requirements baseline to task and information design
 
 - Source: User authorized evidence reuse and requirements convergence.
-- Status: Next active work. The research items below are conditional backlog, not sequential prerequisites; no repeat interview request required.
+- Status: Task/information design v0.1 completed 2026-09-30 in docs/product/advisor-task-design.md. Deferred behind 2026-09-30 requirements convergence at user request; later use the four existing specimens and decide persistence scope before promising return behavior. Research backlog remains conditional, not prerequisite.
 - Acceptance: Design user entry/results and necessary content relationships from needs-analysis.md conclusions; preserve lightweight endings and substantive experience support. Keep recommendation versus accepted implementation explicit. Do not resume generic evidence gathering or imply full P1 validation.
 - Dependencies: Only uncertainties affecting the specific design; data ownership/update promises resolved before release.
 

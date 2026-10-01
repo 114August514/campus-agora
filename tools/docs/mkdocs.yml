@@ -10,10 +10,11 @@ exclude_docs: |
 nav:
   - 首页: index.md
   - 产品:
-      - 需求评审交接入口: product/requirements-handoff.md
+      - 需求分析 v1.0: product/requirements-handoff.md
       - 概览: product/overview.md
-      - 需求分析: product/needs-analysis.md
-      - 需求基线草案: product/requirements.md
+      - 需求论证与研究记录: product/needs-analysis.md
+      - 需求基线与分析契约: product/requirements.md
+      - 选导师任务与信息结构: product/advisor-task-design.md
       - UI 组件与视觉规范: product/ui-system.md
       - 隐私: product/privacy.md
       - 里程碑: product/milestones.md

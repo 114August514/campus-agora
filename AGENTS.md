@@ -1,14 +1,15 @@
 # Agent Notes
 
-Last updated: 2026-09-29
+Last updated: 2026-10-01
 
 This file is the project-level instruction sheet for AI agents and human
 collaborators. Follow it before making changes.
 
 ## Project Context
 
-Follow `docs/product/overview.md` and `docs/product/milestones.md` for current
-product decisions and work order. The active direction is opportunity discovery
+Read `docs/product/requirements-handoff.md` for the consolidated requirements
+analysis v1.0. `docs/product/overview.md` summarizes decisions and
+`docs/product/milestones.md` controls work order. The active direction is opportunity discovery
 and actionable guidance across institutions and disciplines, initially serving
 USTC students. The initial product is exclusively a personal-use tool; community
 features are a possible future extension, not current scope or a scheduled phase.
@@ -30,6 +31,41 @@ already exist. Evaluate reuse against the new requirements. Existing engineering
 checks still apply when relevant code is changed; this reset does not establish
 that runtime behavior or CI has been freshly verified.
 
+## Confirmed Requirements Decisions (2026-09-30)
+
+Discovery and judgment jointly support autonomous choice; emphasis follows the
+current task, with no mandatory complete journey. Experience-informed selection
+also includes connecting users to knowledgeable current/former participants via
+contacts published for relevant communication or shared with consent; preserve
+relationship and time context, without automatic outreach or quality endorsement.
+Supply direction is automation-led collection/organization with team review of
+critical claims, exceptions and corrections. Community contributions may later
+extend maintenance, but are optional and unscheduled, not a prerequisite for
+individual value. This does not approve specific crawlers, private channels or
+key-handling designs. Maintenance capacity and ownership remain unresolved.
+
+## Competition Demo Priority (2026-10-01)
+
+The immediate deliverable is a competition demo showing the value of finding and
+organizing relevant information. Initial maintenance capacity is limited. Do not
+make long-term staffing, recurring update schedules or sustainable operation a
+prerequisite for requirements convergence or the demo. Dated material can still
+support discovery and comparison when its time and intended use are clear; do not
+present historical recruitment as currently open. Seek broad relevant coverage
+without claiming exhaustive discovery. Distinguish fixed demonstration data from
+actually executed automated collection. Decide ongoing maintenance investment
+after assessing demonstrated value; do not revive a maintenance gate by default.
+
+## Exploration and Discovery Approach (2026-10-01)
+
+User accepted multiple persistent exploration topics with candidates, sources,
+private reasons and open questions; reuse public data but retain separate topic
+preferences. Browsing need not start with topic creation. The demo must actually
+run external discovery alongside existing-data reuse. Use reusable research
+instructions (skills or equivalent), executable tools/workflow and AI judgment as
+complementary parts; specific providers, storage and frameworks remain unselected.
+Do not re-ask these product decisions or claim implementation is complete.
+
 ## Requirements Analysis Work Order
 
 Before prioritizing prototype or implementation work, follow the eight-part
@@ -48,8 +84,10 @@ unvalidated benefit or let UI migration displace the analysis by default.
 
 User confirmed on 2026-09-27: adopt existing evidence within its stated scope;
 do not repeat research merely because it does not prove population prevalence
-or product efficacy. `docs/product/needs-analysis.md` now has a reviewable
-requirements conclusion. Continue task/information-structure design from it.
+or product efficacy. `docs/product/requirements-handoff.md` is the consolidated v1.0 baseline;
+`docs/product/needs-analysis.md` retains detailed reasoning, H/V definitions and
+historical records, not a second active backlog. Continue task/information-structure
+design from the v1.0 baseline.
 H1–H6/V1–V5 are targeted validation tools, not universal sequential gates.
 Only add research that could change a concrete decision; otherwise limit the
 claim, defer the optional capability, or observe during trial. Missing task
