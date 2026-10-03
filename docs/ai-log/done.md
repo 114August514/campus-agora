@@ -19,6 +19,47 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-10-03 - Prepare requirements follow-up through the handoff branch
+
+- Source: User requested handoff-branch publication followed by main integration after GitHub rejected a direct main push (PR required).
+- Result: Verified the old handoff tree equals main's `09cb425`, merged that main baseline without conflicts, and copied the user's `c5673b5` as handoff commit `9696acd`. Original local main commit preserved. PR delivery uses squash merge after current CI verification.
+- Verification: `git diff --exit-code main HEAD` passed before this log update; `git diff --check origin/main...HEAD` passed. Follow-up differs only in the nine intended documentation/instruction files; delivery-log edits do not change product behavior.
+- Follow-up: Apply v0.3 in technical/interaction trials; publishing documents is not implementation, teammate approval or demonstrated user benefit. GitHub PR records own the final CI and merge status.
+
+### 2026-10-03 - Add cancellable discovery, merge correction and truthful AI send states
+
+- Source: User accepted the three follow-up suggestions and requested their inclusion.
+- Result: Task design v0.3 adds cancellation with partial-result preservation, declared per-run time/source-call/applicable-cost limits and stopping automatic retries; mistaken public merges can be split and repaired without losing private reasons or original references, with ambiguous associations confirmed by the user. Selected personal-content sending distinguishes confirmed unsent, sent/waiting, returned and delivery unknown; timeout/cancellation never imply data was not sent or retracted. Added corresponding acceptance checks and a planned complete walkthrough.
+- Changed: AGENTS.md; docs/product/advisor-task-design.md, requirements-handoff.md, requirements.md, overview.md, milestones.md and privacy.md; AI logs. Preserved prior local requirements and log edits.
+- Verification: `git diff --check` passed; 86 local Markdown links and 25 tables checked with 0 errors. `command -v uv` found no executable, so the MkDocs build remains unavailable; no runtime changes or runtime tests. Cross-checked new task-design behaviors with handoff 7–8, N12, privacy and P3.
+- Scope: Requirements/design only, uncommitted and unpushed. Concrete run limits, provider cancel/delivery capabilities and storage repair mechanisms remain technical decisions; no implementation or completed demo claim.
+- Follow-up: Exercise real discovery and the declared limits, partial-result cancellation, safe merge repair and selected-input/send-state handling during the planned walkthrough; simulations must stay separate from real discovery and user benefit.
+
+### 2026-10-03 - Specify discovery-result handling, topic isolation and selected AI input
+
+- Source: User asked to add result organization, existing-data merging, failure continuation and isolation of private reasons; clarified external AI may receive only personal content the user explicitly selects.
+- Result: Task design v0.2 defines source-backed result organization, object reuse/new-fact association, deduplication and unresolved conflicts; partial failures preserve usable information, comparison choices and saved records. Private reasons belong to topic-candidate records, with separate edit/delete/reopen behavior. Personal-input selection covers AI requests, derived summaries, retries and prior context; unselected notes/topics are not attached, outputs stay private, and local deletion does not promise remote deletion.
+- Changed: AGENTS.md; docs/product/advisor-task-design.md, requirements-handoff.md, requirements.md, overview.md, milestones.md and privacy.md; AI logs. Privacy now separates current personal-use boundaries from preserved historical community design. P3 explicitly includes persistent topics.
+- Verification: `git diff --check` passed; 85 local Markdown links checked with 0 missing targets. `bash scripts/ci/docs.sh` attempted but could not run MkDocs because `uv` is not installed. Reviewed N02/N09, handoff 7–8, task design and privacy for matching behavior/acceptance wording.
+- Scope: Requirements/design only; no provider, persistence technology, runtime feature, actual AI transfer or measured benefit claimed. No commit or remote push in this task; preserved earlier local AI-log changes.
+- Follow-up: Implement and verify real discovery, merging/retries, two-topic reopen/isolation and selected outbound AI requests using the declared environment; confirm chosen services' retention/deletion terms. Teammate review and actual user effects remain open.
+
+### 2026-10-03 - Read current project requirements and design readiness
+
+- Source: User asked to inspect project requirements.
+- Result: Read requirements-handoff.md, requirements.md, overview.md, advisor-task-design.md, current milestones and prototype status; checked the Web App shell. Current v1.0 supports continuing P2 design, without claiming P1 effect validation or a working demo. First delivery is the personal advisor-guide demo; broader opportunity research remains separate.
+- Findings: Task design explicitly awaits actual external discovery and persistent multi-topic interactions; storage/deletion/AI transmission boundaries belong to implementation design. Milestones P3 still says persistence is added after scope confirmation, although N09 and handoff 8.2 already require it. Existing Web shell retains historical discussion/archive navigation and is not the current product implementation.
+- Changed: AI logs only; preserved confirmed requirements and the preceding machine-local LFS repair log. Corrected PR #10 delivery status without implying teammate approval.
+- Verification: Cross-checked N02/N09 and handoff 8.2 against task-design sections 1–3/5–6 and milestones P3; `git diff --check` passed. No runtime changes or runtime tests.
+- Follow-up: Apply external discovery and multi-topic requirements to the existing task/information design, resolve implementation data boundaries, and align P3 wording; no new broad research or maintenance gate.
+
+### 2026-10-03 - Repair local VS Code Git LFS hooks
+
+- Source: User asked to fix VS Code Git LFS checkout/push errors.
+- Result: VS Code logs show shell-environment resolution timeouts. Added a conditional `/opt/homebrew/bin` PATH fallback to local `.git/hooks/post-checkout`, `post-commit`, `post-merge` and `pre-push`, retaining their standard Git LFS checks and commands. Original hooks backed up under `/tmp/campus-agora-lfs-hooks-backup-20261003-194000`.
+- Verification: `sh -n` and direct execution of all four hooks with `PATH=/usr/bin:/bin:/usr/sbin:/sbin` passed (exit 0); executable permissions retained. `git diff --check` passed; main and origin/main remain at `09cb425`.
+- Scope: Machine-local repair, no runtime changes or remote push; only this log is a tracked edit. Reinstalling/forcing LFS hooks can replace this local fallback. VS Code's general startup timeout has not been repaired or rechecked in the GUI.
+
 ### 2026-10-03 - Apply AI multi-dimension review findings to requirements v1.0
 
 - Source: User asked for a review of the current requirements analysis, then asked to fix all reported issues.
