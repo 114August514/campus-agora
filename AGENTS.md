@@ -1,6 +1,6 @@
 # Agent Notes
 
-Last updated: 2026-10-01
+Last updated: 2026-10-03
 
 This file is the project-level instruction sheet for AI agents and human
 collaborators. Follow it before making changes.
@@ -65,6 +65,22 @@ run external discovery alongside existing-data reuse. Use reusable research
 instructions (skills or equivalent), executable tools/workflow and AI judgment as
 complementary parts; specific providers, storage and frameworks remain unselected.
 Do not re-ask these product decisions or claim implementation is complete.
+
+On 2026-10-03 the user added result organization, existing-data merging,
+failure continuation and isolation of private reasons across topics. Reuse
+identified public objects, retain source/time and unresolved conflicts, and keep
+private reasons attached to their topic records. The user explicitly confirmed
+that external AI may receive only personal content the user explicitly selects;
+do not automatically attach other notes, topics or prior private context. Follow
+`docs/product/privacy.md` and the updated task design; this is a requirement,
+not evidence of implemented isolation or AI integration.
+
+The same day the user accepted cancellable discovery with declared per-run
+limits, correction of mistaken merges without losing private topic records,
+and truthful external-AI send states. Timeout or cancellation is not proof that
+personal content was never sent; show delivery uncertainty when needed.
+Thresholds and mechanisms remain technical-design choices, not fixed budgets
+or evidence of implementation.
 
 ## Requirements Analysis Work Order
 
