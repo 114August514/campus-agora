@@ -1,6 +1,6 @@
 # AI Log Todo
 
-Last updated: 2026-10-01
+Last updated: 2026-10-03
 
 This file records meaningful pending work for AI agents and collaborators.
 Keep entries short, dated, and actionable.
@@ -23,7 +23,7 @@ Keep entries short, dated, and actionable.
 ### 2026-10-01 - Review aligned requirements and choose demo tasks
 
 - Source: Requirements alignment; requirements analysis v1.0.
-- Status: Requirements v1.0 is on PR #10 for teammate review. Multi-topic organization and hybrid external discovery are accepted. Applying handoff section 8.2 to the existing task design remains open.
+- Status: Requirements v1.0 is on PR #10 for teammate review. Multi-topic organization and hybrid external discovery are accepted. 2026-10-03 AI review fixes applied (see done.md); teammate review still pending. Applying handoff section 8.2 to the existing task design remains open.
 - Acceptance: Resolve actual review differences, apply adopted multi-topic/discovery requirements and handoff 8.2 outcomes to existing task design. No new broad research or long-term staffing gate.
 
 ## Historical and conditional research backlog

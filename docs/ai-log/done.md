@@ -1,6 +1,6 @@
 # AI Log Done
 
-Last updated: 2026-10-01
+Last updated: 2026-10-03
 
 This file records completed agent-visible work. Keep entries factual and link
 them to commits, files, and verification commands where possible.
@@ -18,6 +18,15 @@ them to commits, files, and verification commands where possible.
 ```
 
 ## Completed
+
+### 2026-10-03 - Apply AI multi-dimension review findings to requirements v1.0
+
+- Source: User asked for a review of the current requirements analysis, then asked to fix all reported issues.
+- Result: A 9-dimension AI review (evidence, alternatives, tasks, scope/acceptance, consistency, eight-part contract, feasibility, privacy, readability) with 3-lens adversarial verification kept 8 of 46 findings; 4 low-cost refuted-but-factual items were also fixed. Handoff now states the named-experience precondition (source use + correction handler) in 8.2, overseas language/visa/identity conditions under N04, the contact-advisor scope boundary in 6.2, consistent automation-led supply wording in 2.3, S7–S9 in-text citations, a requirements.md row in the section 10 index, and Arno/skill glosses. requirements.md N04/N05/N11 rows and the G5 note updated; opportunity-needs-map G5 row and needs-analysis N10/N13 historical row annotated; 8.2 multi-topic wording no longer reads as sharing private reasons.
+- Changed: docs/product/requirements-handoff.md, docs/product/requirements.md, docs/product/overview.md, docs/product/needs-analysis.md, docs/constraints/opportunity-needs-map.md.
+- Verification: `git diff --check`; local relative-link check over the five edited docs (0 broken). `bun run docs:build` not run: `uv` is not installed locally.
+- Decisions: Not applied (refuted as conflicting with confirmed decisions or already handled elsewhere): RSTAR/baseline comparison as a demo gate, objection-handling SLA, AI transfer scope and persistence timing in the requirements doc, privacy.md rewrite before implementation, adding columns to handoff tables. This is an AI review, not the pending teammate review.
+- Follow-up: Teammate review of v1.0 remains open; advisor-task-design.md still needs the multi-topic/external-discovery revision.
 
 ### 2026-09-29 - Record advisor-guide first version and align baseline docs
 
