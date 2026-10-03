@@ -41,3 +41,4 @@ temp/
 # Local worktrees
 .worktrees/
 worktrees/
+._*

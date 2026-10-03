@@ -1,5 +1,9 @@
 # Privacy And Data Boundaries
 
+Last updated: 2026-09-22
+
+> Planning status: this document describes the legacy community design. Its feature scope, roles and rollout assumptions are pending reassessment under the opportunity-platform plan in `docs/product/overview.md` and `docs/product/milestones.md`. It does not create implementation tasks. Applicable data-protection and engineering safeguards remain in force for existing or newly adopted capabilities. Update this document before implementing the relevant capability.
+
 Campus Agora handles campus community content. Privacy rules must be explicit
 before real identity integration, attachments, or AI assistance are added.
 

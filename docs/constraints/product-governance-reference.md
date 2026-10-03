@@ -1,5 +1,9 @@
 # 产品治理参考
 
+Last updated: 2026-09-22
+
+> Planning status: this document describes the legacy community design. Its feature scope, roles and rollout assumptions are pending reassessment under the opportunity-platform plan in `docs/product/overview.md` and `docs/product/milestones.md`. It does not create implementation tasks. Applicable data-protection and engineering safeguards remain in force for existing or newly adopted capabilities. Update this document before implementing the relevant capability.
+
 本文保存产品治理和生命周期约束。已经接受的正式规则位于 `docs/product/*`、`docs/operations/security.md` 和里程碑文档。
 
 除了工程架构、API 对接、部署、运维和安全之外，产品治理还需要下面这些边界。

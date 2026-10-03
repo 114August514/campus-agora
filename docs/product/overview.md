@@ -1,75 +1,69 @@
-# Product Overview
+# 产品概览
 
-Campus Agora is a campus discussion and knowledge archive platform. It turns
-useful discussion into durable, searchable knowledge while keeping moderation,
-privacy, and permissions explicit.
+Last updated: 2026-10-01
 
-## MVP Scope
+当前需求基线：[大学生机会探索与决策支持：需求分析 v1.0](requirements-handoff.md)。本文概括已确认决定，[里程碑](milestones.md)维护执行顺序，[需求基线](requirements.md)维护N编号。主稿与这些配套文件同步变更；历史研究不另设现行要求。
 
-The first product scope is a trusted campus knowledge loop:
+## 产品定位
 
-- Students can discover discussion and knowledge entries.
-- Authenticated users can create discussion and knowledge drafts.
-- Maintainers can refine high-signal discussion into archive entries.
-- Moderators can review risky content and manage visibility.
-- The system records sensitive actions for later audit.
+面向大学生个人的机会探索与决策支持工具，初期服务科大学生。汇集跨机构、跨地区和跨学科的信息，帮助发现选项、理解实际内容、比较适配性，并按需找到准备重点与资源入口。
 
-M0.2 does not implement these flows. It defines the boundaries that future
-milestones must follow.
+整体研究覆盖科研、升学、实习、竞赛、交流、活动通知和学习支持。首个真实案例是人工智能与数据科学学院学生的AI／软件导师探索；该案例不代表全体用户或产品上限。机会可以用于兴趣、共同参与、认定、学习、研究或就业，目的可以并存和改变。
 
-## Non-Goals
+## 当前交付：选导师指南demo
 
-These are outside the initialization phase:
+首个完整场景是找到、理解和比较导师，不区分本校与外校，并连接研究所及海外来源。兼容本科进组、短期科研／访问和研究生导师选择，参与条件绑定具体途径和时期。资料范围按当前问题和可获得来源确定。
 
-- Real campus SSO integration.
-- Production moderation console.
-- AI-generated archive publication without human review.
-- Public file hosting or attachment uploads.
-- Full-text search tuning.
-- Production backup automation, alerting, and incident tooling.
-- Tauri auto-update and signed release distribution.
+演示同时包含已有真实资料的探索，以及至少一次实际外部搜索、读取与整理。预存资料可支撑其余流程，不能冒充本次发现。历史研究、项目及招生仍可帮助认识方向与候选，当前能否申请另行说明。
 
-## User Roles
+用户可保存多个探索主题：每个主题保留候选、依据、私人理由和待问项，允许多次回来继续；公共资料可复用，主题偏好和判断分别保留。浏览不强制先创建主题，具体交互和存储在设计时决定。
 
-- `Guest`: unauthenticated reader. Can access public content only.
-- `Student`: authenticated campus user. Can create and manage own content.
-- `OrganizationMember`: student acting within a campus organization context.
-- `Moderator`: trusted reviewer for content state and safety decisions.
-- `Admin`: operational administrator for system configuration and high-risk
-  recovery actions.
+竞赛、实习、交流等其他机会类型保留研究与扩展空间，不要求本次同步实现。多主题不意味着采用完整聊天系统或通用项目管理工具。
 
-Roles are not a global hierarchy. Permission checks depend on action, resource,
-resource state, ownership, organization membership, and system role.
+## 产品侧重点与内容深度
 
-## Core Workflows
+| 层次 | 提供的帮助 | 最小深度 |
+| --- | --- | --- |
+| 核心：发现、理解和比较 | 从当前问题认识选项，理解研究／任务、条件、经历依据与差异 | 足以决定是否继续了解；不要求全部用户做深入比较 |
+| 按需：准备指导 | 说明基础、准备重点、理由与可选路径 | 不扩展概念教学、练习批改或学习测评 |
+| 按需或直达：资源 | 找到课程、算力、文献、设备、咨询等适用支持 | 说明用途、关键前提和获取入口；章节链接仅在有帮助时补充 |
 
-1. Discussion starts as a question, correction, or experience report.
-2. Contributors add replies, references, and clarifications.
-3. A maintainer or moderator identifies durable knowledge.
-4. The durable version is archived with tags, sources, and revision history.
-5. Later corrections update the archive while preserving previous versions.
+科研场景重点探索跨机构信息与本校选项的共同理解。地域或学校身份不代替适配判断，官方资源也不自动适合每个人。办理回原平台，具体研究工作和项目招收情况分别表达。
 
-## Admin Boundary
+## 实际情况考察
 
-Administration exists to protect the community and system integrity. It is not a
-shortcut around product rules.
+介绍之外的实际参与情况是跨场景共性需要。有可用经历、记录或知情者入口时呈现来源、关系、角色和时期；联系入口须公开用于相关交流或经同意展示。缺少资料时帮助明确疑问和进一步了解路径，不虚构经历，不保证回复或形成质量背书。
 
-High-risk admin actions require backend permission checks and audit events:
+不同年份与团队的经历不混合，来源冲突保留背景，私人判断不公开。不以论文数量推断指导品质，不生成人格总分或公开黑红榜。仅查入口者可以直接结束。
 
-- Role or permission changes.
-- Content removal, restoration, or state override.
-- Data export.
-- System configuration change.
-- Security response or abuse mitigation.
+## 自主选择与可选帮助
 
-## Success Metrics
+浏览、收藏和符合资格不代表必须参与。用户可以暂停、改变目标或拒绝，无须说明理由。准备与资源按需出现，不提供年级成长压力、欠缺排行榜、社会比较或默认催促。
 
-Early product metrics should stay simple:
+兴趣、娱乐与认定可同时成立；综测按院系与适用年度规则判断，奖项、学分／GPA和综测分别表达。官方义务与可选建议分开。评价任务是否清楚、问题是否解决，不以日活或参与数量衡量全部价值。
 
-- Useful archive entries created from discussion.
-- Correction turnaround time.
-- Content reports resolved.
-- Search or navigation success in demos.
-- Percentage of high-risk actions with audit records.
+## 信息供给与有限维护
 
-Metrics must not require collecting unnecessary personal data.
+采用已有资料复用与外部补查结合的方向：调研方法可用skill（可复用的调研说明包，可附脚本和参考资料）或版本化说明组织，程序执行固定操作，AI辅助关键词扩展、相关性判断和解释。具体搜索服务、模型、框架、存储尚未选定，尚未实现该流程。
+
+自动化主收集整理，团队主关键核对、异常处理和纠错。初期用有限批次资料及必要核对支持demo，可使用文件改错，无需先建后台。长期负责人、更新周期和持续供给预算不是需求分析或比赛demo的前置条件；展示价值后再决定投入。
+
+围绕当前问题尽可能找到相关信息，不宣称全网穷尽或所有信息实时有效。小红书等是候选来源，不默认依赖私域或绕过访问限制。社区未来可补充信息维护，但不是初期价值的依赖，也没有建设排期。
+
+## 验收与后续工作
+
+按[需求分析第8节](requirements-handoff.md)检查实际发现、真实候选比较、历史与当前区分、进一步了解、准备／资源直达、多主题接续及基本质量。需求基线定版、demo功能可用、学生实际收益和长期可持续分别报告。
+
+下一步是同伴评审和任务／信息结构设计，复用已有四人样稿与研究记录，仅补会改变具体决定的证据。问卷、独立对照、真实返回和长期维护计时按所问问题安排，不作全部必须先执行的门槛。
+
+## UI与工程边界
+
+前端固定使用[Primer体系与视觉规范](ui-system.md)，旧Web和HTML原型不是合规模板。新产品尚未实现；旧工程代码按需求评估复用，适用工程检查仍执行。真实数据进入前明确存储、删除与AI传输范围，公开浏览不要求校园认证，产品不收集外部账号密码。
+
+## 历史方案
+
+2026-09-22授权的产品重置已废止旧M系列社区路线。论坛、评论、匿名区、讨论归档、贡献榜、校园SSO和桌面端不因代码存在而恢复。
+
+### 供给设想：两把密钥（未采纳）
+
+此前“维护信息与生成指导分别使用密钥”的提议仅为历史技术设想。已确认的自动化方向不批准该密钥处理方式或特定群机器人／平台采集；校园模型资源的额度与第三方使用方式在实际采用时核对。历史Python教学样例只作为资源研究，不恢复教学功能或测评任务。

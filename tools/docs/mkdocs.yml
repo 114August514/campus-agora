@@ -10,7 +10,12 @@ exclude_docs: |
 nav:
   - 首页: index.md
   - 产品:
+      - 需求分析 v1.0: product/requirements-handoff.md
       - 概览: product/overview.md
+      - 需求论证与研究记录: product/needs-analysis.md
+      - 需求基线与分析契约: product/requirements.md
+      - 选导师任务与信息结构: product/advisor-task-design.md
+      - UI 组件与视觉规范: product/ui-system.md
       - 隐私: product/privacy.md
       - 里程碑: product/milestones.md
   - 架构:
@@ -25,9 +30,15 @@ nav:
       - Git LFS: engineering/lfs.md
   - 约束:
       - 阅读地图: constraints/index.md
-      - 产品定位: constraints/product-positioning-reference.md
-      - 内容边界: constraints/content-boundary-reference.md
-      - 资料社区: constraints/archive-community-reference.md
+      - 成熟团队需求分析方法: constraints/requirements-practice-reference.md
+      - 导师来源试采: constraints/mentor-source-reference.md
+      - AIDS 导师调研: constraints/aids-mentor-research.md
+      - 导师工作流需求证据: constraints/mentor-workflow-evidence.md
+      - 全产品需求地图: constraints/opportunity-needs-map.md
+      - 学生发展文献调研: constraints/student-development-literature.md
+      - 旧产品定位（历史）: constraints/product-positioning-reference.md
+      - 旧内容边界（历史）: constraints/content-boundary-reference.md
+      - 旧资料社区（历史）: constraints/archive-community-reference.md
       - 前端: constraints/frontend-reference.md
       - 后端: constraints/backend-reference.md
       - API 契约: constraints/api-contract-reference.md

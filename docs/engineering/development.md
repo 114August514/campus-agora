@@ -1,5 +1,7 @@
 # Development
 
+Last updated: 2026-09-29
+
 ## Requirements
 
 - Bun `1.3.14`
@@ -41,11 +43,16 @@ build check.
 
 ## Frontend Organization
 
+The UI system is fixed by [UI 组件与视觉规范](../product/ui-system.md):
+Primer React Product UI, Primer Primitives and Octicons only, with no
+handwritten CSS, Tailwind, CSS Modules, inline `style`, `sx` or CSS-in-JS.
+The existing `src/styles` token/CSS files and hand-built primitives are legacy
+M0 scaffolding awaiting migration; do not extend them.
+
 Frontend code should stay organized by responsibility:
 
-- `src/styles`: tokens, themes, and global CSS.
-- `src/components/ui`: reusable primitives such as Button, Input, Modal, Card,
-  Badge, Toast, and loading or empty states.
+- `src/components/ui`: thin compositions of Primer components for shared
+  loading, empty, error and permission states.
 - `src/components/layout`: AppShell, Sidebar, Topbar, and status surfaces.
 - `src/pages`: route-level composition.
 - `src/hooks`: reusable client-side behavior.
@@ -56,13 +63,12 @@ inputs, modals, loading states, or error states.
 
 ## Design System Rules
 
-- Use design tokens for colors, spacing, radius, typography, shadows, and focus
-  treatment.
-- Use Lucide rounded outline icons with 2px stroke where an icon is available.
-- Do not introduce one-off colors or arbitrary spacing without updating tokens.
-- Keep cards, modals, controls, and layout primitives consistent across pages.
-- Add or update a style guide page when a reusable primitive or state component
-  becomes part of the product surface.
+- Use Primer Primitives tokens through Primer components; do not scatter
+  literal colors or spacing in pages.
+- Use Octicons for icons; do not add Lucide or other icon sets.
+- Do not use bordered content cards, gradients, eyebrows or decorative
+  subtitles; see the UI spec for the full list.
+- Pages compose Primer layout and form components rather than one-off markup.
 
 ## API And Mock Mode
 
