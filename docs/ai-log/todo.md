@@ -23,7 +23,7 @@ Keep entries short, dated, and actionable.
 ### 2026-10-01 - Review aligned requirements and choose demo tasks
 
 - Source: Requirements alignment; requirements analysis v1.0.
-- Status: Requirements v1.0 merged via PR #10 into main at `09cb425` on 2026-10-03; teammate review still pending. Task design v0.3 covers result handling, topic isolation and selected personal AI input, plus user-adopted cancellation/run limits, mistaken-merge correction and truthful send states; P3 wording aligned. These additions remain local, without implementation or user-test claims.
+- Status: Requirements v1.0 merged via PR #10 into main at `09cb425` on 2026-10-03; teammate review still pending. Task design v0.3 covers result handling, topic isolation and selected personal AI input, plus user-adopted cancellation/run limits, mistaken-merge correction and truthful send states; P3 wording aligned. Delivery of these additions uses docs/requirements-handoff and a PR to protected main; implementation and user testing remain open.
 - Acceptance: Resolve actual review differences and apply task design v0.3 plus handoff 8.2 to concrete demo content, technical trials and the complete walkthrough. Choose search/AI/persistence mechanisms, declare per-run limits and explain storage/service boundaries. No new broad research or long-term staffing gate.
 
 ## Historical and conditional research backlog

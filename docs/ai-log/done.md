@@ -19,6 +19,13 @@ them to commits, files, and verification commands where possible.
 
 ## Completed
 
+### 2026-10-03 - Prepare requirements follow-up through the handoff branch
+
+- Source: User requested handoff-branch publication followed by main integration after GitHub rejected a direct main push (PR required).
+- Result: Verified the old handoff tree equals main's `09cb425`, merged that main baseline without conflicts, and copied the user's `c5673b5` as handoff commit `9696acd`. Original local main commit preserved. PR delivery uses squash merge after current CI verification.
+- Verification: `git diff --exit-code main HEAD` passed before this log update; `git diff --check origin/main...HEAD` passed. Follow-up differs only in the nine intended documentation/instruction files; delivery-log edits do not change product behavior.
+- Follow-up: Apply v0.3 in technical/interaction trials; publishing documents is not implementation, teammate approval or demonstrated user benefit. GitHub PR records own the final CI and merge status.
+
 ### 2026-10-03 - Add cancellable discovery, merge correction and truthful AI send states
 
 - Source: User accepted the three follow-up suggestions and requested their inclusion.
