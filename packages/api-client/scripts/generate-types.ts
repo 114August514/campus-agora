@@ -7,6 +7,7 @@ type JsonSchema = {
   enum?: string[];
   required?: string[];
   properties?: Record<string, JsonSchema>;
+  items?: JsonSchema;
   additionalProperties?: boolean | JsonSchema;
   $ref?: string;
 };
@@ -65,6 +66,10 @@ function renderType(schema: JsonSchema): string {
 
   if (schema.type === "boolean") {
     return "boolean";
+  }
+
+  if (schema.type === "array" && schema.items) {
+    return `Array<${renderType(schema.items)}>`;
   }
 
   if (schema.type === "object") {

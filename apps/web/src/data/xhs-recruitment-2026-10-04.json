@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "batchId": "xhs-recruitment-2026-10-04",
+  "query": "人工智能 导师 招生",
+  "scope": "小红书站内搜索，一篇招生帖的文字部分；上海交大教师名录交叉核对",
+  "collector": "Codex 浏览器工具与 agent 整理",
+  "completedAt": "2026-10-04T12:37:52.000Z",
+  "status": "partial",
+  "warnings": [
+    "这是一次已执行的有限采集，展示时复用该批次，未重新实时搜索。",
+    "小红书帖的文字部分已读取，十张配图未逐张阅读，评论未纳入。",
+    "来源中的招生意向不等于当前仍有名额或个人已符合条件。"
+  ],
+  "advisors": [
+    {
+      "candidateId": "shangding-gu",
+      "name": "顾尚定",
+      "institution": "上海交通大学",
+      "research": "研究 AI Agent 安全、强化学习和具身智能等方向。",
+      "approach": "招生帖列出了安全评测、机器人学习、基础模型和多智能体等课题方向；具体研究工作仍需查看实验室项目和论文。",
+      "participation": "帖中面向2027级硕博及科研实习，也欢迎本科生参与，提到编程基础和研究兴趣。具体途径、资格和名额需进一步确认。",
+      "unknowns": "当前剩余名额、具体课题、日常指导、学生体验及实习安排均未确认；自我介绍不是独立体验依据。",
+      "sources": [
+        {
+          "url": "https://www.xiaohongshu.com/explore/6a7574850000000024024a50",
+          "lookupUrl": "https://www.xiaohongshu.com/search_result?keyword=%25E6%259C%25AC%25E4%25BA%25BA%25E6%258B%259B%25E7%2594%259F%25EF%25BC%259A%25E6%258B%259B%25E6%2594%25B6%25E5%258D%259A%25E5%25A3%25AB%25E7%2594%259F%252F%25E7%25A1%2595%25E5%25A3%25AB%25E7%2594%259F%252F%25E7%25A7%2591%25E7%25A0%2594%25E5%25AE%259E%25E4%25B9%25A0%25E7%2594%259F&source=unknown",
+          "accessNote": "本次直接打开原帖短链接显示不可用；站内按完整标题搜索可定位此帖，原站可能仍要求登录。",
+          "title": "本人招生：招收博士生/硕士生/科研实习生",
+          "content": "账号显示“顾尚定 Shangding Gu”，帖内自述所属上海交大，并给出 SAIL 实验室主页。文字部分提供了研究方向及招生意向，整理内容未覆盖配图和评论。",
+          "collectedAt": "2026-10-04T12:37:52.000Z",
+          "kind": "snapshot",
+          "publishedAt": "编辑于 6天前",
+          "query": "人工智能 导师 招生",
+          "relevanceEvidence": ["招生帖说明硕博、科研实习及本科科研参与意向。"],
+          "unknowns": [
+            "配图未逐张阅读；当前名额与具体接收条件待确认。",
+            "账号本人身份未独立认证；学院名录仅核对姓名、机构与研究方向。"
+          ],
+          "collection": {
+            "method": "browser_dom",
+            "contentKind": "summary",
+            "readStatus": "partial",
+            "scope": "站内搜索后打开一篇帖，读取已呈现的文字部分",
+            "batchId": "xhs-recruitment-2026-10-04"
+          }
+        },
+        {
+          "url": "https://www.cs.sjtu.edu.cn/jiaoshiml/gushangding.html",
+          "title": "上海交通大学计算机学院：顾尚定教师名录",
+          "content": "学院名录列明顾尚定的教师身份、研究方向及 SAIL 实验室主页，与招生帖中的姓名、机构和方向相符；名录未确认该帖账号归属、招生名额或指导体验。",
+          "collectedAt": "2026-10-04T12:37:52.000Z",
+          "kind": "snapshot",
+          "collection": {
+            "method": "web_read",
+            "contentKind": "summary",
+            "readStatus": "complete",
+            "scope": "读取公开教师名录正文，核对姓名、机构和研究方向",
+            "batchId": "xhs-recruitment-2026-10-04"
+          }
+        }
+      ]
+    }
+  ]
+}

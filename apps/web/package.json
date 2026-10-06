@@ -8,16 +8,19 @@
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check src",
-    "lint:styles": "biome check src/styles",
-    "test": "bun run typecheck"
+    "lint:styles": "bun scripts/check-ui.ts",
+    "test": "bun test tests && bun run typecheck"
   },
   "dependencies": {
     "@campus-agora/api-client": "workspace:*",
+    "@primer/octicons-react": "19.38.0",
+    "@primer/primitives": "11.10.0",
+    "@primer/react": "38.40.1",
     "@vitejs/plugin-react": "^4.3.1",
-    "vite": "^5.4.11",
-    "typescript": "^5.4.5",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "typescript": "^5.4.5",
+    "vite": "^5.4.11"
   },
   "devDependencies": {
     "@types/react": "^18.2.66",

@@ -1,7 +1,44 @@
 # Security
 
-Security work starts before production. M0.2 records the boundaries that future
-features must satisfy.
+Last updated: 2026-10-04
+
+The current demo supports bounded public discovery and private browser-local
+explorations. Controls for identity, shared content, uploads and moderation
+below apply when those server-side capabilities are adopted; they do not
+create current community or desktop tasks.
+
+## Public Discovery Boundary
+
+The discovery endpoint accepts public interest terms, not a URL to proxy.
+Queries are sent to the fixed DuckDuckGo HTML search endpoint. Retrieved page
+hosts must fall under `edu.cn`, `ac.cn`, `cas.cn`, `edu`, `edu.hk`, `ac.uk`, or
+`edu.sg`, or equal one of the checked academic hosts `tqchen.com`,
+`xiangwang1223.github.io`, `xiongyingfei.github.io`, and `cse.ust.hk`. A permitted
+hostname is a reading boundary, not an endorsement of its claims.
+
+Every redirect is checked again. HTTP(S) only, allowed ports 80/443, and no URL
+credentials are accepted. Resolved private, loopback, link-local and other
+blocked addresses are rejected; accepted addresses are pinned for the actual
+connection, with environment proxies disabled. When local DNS returns only
+synthetic `198.18.0.0/15` addresses, the service asks the fixed HTTPS endpoint
+`https://dns.google/resolve` for public A records of the already-allowed host.
+Returned addresses must pass the same public-address checks and are pinned;
+the synthetic/private addresses are never page-fetch destinations. Other
+private DNS answers remain blocked.
+
+There are two concurrent discovery permits per process, at most five fetched
+search-result pages, a 1,000,000-byte page cap, and a 14-second bound per
+search/page operation. On search failure, the only fallback is live reading
+of Stanford AI Laboratory and CMU Machine Learning public faculty directories,
+with the changed scope and any failures shown in the response. These demo
+bounds are not per-user/IP rate limiting or a production traffic policy.
+
+Only static UTF-8 HTML is processed; no webpage code or instructions are
+executed, and PDF, login-only and JavaScript-rendered content are unsupported.
+The service uses no model or paid API key. It does not store private reasons,
+topics or fetched pages in the backend. Public query terms may reach the
+search provider, and lookup hostnames may reach `dns.google`; see
+[Privacy](../product/privacy.md).
 
 ## Secrets
 
@@ -23,7 +60,8 @@ Rules:
 
 ## Rate Limiting And Abuse
 
-M0.2 does not implement rate limiting. Before public write endpoints launch,
+The demo implements the concurrency bounds above, not general rate limiting.
+Before public write endpoints launch,
 define limits for:
 
 - Login attempts.
@@ -72,6 +110,11 @@ High-risk actions require audit events:
 - System config change.
 - Security response.
 
+This list concerns server-side shared/account data. Deleting a private topic
+or candidate from the current browser's saved explorations removes that local
+record without server audit, soft deletion, export or undo. It does not remove
+the source website or records saved in another topic/browser.
+
 Audit events should record who acted, what changed, when it changed, and the
 target resource. They must not record raw secrets or raw identity assertions.
 
@@ -82,8 +125,9 @@ Retention defaults are documented here and mirrored in
 retention, backup retention, audit retention, or attachment retention must
 update both privacy and operations docs.
 
-| Data Category | M0.2 Retention Boundary |
+| Data Category | Retention Boundary |
 | --- | --- |
+| Current browser-local explorations | Retain in this browser/site's localStorage until the user removes them or browser storage is cleared. No backend copy, synchronization, export or undo is implemented. |
 | Business content | Retain while published, drafted, or needed for account-visible history. Soft deletion must precede hard purge when restore or audit review is required. |
 | Audit logs | Retain longer than operational request logs. Exact production duration must be set before real auth, moderation, or admin actions launch. |
 | Request logs | Keep for a short debugging and abuse-response window. Logs must include request IDs but avoid raw tokens, cookies, and raw campus identity assertions. |
