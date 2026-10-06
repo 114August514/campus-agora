@@ -57,7 +57,7 @@ P4/P5只有决定继续投入时才启动，不是比赛完成的必经阶段。
 
 以下原文仅用于回看旧方案。其“当前阶段”“计划中”“必须”等文字均属于 2026-07-06 的历史计划，不产生现行任务或退出条件；与上述基线不一致时以上述基线为准。2026-09-22 的重置当时只调整仓库内计划。
 
-2026-10-06 按用户要求清理远端旧路线 PR：[身份认证 #4](https://github.com/114August514/campus-agora/pull/4)、[归档后端 #5](https://github.com/114August514/campus-agora/pull/5)、[归档前端 #6](https://github.com/114August514/campus-agora/pull/6)、[讨论归档 #7](https://github.com/114August514/campus-agora/pull/7)、[审核与 AI 草稿 #8](https://github.com/114August514/campus-agora/pull/8) 均已关闭且未合并，未删除分支；复核时无开放 PR。历史实现保留供按新需求评估复用，当前导师探索功能的新 PR 和后续 issue 尚未提交。
+2026-10-06 按用户要求清理远端旧路线 PR：[身份认证 #4](https://github.com/114August514/campus-agora/pull/4)、[归档后端 #5](https://github.com/114August514/campus-agora/pull/5)、[归档前端 #6](https://github.com/114August514/campus-agora/pull/6)、[讨论归档 #7](https://github.com/114August514/campus-agora/pull/7)、[审核与 AI 草稿 #8](https://github.com/114August514/campus-agora/pull/8) 均已关闭且未合并，未删除分支；清理完成时无开放 PR。历史实现保留供按新需求评估复用。同日后续已将当前导师探索功能及相关资料提交到[PR #12](https://github.com/114August514/campus-agora/pull/12)，尚未合并；后续 issue 未创建。
 
 ---
 
