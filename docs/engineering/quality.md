@@ -1,5 +1,7 @@
 # Quality Gates
 
+Last updated: 2026-10-04
+
 M0.1 turns the repository skeleton into a checked engineering loop.
 
 ## Required Local Checks
@@ -48,6 +50,14 @@ suite. New UI primitives must still provide:
 - Keyboard-reachable controls.
 
 ## UI Regression Boundary
+
+The active advisor UI follows [the Primer specification](../product/ui-system.md).
+`bun run lint:styles` now checks application sources for handwritten styles,
+`style`/`sx`/`className` attributes, non-Primer stylesheet imports and selected
+incompatible UI imports. Primer distribution CSS is allowed. This static check
+does not establish visual compliance, contrast or keyboard usability. Web tests
+exercise same-browser storage/isolated topics; use actual browser operations to
+check rendered saving and restoration.
 
 Before screenshot regression exists, review UI changes against:
 

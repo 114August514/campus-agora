@@ -1,6 +1,6 @@
 # 约束参考
 
-Last updated: 2026-09-27
+Last updated: 2026-10-05
 
 ## 2026-09-22 产品重置
 
@@ -13,6 +13,8 @@ Last updated: 2026-09-27
 当前 UI 唯一规范：[Primer 组件与视觉规范](../product/ui-system.md)，覆盖旧自由样式建议。
 
 ## 当前调研参考
+
+- [开源项目复用调研](open-source-reuse-reference.md)：搜索／读取、研究流程与个人主题组织；第9节记录浏览器采集和辅助登录，第10节核对帮助选择的领域skill、个人决策、依据比较和理由结构，并给出两候选小试验建议；候选框架未安装。
 
 - [成熟团队需求分析方法](requirements-practice-reference.md)：一手流程案例、证据复用、范围取舍与进入设计／开发的区别。
 

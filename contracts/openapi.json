@@ -48,6 +48,147 @@
         ],
         "type": "object"
       },
+      "DiscoveryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "description": "Public interest terms; sent to DuckDuckGo. No private notes or identities.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "DiscoveryResponse": {
+        "properties": {
+          "collectedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "duckduckgo_html",
+              "official_directory"
+            ],
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "scope": {
+            "description": "Actual provider and bounded reading scope for this attempt.",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/DiscoverySource"
+            },
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "complete",
+              "partial",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/DiscoveryWarning"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "query",
+          "provider",
+          "scope",
+          "status",
+          "collectedAt",
+          "sources",
+          "warnings"
+        ],
+        "type": "object"
+      },
+      "DiscoverySource": {
+        "properties": {
+          "collectedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "content": {
+            "description": "Fetched HTML text; maximum 16000 characters, not a generated summary.",
+            "type": "string"
+          },
+          "institution": {
+            "description": "Source hostname, not a verified institutional affiliation.",
+            "type": "string"
+          },
+          "publishedAt": {
+            "description": "Unverified original date metadata when present, never inferred from collection time.",
+            "type": "string"
+          },
+          "relevanceEvidence": {
+            "description": "Up to three body passages matching query terms; no model judgment.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "searchSnippet": {
+            "description": "Search-index snippet, kept separate from fetched body.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unknowns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "url": {
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "title",
+          "institution",
+          "content",
+          "searchSnippet",
+          "relevanceEvidence",
+          "collectedAt",
+          "unknowns"
+        ],
+        "type": "object"
+      },
+      "DiscoveryWarning": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "url": {
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
       "MetaResponse": {
         "properties": {
           "appName": {
@@ -110,6 +251,66 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/discoveries": {
+      "post": {
+        "description": "DuckDuckGo公开索引中的高校与研究所网站（edu.cn、ac.cn、cas.cn、edu、edu.hk、ac.uk、edu.sg），及已核对的学术主页tqchen.com、xiangwang1223.github.io、xiongyingfei.github.io、cse.ust.hk；最多读取5个公开HTML页面，不覆盖全网、私域、PDF或需登录页面。",
+        "operationId": "discoverSources",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoveryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoveryResponse"
+                }
+              }
+            },
+            "description": "Live attempt, including explicit partial or failed results; never cached demo replacements"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Request body exceeds configured limit"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid public query"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Two discovery requests already running"
+          }
+        },
+        "security": [],
+        "summary": "Live public-index search and bounded academic HTML reading"
+      }
+    },
     "/api/v1/meta": {
       "get": {
         "operationId": "getMeta",

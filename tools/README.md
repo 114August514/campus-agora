@@ -1,6 +1,6 @@
 # Tools
 
-Last updated: 2026-07-06
+Last updated: 2026-10-04
 
 This directory stores tool-specific configuration that does not need to live in
 the repository root for automatic discovery.
@@ -12,6 +12,8 @@ running nested tool commands directly.
 ## Layout
 
 - `docs/`: MkDocs and uv configuration for the documentation site.
+- `discovery/`: Offline collected-batch validation, invoked with `bun run discovery:validate <batch.json>`; it does not browse or publish.
+- `skills/opportunity-discovery/`: Repository draft research skill and batch-format reference. Ask the agent to read its `SKILL.md` explicitly; it is not installed into an automatic skill-discovery directory.
 
 ## Rules
 

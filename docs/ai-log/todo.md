@@ -1,6 +1,6 @@
 # AI Log Todo
 
-Last updated: 2026-10-03
+Last updated: 2026-10-06
 
 This file records meaningful pending work for AI agents and collaborators.
 Keep entries short, dated, and actionable.
@@ -20,11 +20,27 @@ Keep entries short, dated, and actionable.
 
 ## Pending
 
-### 2026-10-01 - Review aligned requirements and choose demo tasks
+### 2026-10-06 - Publish the implemented workflow as a new PR
+
+- Source: User now authorized publication of local unsubmitted work as a PR, following the October 5 readiness assessment and October 6 old-PR cleanup.
+- Status: In progress: one feature PR, reconciling latest main and preserving the teammate's merged PR #11. Four follow-up issues remain proposals, not part of this publication request.
+- Remote cleanup: User-requested closure of superseded #4–#8 completed and verified on 2026-10-06; no open PRs remained. Branches/history retained; this feature PR and the four issues are still unpublished.
+- PR scope: Current discovery API/contract/client, Primer Web and topic/compare behavior, collected batches/skill/validation, tests and related docs/locks. Preserve local historical tools/prototypes/opportunities.html and exclude it as its README specifies.
+- Submission dependency: Start from latest main and reconcile the nine files in merged PR #11; retain adopted cancellation/run limits, mistaken-merge correction, selected personal AI input and truthful send states. Current docs/requirements-handoff history diverges from main; do not force-push or overwrite the teammate's documentation. Post-commit CI results remain required before merge.
+- Proposed issues, not created: (1) decision-relevant lookup → source-bound candidate/comparison update; (2) editable topic conditions plus cancellable/bounded discovery; (3) optional preparation/knowledgeable-participant/resource entries; (4) complete demo walkthrough and synthetic mistaken-association repair. no retroactive completed-feature issue, staffing gate or new broad research task.
+
+### 2026-10-03 - Review task design and begin bounded implementation experiments
 
 - Source: Requirements alignment; requirements analysis v1.0.
-- Status: Requirements v1.0 merged via PR #10 into main at `09cb425` on 2026-10-03; teammate review still pending. Task design v0.3 covers result handling, topic isolation and selected personal AI input, plus user-adopted cancellation/run limits, mistaken-merge correction and truthful send states; P3 wording aligned. Delivery of these additions uses docs/requirements-handoff and a PR to protected main; implementation and user testing remain open.
-- Acceptance: Resolve actual review differences and apply task design v0.3 plus handoff 8.2 to concrete demo content, technical trials and the complete walkthrough. Choose search/AI/persistence mechanisms, declare per-run limits and explain storage/service boundaries. No new broad research or long-term staffing gate.
+- Milestone: P2.
+- Status: Requirements v1.0 was merged via PR #10; task-design v0.4 has six user tasks and G1–G5 work packages. On 2026-10-04 the first actual discovery/body/save/reopen slice was implemented and developer-tested, including independent two-topic records. October 5 repeated the discovery skill on text/image recruitment formats and integrated a second batch; seven candidates now include four dated samples and three collected people. The source-bound Jiang/Song choice-support slice was implemented and developer-tested on October 5; complete demo and student usability remain open.
+- Acceptance: Review concrete task/interaction differences; use real specimens for the Primer interaction draft. Trial two-topic persistence and one actual external search/body read, then integrate the user tasks and handoff 8.2 checks. No new broad research or long-term staffing gate.
+- Dependencies: First slice reuses React/Vite, existing Rust API and contract tooling; same-origin localStorage, DuckDuckGo/limited directory fallback and public-query transfer are documented. Model/provider costs, deployment and continued supply remain subsequent decisions; current design/runtime edits are not committed/pushed.
+- Reuse input: docs/constraints/open-source-reuse-reference.md compares 18 projects. Select a bounded component/service comparison and a topic-persistence trial rather than install all candidates; license/version, cost, reading state and source/notes boundaries remain implementation decisions.
+- Next: Build on the implemented choice-support slice (advisor-task-design.md §8.4): connect a decision-relevant unknown to optional follow-up lookup, then topic-condition editing and preparation/contact/resource entries. Generalizing the curated two-candidate comparison into a choice-help skill/output or model path is subsequent work; no model or decision engine selected. Check changed-query behavior and full §8.2 demo tasks; independent student trial/benefit and ongoing maintenance are not claimed. Public index fallback currently matches only Stanford AI/CMU ML directories; browser tests used labeled demo records.
+- Collection follow-up: Reuse the two completed batches for comparison before collecting more. Introduce a fixed browser adapter only for a concrete repeated gap; image-only content requires visual reading, not title/DOM-only completion. Application-triggered Xiaohongshu discovery and unattended collection remain unimplemented; the explicitly invoked repository skill and login handoff remain available.
+- Engineering follow-up: Production build warns about a roughly 762 kB main JS bundle (about 187 kB gzip); assess splitting when expanding the next slice. Pin remains Bun 1.3.14 but this machine's actual verification used Bun 1.4.2. Contract snapshots are regenerated/reproducible locally but remain uncommitted, so committed-drift CI is not yet a passing handoff fact.
+- Adopted rules retained from PR #11: declare per-run limits, support cancellation with partial results, repair mistaken public associations without losing private records, and send only explicitly selected personal AI inputs with truthful delivery states. Complete walkthrough and chosen AI mechanisms remain open.
 
 ## Historical and conditional research backlog
 

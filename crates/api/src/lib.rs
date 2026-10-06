@@ -6,7 +6,10 @@ use axum::extract::State;
 use axum::http::{header, header::HeaderName, HeaderMap, HeaderValue, Method, Request, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::{routing::get, Json, Router};
+use axum::{
+    routing::{get, post},
+    Json, Router,
+};
 use serde::Serialize;
 use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
@@ -18,6 +21,8 @@ const DEFAULT_REQUEST_BODY_LIMIT_BYTES: usize = 1024 * 1024;
 const DEFAULT_CORS_ALLOWED_ORIGINS: &[&str] = &["http://127.0.0.1:5173", "http://localhost:5173"];
 const REQUEST_ID_HEADER: &str = "x-request-id";
 static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+mod discovery;
 
 #[derive(Clone, Debug)]
 pub struct ApiState {
@@ -182,6 +187,7 @@ pub fn build_router_with_state_and_config(state: ApiState, config: ApiRuntimeCon
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/api/v1/meta", get(meta))
+        .route("/api/v1/discoveries", post(discovery::discover))
         .fallback(not_found)
         .with_state(state)
         .layer(cors_layer(&config))
@@ -193,7 +199,7 @@ pub fn build_router_with_state_and_config(state: ApiState, config: ApiRuntimeCon
 }
 
 pub fn openapi_document() -> Value {
-    json!({
+    let mut document = json!({
         "openapi": "3.1.0",
         "info": {
             "title": "Campus Agora API",
@@ -357,7 +363,9 @@ pub fn openapi_document() -> Value {
                 }
             }
         }
-    })
+    });
+    discovery::extend_contract(&mut document);
+    document
 }
 
 async fn healthz() -> &'static str {

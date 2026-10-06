@@ -31,6 +31,7 @@ nav:
   - 约束:
       - 阅读地图: constraints/index.md
       - 成熟团队需求分析方法: constraints/requirements-practice-reference.md
+      - 开源项目复用调研: constraints/open-source-reuse-reference.md
       - 导师来源试采: constraints/mentor-source-reference.md
       - AIDS 导师调研: constraints/aids-mentor-research.md
       - 导师工作流需求证据: constraints/mentor-workflow-evidence.md

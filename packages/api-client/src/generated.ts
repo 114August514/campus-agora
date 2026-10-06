@@ -14,6 +14,38 @@ export interface CapabilityFlags {
   desktopEnabled: boolean;
 }
 
+export interface DiscoveryRequest {
+  query: string;
+}
+
+export interface DiscoveryResponse {
+  collectedAt: string;
+  provider: "duckduckgo_html" | "official_directory";
+  query: string;
+  scope: string;
+  sources: Array<DiscoverySource>;
+  status: "complete" | "partial" | "failed";
+  warnings: Array<DiscoveryWarning>;
+}
+
+export interface DiscoverySource {
+  collectedAt: string;
+  content: string;
+  institution: string;
+  publishedAt?: string;
+  relevanceEvidence: Array<string>;
+  searchSnippet: string;
+  title: string;
+  unknowns: Array<string>;
+  url: string;
+}
+
+export interface DiscoveryWarning {
+  code: string;
+  message: string;
+  url?: string;
+}
+
 export interface MetaResponse {
   appName: "Campus Agora";
   capabilities: CapabilityFlags;

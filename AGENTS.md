@@ -1,6 +1,6 @@
 # Agent Notes
 
-Last updated: 2026-10-03
+Last updated: 2026-10-06
 
 This file is the project-level instruction sheet for AI agents and human
 collaborators. Follow it before making changes.
@@ -13,7 +13,8 @@ analysis v1.0. `docs/product/overview.md` summarizes decisions and
 and actionable guidance across institutions and disciplines, initially serving
 USTC students. The initial product is exclusively a personal-use tool; community
 features are a possible future extension, not current scope or a scheduled phase.
-Current planning stage: P1 needs and information-supply validation. The product
+Current planning stage: P2 task design and bounded implementation experiments,
+following the requirements v1.0 baseline. The product
 deliverable is a reusable discovery-to-action workflow. The user's AIDS mentor
 search is its first real pilot, not a standalone advisor-list delivery goal or
 the boundary of needs research. P1 explores product-wide users and opportunities
@@ -63,7 +64,8 @@ private reasons and open questions; reuse public data but retain separate topic
 preferences. Browsing need not start with topic creation. The demo must actually
 run external discovery alongside existing-data reuse. Use reusable research
 instructions (skills or equivalent), executable tools/workflow and AI judgment as
-complementary parts; specific providers, storage and frameworks remain unselected.
+complementary parts; choose providers, storage and frameworks through bounded
+implementation experiments rather than treating product decisions as unresolved.
 Do not re-ask these product decisions or claim implementation is complete.
 
 On 2026-10-03 the user added result organization, existing-data merging,
@@ -80,7 +82,47 @@ limits, correction of mistaken merges without losing private topic records,
 and truthful external-AI send states. Timeout or cancellation is not proof that
 personal content was never sent; show delivery uncertainty when needed.
 Thresholds and mechanisms remain technical-design choices, not fixed budgets
-or evidence of implementation.
+or evidence of implementation. These accepted requirements remain active in
+`docs/product/advisor-task-design.md` v0.4; the later experiments below do not
+establish that cancellation, mistaken-merge repair or external AI are implemented.
+
+On 2026-10-04 the user selected Xiaohongshu recruitment posts as the first
+browser-collection pilot, intending to reuse an available logged-in session.
+Search and text reading were executed, but sign-in was not performed or verified.
+Normal search/read using the available connected session is within this task. The repository draft
+`tools/skills/opportunity-discovery/SKILL.md` organizes this work; invoke it
+explicitly, since it is not installed in an automatic skill directory. An executed
+small batch can be displayed as precollected summaries, distinct from live API
+discovery. This does not imply a standalone unattended collector, access to a
+different Chrome session, private-message harvesting or automatic outreach.
+
+On 2026-10-05 the user authorized a user-assisted sign-in trial from a signed-out
+session. Follow the skill's handoff: the agent opens the site's login entry; the
+user completes QR scanning, credentials or CAPTCHA; then verify visible sign-in
+state and actual search/body reading separately. A new tab does not isolate login.
+Use a tool-supported isolated session or obtain explicit agreement before signing
+out an existing session. Do not save credentials, QR codes or authentication screens.
+The observed Xiaohongshu session is signed in. The IAB exposes only one normal
+profile, without an isolated-session capability. Bilibili visibly showed a signed-out
+entry; its original-site login window was shown to the user. After the user reported
+completion, fresh UI inspection confirmed the login prompt disappeared and account
+navigation appeared. The agent then searched for advisor-selection information and
+read a relevant article's text body. Existing sessions were not signed out. This
+verifies an assisted Bilibili sign-in and resumed-reading trial, not that reading
+requires login, future authentication will persist, Xiaohongshu sign-in was tested,
+or the application includes a Bilibili collector. The article was technical reading
+verification only, not a new advisor batch or requirements evidence.
+
+On 2026-10-05 a bounded choice-support experiment was implemented in the Web
+demo using the two actually collected Jiang/Song candidates. Research/graduate/
+short-term perspectives, optional research focus, specific source summaries and
+topic-scoped private records are usable. The source-bound interpretations are
+curated from the existing batch, not integrated model output or live collection.
+Compare selection and perspective are temporary; explicitly saved records use
+the existing topic store, and comparison removal does not delete them. This is
+developer verification, not a student benefit result or complete demo acceptance;
+preparation/resource/contact entries and general choice-help automation remain
+subsequent work. See advisor-task-design.md v0.4 §8.4.
 
 ## Requirements Analysis Work Order
 
@@ -148,12 +190,13 @@ credits/GPA and other recognition; only applicable rules support eligibility.
 
 ## UI Rules
 
-Follow `docs/product/ui-system.md` before any UI or prototype work. Use only Primer React Product UI + Primer Primitives + Octicons. No Tailwind, handwritten CSS/CSS Modules, inline style, sx or CSS-in-JS. Use library layouts and one declarative theme configuration. Fix light neutral palette with Primer blue interaction, system sans-serif and normal letter spacing. Ban emoji icons, eyebrows, subtitles/taglines, gradients, bordered content cards, display monospace and tracking. Keep necessary field borders and keyboard focus. Existing Web and HTML prototype are pending migration, not compliant templates. Reference sites inform interaction only; they cannot override these rules.
+Follow `docs/product/ui-system.md` before any UI or prototype work. Use only Primer React Product UI + Primer Primitives + Octicons. No Tailwind, handwritten CSS/CSS Modules, inline style, sx or CSS-in-JS. Use library layouts and one declarative theme configuration. Fix light neutral palette with Primer blue interaction, system sans-serif and normal letter spacing. Ban emoji icons, eyebrows, subtitles/taglines, gradients, bordered content cards, display monospace and tracking. Keep necessary field borders and keyboard focus. The current Web app uses Primer; the historical HTML prototype remains superseded and is not a compliant template. Reference sites inform interaction only; they cannot override these rules.
 
 ## Collaboration Rules
 
 - Read the relevant local context before editing: this file, the active spec,
-  related docs, package scripts, and nearby source files.
+  applicable docs, package scripts, and nearby source files. Reuse context
+  already read in the session; reread when it changes or is no longer reliable.
 - Before changing a product, frontend, backend, API, operations, desktop, or
   monorepo boundary, read `docs/constraints/index.md` and the area-specific
   constraint reference listed there.
@@ -166,6 +209,22 @@ Follow `docs/product/ui-system.md` before any UI or prototype work. Use only Pri
 - Verify changes with the narrowest meaningful command set, and report commands
   that were run or could not be run.
 - Do not claim work is complete without fresh verification evidence.
+
+## Rapid Iteration Default (2026-10-03)
+
+The user prefers short feedback loops and autonomous execution. Apply the
+iteration guidance in `docs/engineering/development.md` proportionally:
+
+- Clear small changes go directly to implementation and meaningful checks.
+  Normal features need only a short plan in the turn or existing task record;
+  research/design first only when an unknown blocks the current result.
+- Authorized implementation includes running, observing and fixing the result.
+  Continue until the requested outcome is verified; decide routine reversible
+  details without repeated confirmation, using existing project conventions.
+- Reuse current context and existing logs. Update durable docs for changed
+  decisions, contracts or handoff facts; use focused checks during edits and
+  affected required checks at completion. Review and extra testing respond to
+  substantive risk or new failures, not every microtask.
 
 ## AI Log Workflow
 

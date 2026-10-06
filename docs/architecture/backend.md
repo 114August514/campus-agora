@@ -1,5 +1,7 @@
 # Backend Architecture
 
+Last updated: 2026-10-04
+
 The backend is a Rust API server. Handlers should stay thin; domain and
 application crates carry business rules.
 
@@ -13,6 +15,40 @@ application crates carry business rules.
   database connection concerns.
 - `crates/api`: Axum app, routes, DTOs, middleware, errors, config, health
   checks, readiness checks, and OpenAPI export.
+
+## Current Discovery Demo
+
+`POST /api/v1/discoveries` uses a thin Axum handler and
+`crates/application/src/discovery.rs` for external collection. It requires no
+database or API key. `bun run dev:api` starts the API binary; the contract
+exporter remains a separate binary.
+
+The service sends the user's public query to DuckDuckGo's HTML search index,
+then reads eligible academic pages. On search transport or verification-page
+failure, it instead reads and matches two fixed public directories: Stanford
+AI Laboratory faculty and CMU Machine Learning core faculty. The response
+identifies the actual provider and scope; this fallback searches those
+directories, not the whole web or the four demonstration candidates.
+
+Collection allows at most five search-result pages, 1,000,000 bytes per page,
+and 14 seconds per search/page operation, with two concurrent discovery
+requests per API process. Directory fallback reads two pages. Each request and
+redirect validates the source range and resolved public addresses, then pins
+the connection to those addresses. The special local `198.18.0.0/15` fake-IP
+case uses a fixed `dns.google` public A-record lookup and still requires public
+destination addresses; see [Security](../operations/security.md).
+
+This implementation extracts static UTF-8 HTML text and query-matching
+passages, with a small explicit Chinese/English vocabulary map. It runs no
+browser JavaScript, PDF extraction, login, or model summarization. Index
+snippets remain separate from fetched body text. Collection time does not
+establish publication time, open recruitment, personal suitability, or
+guidance quality. Failures and unknowns remain visible; fixed demo snapshots
+never replace live attempts silently.
+
+The server does not persist explorations. Topics, candidates, saved sources,
+private reasons and questions use this browser's `localStorage`; their data
+boundary and deletion behavior are in [Privacy](../product/privacy.md).
 
 ## Model Boundaries
 
@@ -86,8 +122,9 @@ Minimum operational signals before production:
 - Enforce permissions in backend policy, not only in UI.
 - Include visibility or permission scope in repository queries.
 - Do not log secrets, bearer tokens, cookies, or raw identity assertions.
-- Treat uploads, exports, deletes, restores, role changes, and moderation
-  overrides as high-risk actions requiring audit events.
+- Audit applicable server-side uploads, exports, shared-content deletion or
+  restoration, role changes, and moderation overrides. Removing a private
+  browser-local candidate or topic does not require a server audit event.
 
 ## Testing Expectations
 

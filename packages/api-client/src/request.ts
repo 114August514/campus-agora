@@ -31,12 +31,16 @@ export class CampusAgoraApiError extends Error {
 export async function requestJson<T>(
   options: RequestOptions,
   path: string,
+  init: RequestInit = {},
 ): Promise<T> {
   let response: Response;
+  const headers = requestHeaders(options);
+  new Headers(init.headers).forEach((value, key) => headers.set(key, value));
 
   try {
     response = await options.fetchImpl(`${options.baseUrl}${path}`, {
-      headers: requestHeaders(options),
+      ...init,
+      headers,
     });
   } catch (error) {
     throw new CampusAgoraApiError(

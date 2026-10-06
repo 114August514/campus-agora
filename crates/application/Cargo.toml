@@ -6,6 +6,11 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "charset"] }
+scraper = "0.23"
+serde_json.workspace = true
+tokio.workspace = true
 campus_agora_domain = { path = "../domain" }
 
 [lib]
