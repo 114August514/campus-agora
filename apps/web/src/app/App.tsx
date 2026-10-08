@@ -1,7 +1,8 @@
 import { BookmarkIcon } from "@primer/octicons-react";
 import {
+  ActionList,
+  Banner,
   Button,
-  ButtonGroup,
   FormControl,
   Heading,
   PageLayout,
@@ -10,6 +11,7 @@ import {
   Text,
   TextInput,
   Textarea,
+  UnderlineNav,
 } from "@primer/react";
 import { useState } from "react";
 import {
@@ -24,6 +26,7 @@ import {
   comparisonSupportedCandidateIds,
 } from "../lib/advisor-comparison";
 import { type Advisor, advisors, collectedBatches, sourceDate } from "../lib/advisors";
+import { getFollowupQuery, getSupplementalSources } from "../lib/comparison-followup";
 import {
   type CandidateSnapshot,
   type ExplorationTopic,
@@ -47,7 +50,10 @@ export function App() {
   const [initial] = useState(loadExplorations);
   const [topics, setTopics] = useState(initial.topics);
   const [topicId, setTopicId] = useState(initial.topics[0]?.id ?? "");
-  const [view, setView] = useState<"explore" | "saved" | "compare">("explore");
+  const [view, setView] = useState<"explore" | "saved" | "compare" | "followup">(
+    "explore",
+  );
+  const [followupCandidate, setFollowupCandidate] = useState<Advisor>();
   const [comparisonIds, setComparisonIds] = useState<string[]>([]);
   const [perspective, setPerspective] = useState<ComparisonPerspective>("research");
   const [focus, setFocus] = useState<ResearchFocus>("open");
@@ -148,37 +154,72 @@ export function App() {
     });
   }
 
+  function startFollowup(candidate: Advisor) {
+    setFollowupCandidate(candidate);
+    setQuery(getFollowupQuery(candidate, perspective));
+    setError("");
+    setMessage("");
+    setView("followup");
+  }
+
+  function saveSupplemental(candidate: CandidateSnapshot) {
+    mutate(() => {
+      if (!activeTopic) throw new Error("先选择或创建主题，再保存补充依据。");
+      initial.store?.saveCandidate(activeTopic.id, candidate);
+      // Adding evidence does not save or discard the comparison's private drafts.
+      setMessage(
+        `已把${candidate.name}的补充依据保存到“${activeTopic.name}”，可返回比较继续查看。`,
+      );
+    });
+  }
+
   return (
     <PageLayout containerWidth="large" padding="normal">
-      <PageLayout.Header divider="none">
-        <Stack gap="normal">
+      <PageLayout.Header>
+        <Stack gap="condensed">
           <Heading as="h1" variant="medium">
             选导师
           </Heading>
-          <nav aria-label="主导航">
-            <ButtonGroup>
-              <Button
-                aria-pressed={view !== "saved"}
-                onClick={() => setView("explore")}
-              >
-                探索
-              </Button>
-              <Button aria-pressed={view === "saved"} onClick={() => setView("saved")}>
-                我的探索{topics.length ? `（${topics.length}）` : ""}
-              </Button>
-            </ButtonGroup>
-          </nav>
+          <UnderlineNav aria-label="主导航" variant="flush">
+            <UnderlineNav.Item
+              aria-current={view === "explore" ? "page" : undefined}
+              onSelect={(event) => {
+                event.preventDefault();
+                setView("explore");
+              }}
+            >
+              探索
+            </UnderlineNav.Item>
+            <UnderlineNav.Item
+              counter={comparisonIds.length}
+              aria-current={
+                view === "compare" || view === "followup" ? "page" : undefined
+              }
+              onSelect={(event) => {
+                event.preventDefault();
+                setView("compare");
+              }}
+            >
+              比较
+            </UnderlineNav.Item>
+            <UnderlineNav.Item
+              counter={topics.length}
+              aria-current={view === "saved" ? "page" : undefined}
+              onSelect={(event) => {
+                event.preventDefault();
+                setView("saved");
+              }}
+            >
+              我的探索
+            </UnderlineNav.Item>
+          </UnderlineNav>
         </Stack>
       </PageLayout.Header>
       <PageLayout.Content width="large">
-        <Stack gap="spacious">
+        <Stack gap="normal">
           <div aria-live="polite">
-            {message && <Text as="p">{message}</Text>}
-            {error && (
-              <Text as="p" role="alert">
-                {error}
-              </Text>
-            )}
+            {message && <Banner variant="success" layout="compact" title={message} />}
+            {error && <Banner variant="critical" layout="compact" title={error} />}
           </div>
           <Stack
             direction={{ narrow: "vertical", regular: "horizontal" }}
@@ -271,51 +312,40 @@ export function App() {
                   <Button onClick={() => setView("compare")}>
                     查看当前比较（{comparisonIds.length}）
                   </Button>
+                  {advisor &&
+                    comparisonSupportedCandidateIds.some(
+                      (id) => id === advisor.candidateId,
+                    ) && (
+                      <Button
+                        aria-pressed={comparisonIds.includes(advisor.candidateId)}
+                        onClick={() =>
+                          setComparisonIds((ids) =>
+                            ids.includes(advisor.candidateId)
+                              ? ids.filter((id) => id !== advisor.candidateId)
+                              : [...ids, advisor.candidateId],
+                          )
+                        }
+                      >
+                        {comparisonIds.includes(advisor.candidateId)
+                          ? `取消比较${advisor.name}`
+                          : `加入比较${advisor.name}`}
+                      </Button>
+                    )}
                 </Stack>
-                {advisors.map((item) => (
-                  <Stack key={item.candidateId} gap="condensed">
-                    <Stack
-                      direction="horizontal"
-                      align="center"
-                      justify="space-between"
-                      wrap="wrap"
+                <ActionList showDividers selectionVariant="single">
+                  {advisors.map((item) => (
+                    <ActionList.Item
+                      key={item.candidateId}
+                      selected={selectedAdvisor === item.candidateId}
+                      onSelect={() => setSelectedAdvisor(item.candidateId)}
                     >
-                      <Text weight="semibold">
-                        {item.name} · {item.institution}
-                      </Text>
-                      <Stack direction="horizontal" gap="condensed" wrap="wrap">
-                        <Button
-                          size="small"
-                          aria-pressed={selectedAdvisor === item.candidateId}
-                          onClick={() => setSelectedAdvisor(item.candidateId)}
-                        >
-                          查看{item.name}
-                        </Button>
-                        {comparisonSupportedCandidateIds.some(
-                          (id) => id === item.candidateId,
-                        ) && (
-                          <Button
-                            size="small"
-                            aria-pressed={comparisonIds.includes(item.candidateId)}
-                            onClick={() =>
-                              setComparisonIds((ids) =>
-                                ids.includes(item.candidateId)
-                                  ? ids.filter((id) => id !== item.candidateId)
-                                  : [...ids, item.candidateId],
-                              )
-                            }
-                          >
-                            {comparisonIds.includes(item.candidateId)
-                              ? "取消比较"
-                              : "加入比较"}
-                            {item.name}
-                          </Button>
-                        )}
-                      </Stack>
-                    </Stack>
-                    <Text as="p">{item.research}</Text>
-                  </Stack>
-                ))}
+                      {item.name}
+                      <ActionList.Description variant="block">
+                        {item.institution}。{item.research}
+                      </ActionList.Description>
+                    </ActionList.Item>
+                  ))}
+                </ActionList>
               </Stack>
               {advisor && (
                 <AdvisorDetail
@@ -326,6 +356,32 @@ export function App() {
                 />
               )}
             </>
+          ) : view === "followup" && followupCandidate ? (
+            <Stack as="section" gap="normal">
+              <Stack
+                direction="horizontal"
+                justify="space-between"
+                align="center"
+                wrap="wrap"
+              >
+                <Heading as="h2" variant="small">
+                  补查{followupCandidate.name}
+                </Heading>
+                <Button onClick={() => setView("compare")}>返回比较</Button>
+              </Stack>
+              <Text as="p">
+                按当前比较视角预填了公开检索词，可以改成一个具体问题后再查找。
+              </Text>
+              <DiscoveryPanel
+                key={followupCandidate.candidateId}
+                query={query}
+                onQueryChange={setQuery}
+                canSave={Boolean(activeTopic && initial.store)}
+                onSave={saveSupplemental}
+                targetCandidate={followupCandidate}
+                saveTargetName={activeTopic?.name}
+              />
+            </Stack>
           ) : view === "compare" ? (
             <AdvisorComparison
               candidates={comparisonCandidates}
@@ -333,6 +389,13 @@ export function App() {
               focus={focus}
               topicName={initial.store ? activeTopic?.name : undefined}
               notes={comparisonNotes}
+              supplementalSources={Object.fromEntries(
+                comparisonCandidates.map((candidate) => [
+                  candidate.candidateId,
+                  getSupplementalSources(candidate, activeTopic),
+                ]),
+              )}
+              onFollowup={startFollowup}
               onPerspectiveChange={setPerspective}
               onFocusChange={setFocus}
               onRemove={(id) =>
@@ -438,6 +501,11 @@ export function App() {
           )}
         </Stack>
       </PageLayout.Content>
+      <PageLayout.Footer>
+        <Text as="p" size="small">
+          资料保存在此浏览器。浏览和保存不代表决定申请。
+        </Text>
+      </PageLayout.Footer>
     </PageLayout>
   );
 }
@@ -531,6 +599,7 @@ function SavedCandidate({
         <SourceView
           key={`${source.url}-${source.collectedAt}-${index}`}
           source={source}
+          saved
         />
       ))}
       <FormControl>

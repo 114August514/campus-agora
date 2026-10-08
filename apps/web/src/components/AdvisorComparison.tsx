@@ -38,6 +38,8 @@ export function AdvisorComparison({
   focus,
   topicName,
   notes,
+  supplementalSources,
+  onFollowup,
   onPerspectiveChange,
   onFocusChange,
   onRemove,
@@ -50,6 +52,8 @@ export function AdvisorComparison({
   focus: ResearchFocus;
   topicName?: string;
   notes: Record<string, ComparisonNotes>;
+  supplementalSources: Record<string, SourceSnapshot[]>;
+  onFollowup: (advisor: Advisor) => void;
   onPerspectiveChange: (value: ComparisonPerspective) => void;
   onFocusChange: (value: ResearchFocus) => void;
   onRemove: (candidateId: string) => void;
@@ -79,6 +83,11 @@ export function AdvisorComparison({
       renderCell: (item) => (
         <Stack gap="condensed">
           <Text as="p">{item.text}</Text>
+          {item.criterion === "还有哪些未知" && (
+            <Button onClick={() => onFollowup(item.advisor)}>
+              补查{item.advisor.name}
+            </Button>
+          )}
           {item.sources.length > 0 && (
             <Details>
               <Details.Summary
@@ -217,6 +226,45 @@ export function AdvisorComparison({
               })}
             </Stack>
           )}
+          <Stack as="section" gap="normal">
+            <Heading as="h3" variant="small">
+              补充依据
+            </Heading>
+            <Text as="p">
+              {topicName
+                ? `以下是你关联到“${topicName}”的新增来源，可结合原有摘要继续判断；保存来源不代表待问项已确认。`
+                : "补查后可以把来源保存到一个主题，再回到这里继续比较。"}
+            </Text>
+            {candidates.map((candidate) => {
+              const sources = supplementalSources[candidate.candidateId] ?? [];
+              return (
+                <Stack key={candidate.candidateId} gap="condensed">
+                  <Text weight="semibold">{candidate.name}</Text>
+                  {sources.length ? (
+                    <Details>
+                      <Details.Summary>
+                        查看{candidate.name}的补充依据（{sources.length}）
+                      </Details.Summary>
+                      <Stack gap="normal">
+                        {sources.map((source, index) => (
+                          <SourceView
+                            key={`${source.url}-${source.collectedAt}-${index}`}
+                            source={source}
+                            saved
+                          />
+                        ))}
+                      </Stack>
+                    </Details>
+                  ) : (
+                    <Text as="p">当前主题还没有这位候选的补充依据。</Text>
+                  )}
+                  <Button onClick={() => onFollowup(candidate)}>
+                    继续补查{candidate.name}
+                  </Button>
+                </Stack>
+              );
+            })}
+          </Stack>
           <Stack as="section" gap="normal">
             <Heading as="h3" variant="small">
               自己的记录

@@ -71,4 +71,13 @@ describe("source presentation", () => {
     expect(html).toContain("查看已有资料");
     expect(html).not.toContain("查看已取得的正文");
   });
+
+  test("reopened live evidence retains its capture date without claiming a fresh read", () => {
+    const html = renderToStaticMarkup(
+      <SourceView source={{ ...source, collection: undefined, kind: "live" }} saved />,
+    );
+    expect(html).toContain("已保存的外部正文");
+    expect(html).toContain("2026/10/4");
+    expect(html).not.toContain("本次外部正文读取");
+  });
 });

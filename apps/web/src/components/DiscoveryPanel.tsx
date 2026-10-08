@@ -1,6 +1,7 @@
 import { type DiscoveryResponse, discoverSources } from "@campus-agora/api-client";
 import { SearchIcon } from "@primer/octicons-react";
 import {
+  Banner,
   Button,
   FormControl,
   Heading,
@@ -10,7 +11,7 @@ import {
   TextInput,
 } from "@primer/react";
 import { useRef, useState } from "react";
-import { advisors } from "../lib/advisors";
+import { type Advisor, advisors } from "../lib/advisors";
 import type { CandidateSnapshot, SourceSnapshot } from "../lib/exploration-store";
 import { SourceView } from "./SourceView";
 
@@ -19,9 +20,18 @@ interface Props {
   onQueryChange: (value: string) => void;
   onSave: (candidate: CandidateSnapshot) => void;
   canSave: boolean;
+  targetCandidate?: Advisor;
+  saveTargetName?: string;
 }
 
-export function DiscoveryPanel({ query, onQueryChange, onSave, canSave }: Props) {
+export function DiscoveryPanel({
+  query,
+  onQueryChange,
+  onSave,
+  canSave,
+  targetCandidate,
+  saveTargetName,
+}: Props) {
   const [result, setResult] = useState<DiscoveryResponse | null>(null);
   const [runningQuery, setRunningQuery] = useState("");
   const [error, setError] = useState("");
@@ -30,8 +40,9 @@ export function DiscoveryPanel({ query, onQueryChange, onSave, canSave }: Props)
   const [institution, setInstitution] = useState("");
   const [research, setResearch] = useState("");
   const sequence = useRef(0);
-  const hasCandidate =
-    candidateId === "new"
+  const hasCandidate = targetCandidate
+    ? true
+    : candidateId === "new"
       ? Boolean(candidateName.trim() && institution.trim())
       : Boolean(candidateId);
 
@@ -69,6 +80,7 @@ export function DiscoveryPanel({ query, onQueryChange, onSave, canSave }: Props)
             <FormControl.Label>想了解什么研究或哪位导师？</FormControl.Label>
             <TextInput
               block
+              autoFocus={Boolean(targetCandidate)}
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
               placeholder="例如 AI systems compiler Tianqi Chen"
@@ -86,11 +98,19 @@ export function DiscoveryPanel({ query, onQueryChange, onSave, canSave }: Props)
         </Stack>
       </form>
       <div aria-live="polite">
-        {runningQuery && <Text as="p">正在检索并读取公开来源：{runningQuery}</Text>}
+        {runningQuery && (
+          <Banner
+            variant="info"
+            layout="compact"
+            title={`正在检索并读取公开来源：${runningQuery}`}
+          />
+        )}
         {error && (
-          <Text as="p" role="alert">
-            {error} 已有资料和已保存主题仍可查看。
-          </Text>
+          <Banner
+            variant="critical"
+            layout="compact"
+            title={`${error} 已有资料和已保存主题仍可查看。`}
+          />
         )}
       </div>
       {result && (
@@ -110,11 +130,23 @@ export function DiscoveryPanel({ query, onQueryChange, onSave, canSave }: Props)
             </Text>
           )}
           {result.warnings.map((warning, index) => (
-            <Text as="p" key={`${warning.code}-${index}`}>
-              {warning.message}
-            </Text>
+            <Banner
+              key={`${warning.code}-${index}`}
+              variant="warning"
+              layout="compact"
+              title={warning.message}
+            />
           ))}
-          {result.sources.length > 0 && (
+          {result.sources.length > 0 && targetCandidate && (
+            <Text as="p">
+              请核对来源是否与{targetCandidate.name}（{targetCandidate.institution}）
+              有关，再确认保存。
+              {saveTargetName
+                ? `将保存到“${saveTargetName}”。`
+                : "如需保存，可先选择或创建主题。"}
+            </Text>
+          )}
+          {result.sources.length > 0 && !targetCandidate && (
             <FormControl>
               <FormControl.Label>需要保存时，将依据关联到哪位候选？</FormControl.Label>
               <Select
@@ -134,7 +166,7 @@ export function DiscoveryPanel({ query, onQueryChange, onSave, canSave }: Props)
               </FormControl.Caption>
             </FormControl>
           )}
-          {result.sources.length > 0 && candidateId === "new" && (
+          {result.sources.length > 0 && !targetCandidate && candidateId === "new" && (
             <Stack gap="condensed">
               <FormControl required>
                 <FormControl.Label>导师姓名</FormControl.Label>
@@ -187,7 +219,8 @@ export function DiscoveryPanel({ query, onQueryChange, onSave, canSave }: Props)
                   disabled={!canSave || !hasCandidate}
                   onClick={() => {
                     const candidate =
-                      candidateId === "new"
+                      targetCandidate ??
+                      (candidateId === "new"
                         ? {
                             candidateId: `external:${institution.trim()}:${candidateName.trim()}`,
                             name: candidateName.trim(),
@@ -197,11 +230,13 @@ export function DiscoveryPanel({ query, onQueryChange, onSave, canSave }: Props)
                           }
                         : advisors.find(
                             (advisor) => advisor.candidateId === candidateId,
-                          );
+                          ));
                     if (candidate) onSave({ ...candidate, sources: [snapshot] });
                   }}
                 >
-                  保存这条依据到当前主题
+                  {targetCandidate
+                    ? `确认与${targetCandidate.name}相关并保存${saveTargetName ? `到“${saveTargetName}”` : ""}`
+                    : "保存这条依据到当前主题"}
                 </Button>
               </Stack>
             );

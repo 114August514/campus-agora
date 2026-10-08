@@ -1,6 +1,6 @@
 # AI Log Done
 
-Last updated: 2026-10-06
+Last updated: 2026-10-08
 
 This file records completed agent-visible work. Keep entries factual and link
 them to commits, files, and verification commands where possible.
@@ -18,6 +18,30 @@ them to commits, files, and verification commands where possible.
 ```
 
 ## Completed
+
+### 2026-10-08 - Walk comparison follow-up against a live public lookup
+
+- Result: From the comparison of 江祖铭 and 宋卓然, follow-up prefilled a public query containing 江祖铭. Changing it to 机器学习 returned fetched page text with matching passages. Saving attached one source to the current topic (4 existing sources became 5) without a second candidate. Returning kept the unsaved question draft and the saved reason. Reload restored the supplemental source and the saved reason. A second topic showed no supplemental sources and did not change the first. A nonsense query did not save anything; the page showed the search challenge, the limited-directory fallback, and that no matching body was found.
+- Changed: comparison follow-up behavior was already in the working tree; this entry records the live walk. UI navigation from 2026-10-07 remains in the same branch.
+- Verification: Chromium on http://127.0.0.1:5173 with the local API. `bun test tests/comparison-followup.test.ts` passed earlier in the session. Fixed comparison sentence “数据库、操作系统、安全与软件工程” still renders, including at 390px with no horizontal overflow.
+- Decisions: No model or provider change. Private notes stayed out of the query. Historical opportunities.html stays untracked.
+- Follow-up: Open the branch PR. Topic-condition editing, cancellation limits, mistaken-association repair, and preparation entries remain open.
+
+### 2026-10-07 - Tighten the advisor UI with Primer navigation and lists
+
+- Result: On feat/comparison-followup, the explore page now uses UnderlineNav for 探索 / 比较 / 我的探索, ActionList for saved candidates, and Banner only for real lookup or save status. Follow-up keeps one return to comparison. No new visual system.
+- Changed: apps/web/src/app/App.tsx, apps/web/src/components/DiscoveryPanel.tsx, docs/product/ui-system.md.
+- Verification: bun --cwd apps/web typecheck, lint:styles, comparison-followup tests, and biome check passed. Chromium at 1280 and 390: nav, candidate selection, compare, saved page, overflow 0, Primer focus ring on the nav. Not committed.
+- Decisions: Borrowed GitHub Primer navigation and row lists, plus the 107 density and status-color rule already in ui-system.md. Did not copy 107 cards, antd, green primary buttons, or Primer Brand comparison tables.
+- Follow-up: The comparison follow-up slice is still uncommitted and has not had a live external lookup walk.
+
+### 2026-10-06 - Review and squash merge PR #12
+
+- Result: At the user's request, reviewed and squash merged [PR #12](https://github.com/114August514/campus-agora/pull/12) into main as a8a0209eaa6a4003b59b0263e0f2048a74b94498. Fresh GitHub inspection confirms closed/merged and this merge SHA. No blocking issue found; no runtime change in this review.
+- Review: Independent bounded code review confirmed topic-scoped private records, comparison draft clearing, source/time/batch binding, query-only external transfer and bounded public-page fetching. GitHub showed no submitted reviews or review threads. Existing declared follow-ups are not represented as complete.
+- Verification: Re-read head c5bd897 and [CI run 37477321621](https://github.com/114August514/campus-agora/actions/runs/37477321621); frontend, backend, desktop, contract, docs and container all succeeded. git diff --check origin/main...HEAD passed before merge; the fetched squash commit has the same file tree as the reviewed head. Local merge-record edits passed UV_CACHE_DIR=/tmp/campus-agora-uv-cache bun run ci:docs and git diff --check. No claim about post-merge main CI completion.
+- Local integration: Fetched origin/main, preserved old divergent main feb4549 in backup/main-before-pr12-20261006, then moved and switched local main to a8a0209. Feature branch and original docs branch remain; untracked historical opportunities.html was preserved. No branch deletion, new issue, reviewer request or direct push to main.
+- Follow-up: Updated todo.md and milestones.md with verified merge state. These merge-record edits remain local for the next documentation submission; do not mistake them for part of the merged PR. Continue the four proposed P2 outcome groups, with bundle-size optimization when extending the next slice.
 
 ### 2026-10-06 - Publish the discovery and choice-support implementation
 
