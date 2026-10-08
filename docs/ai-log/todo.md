@@ -1,6 +1,6 @@
 # AI Log Todo
 
-Last updated: 2026-10-06
+Last updated: 2026-10-07
 
 This file records meaningful pending work for AI agents and collaborators.
 Keep entries short, dated, and actionable.
@@ -20,10 +20,18 @@ Keep entries short, dated, and actionable.
 
 ## Pending
 
-### 2026-10-06 - Review the workflow PR and define subsequent implementation work
+### 2026-10-07 - Follow a comparison question through lookup and saved evidence
 
-- Source: Current implementation published as [PR #12](https://github.com/114August514/campus-agora/pull/12); publication facts and checks are in done.md.
-- Status: PR open for review, not merged. Latest main and the teammate's PR #11 requirements were reconciled; old #4–#8 were closed separately. Historical tools/prototypes/opportunities.html stays local as documented.
+- Source: User accepted the next iteration after PR #12 and asked to start.
+- Milestone: P2, T2/T3/T5.
+- Status: Implemented on feat/comparison-followup and developer-walked on 2026-10-08. A real public lookup returned body text and explicit failure/fallback messages. Saved evidence reloaded on the same topic only. Topic-condition editing, cancellation limits, and preparation entries remain later.
+- Acceptance: Execute an actual external lookup; successful body reads and failures remain explicit. Save a relevant source, return and reload to recover it without duplicate candidates, changed fixed summaries, lost drafts or cross-topic private-record changes. Keep existing Primer UI and same-browser storage.
+- Dependencies: Existing discovery API availability and reading scope. No model/provider or database migration selected for this slice.
+
+### 2026-10-06 - Define subsequent implementation work after PR #12
+
+- Source: Current implementation squash merged via [PR #12](https://github.com/114August514/campus-agora/pull/12) as main a8a0209; review and integration facts are in done.md.
+- Status: Merge completed under the user's authorization after review found no blocking issue and head c5bd897 passed all six CI jobs. Local main matches origin/main; old local main history is preserved in backup/main-before-pr12-20261006. Historical tools/prototypes/opportunities.html stays local as documented. Subsequent issue groups remain proposals.
 - Proposed issues, not created: (1) decision-relevant lookup → source-bound candidate/comparison update; (2) editable topic conditions plus cancellable/bounded discovery; (3) optional preparation/knowledgeable-participant/resource entries; (4) complete demo walkthrough and synthetic mistaken-association repair. Define acceptance from task design v0.4 when taking up a group; no staffing gate or new broad research task.
 
 ### 2026-10-03 - Review task design and begin bounded implementation experiments
@@ -32,11 +40,11 @@ Keep entries short, dated, and actionable.
 - Milestone: P2.
 - Status: Requirements v1.0 was merged via PR #10; task-design v0.4 has six user tasks and G1–G5 work packages. On 2026-10-04 the first actual discovery/body/save/reopen slice was implemented and developer-tested, including independent two-topic records. October 5 repeated the discovery skill on text/image recruitment formats and integrated a second batch; seven candidates now include four dated samples and three collected people. The source-bound Jiang/Song choice-support slice was implemented and developer-tested on October 5; complete demo and student usability remain open.
 - Acceptance: Review concrete task/interaction differences; use real specimens for the Primer interaction draft. Trial two-topic persistence and one actual external search/body read, then integrate the user tasks and handoff 8.2 checks. No new broad research or long-term staffing gate.
-- Dependencies: First slice reuses React/Vite, existing Rust API and contract tooling; same-origin localStorage, DuckDuckGo/limited directory fallback and public-query transfer are documented. Current design/runtime work is published in PR #12; model/provider costs, deployment and continued supply remain subsequent decisions.
+- Dependencies: First slice reuses React/Vite, existing Rust API and contract tooling; same-origin localStorage, DuckDuckGo/limited directory fallback and public-query transfer are documented. Current design/runtime work is integrated into main via PR #12; model/provider costs, deployment and continued supply remain subsequent decisions.
 - Reuse input: docs/constraints/open-source-reuse-reference.md compares 18 projects. Select a bounded component/service comparison and a topic-persistence trial rather than install all candidates; license/version, cost, reading state and source/notes boundaries remain implementation decisions.
 - Next: Build on the implemented choice-support slice (advisor-task-design.md §8.4): connect a decision-relevant unknown to optional follow-up lookup, then topic-condition editing and preparation/contact/resource entries. Generalizing the curated two-candidate comparison into a choice-help skill/output or model path is subsequent work; no model or decision engine selected. Check changed-query behavior and full §8.2 demo tasks; independent student trial/benefit and ongoing maintenance are not claimed. Public index fallback currently matches only Stanford AI/CMU ML directories; browser tests used labeled demo records.
 - Collection follow-up: Reuse the two completed batches for comparison before collecting more. Introduce a fixed browser adapter only for a concrete repeated gap; image-only content requires visual reading, not title/DOM-only completion. Application-triggered Xiaohongshu discovery and unattended collection remain unimplemented; the explicitly invoked repository skill and login handoff remain available.
-- Engineering follow-up: Production build warns about a roughly 762 kB main JS bundle (about 187 kB gzip); assess splitting when expanding the next slice. Pin remains Bun 1.3.14; this machine used Bun 1.4.2. The committed snapshots passed local contract drift checks and the first PR #12 CI run, which used the pinned Bun version; check the latest PR head before merging.
+- Engineering follow-up: Production build warns about a roughly 762 kB main JS bundle (about 187 kB gzip); assess splitting when expanding the next slice. Pin remains Bun 1.3.14; this machine used Bun 1.4.2. The committed snapshots passed local contract drift checks and all six jobs of latest-head PR #12 CI run 37477321621 before merging, including the pinned Bun version. This is not a claim that post-merge main CI has completed.
 - Adopted rules retained from PR #11: declare per-run limits, support cancellation with partial results, repair mistaken public associations without losing private records, and send only explicitly selected personal AI inputs with truthful delivery states. Complete walkthrough and chosen AI mechanisms remain open.
 
 ## Historical and conditional research backlog

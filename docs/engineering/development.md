@@ -1,6 +1,6 @@
 # Development
 
-Last updated: 2026-10-05
+Last updated: 2026-10-08
 
 ## Requirements
 
@@ -64,6 +64,8 @@ expand each claim's specific source summaries. Primer DataTable renders one
 question with named candidate rows, including narrow screens; it is imported
 from the installed library's public experimental entry point. No decision engine
 or new dependency was installed.
+
+From a comparison, “补查” prefills a public query from the current perspective. The query can be edited before lookup. A successful body and a failed or fallback attempt stay explicit. Confirming a source saves it on the current topic and shows it back on the comparison as supplemental evidence. That save does not rewrite the fixed comparison text, the other topic, or an unsaved comparison draft still open in the same visit. Refresh keeps only records that were explicitly saved.
 
 The helper src/lib/advisor-comparison.ts holds two bounded, source-bound
 interpretations of the collected batch. Missing URL/batch/capture evidence

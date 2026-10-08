@@ -1,6 +1,6 @@
 # 产品与开发里程碑
 
-Last updated: 2026-10-06
+Last updated: 2026-10-08
 
 ## 2026-10-01 当前交付口径
 
@@ -28,7 +28,7 @@ Last updated: 2026-10-06
 
 当前[任务与信息结构设计v0.4](advisor-task-design.md)在六项用户任务及G1—G5建议工作包中保留结果整理／合并、失败继续、主题私人理由隔离、个人内容选择发送，以及中止／上限、误合并修正和发送状态。2026-10-04完成首轮Primer查找／正文依据／多主题保存／重开切片与开发者走查，采用同源浏览器保存、现有API和有限公开搜索／目录备用；10月5日接通两候选按问题比较、可改视角／关注点、逐项来源及主题私人记录。已有时间／读取数量边界不等于用户中止及完整上限提示已实现；误关联修正、模型整理与发送流程、按需资源界面仍待接通，P2整体及P3完整demo仍未完成。需求v1.0及10月3日新增操作与数据边界分别通过[PR #10](https://github.com/114August514/campus-agora/pull/10)、[PR #11](https://github.com/114August514/campus-agora/pull/11)进入main，本次变更补入运行时切片与检查记录；合并不代表同伴整体批准或学生收益已验证。
 
-1. 两名候选研究与参与途径比较已完成开发走查，见[任务设计8.4](advisor-task-design.md#84)。下一轮验证关键未知的按需补查及候选理解；不先搭通用聊天壳。
+1. 两名候选研究与参与途径比较已完成开发走查，见[任务设计8.4](advisor-task-design.md#84)。2026-10-08已从比较中的未知发起一次真实公开补查：正文与失败分开显示，补充依据回到当前主题，固定摘要和另一主题不变。主题条件编辑、中止上限和准备入口仍在后面。
 2. 根据公开索引验证页和有限目录命中情况改善发现／整理，模型与费用在采用前决定；不以固定样本冒充实时结果。10月4日另完成一次现有浏览器读小红书招生帖、agent整理与批次展示路径，见[任务设计8.2](advisor-task-design.md#82)；应用内调用采集器和无人值守执行尚未实现。
 3. 补主题条件编辑、用户中止及上限提示、误关联修正、按需支持／入口及完整走查；外部AI若采用，落实明确选择的个人输入及真实发送状态。同伴评审按具体分歧处理，不重复做广泛调研。
 
@@ -57,7 +57,7 @@ P4/P5只有决定继续投入时才启动，不是比赛完成的必经阶段。
 
 以下原文仅用于回看旧方案。其“当前阶段”“计划中”“必须”等文字均属于 2026-07-06 的历史计划，不产生现行任务或退出条件；与上述基线不一致时以上述基线为准。2026-09-22 的重置当时只调整仓库内计划。
 
-2026-10-06 按用户要求清理远端旧路线 PR：[身份认证 #4](https://github.com/114August514/campus-agora/pull/4)、[归档后端 #5](https://github.com/114August514/campus-agora/pull/5)、[归档前端 #6](https://github.com/114August514/campus-agora/pull/6)、[讨论归档 #7](https://github.com/114August514/campus-agora/pull/7)、[审核与 AI 草稿 #8](https://github.com/114August514/campus-agora/pull/8) 均已关闭且未合并，未删除分支；清理完成时无开放 PR。历史实现保留供按新需求评估复用。同日后续已将当前导师探索功能及相关资料提交到[PR #12](https://github.com/114August514/campus-agora/pull/12)，尚未合并；后续 issue 未创建。
+2026-10-06 按用户要求清理远端旧路线 PR：[身份认证 #4](https://github.com/114August514/campus-agora/pull/4)、[归档后端 #5](https://github.com/114August514/campus-agora/pull/5)、[归档前端 #6](https://github.com/114August514/campus-agora/pull/6)、[讨论归档 #7](https://github.com/114August514/campus-agora/pull/7)、[审核与 AI 草稿 #8](https://github.com/114August514/campus-agora/pull/8) 均已关闭且未合并，未删除分支；清理完成时无开放 PR。历史实现保留供按新需求评估复用。同日后续将当前导师探索功能及相关资料提交到[PR #12](https://github.com/114August514/campus-agora/pull/12)，复核无阻塞问题且最新提交六项CI通过后，按用户授权squash合并到main（a8a0209）。本地main已同步，旧本地分叉历史另行备份；后续issue未创建，P2整体及P3完整demo仍未完成。
 
 ---
 

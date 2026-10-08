@@ -3,7 +3,10 @@ import { useState } from "react";
 import { sourceDate } from "../lib/advisors";
 import type { SourceSnapshot } from "../lib/exploration-store";
 
-export function SourceView({ source }: { source: SourceSnapshot }) {
+export function SourceView({
+  source,
+  saved = false,
+}: { source: SourceSnapshot; saved?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const summary = source.collection?.contentKind === "summary";
   const body = source.collection?.contentKind === "body" || source.kind === "live";
@@ -19,7 +22,9 @@ export function SourceView({ source }: { source: SourceSnapshot }) {
         {source.collection
           ? `预采集资料（${source.collection.method === "browser_dom" ? "浏览器读取" : "网页读取"}）`
           : source.kind === "live"
-            ? "本次外部正文读取"
+            ? saved
+              ? "已保存的外部正文"
+              : "本次外部正文读取"
             : "既有资料说明"}{" "}
         · {sourceDate(source.collectedAt)}
         {source.publishedAt
