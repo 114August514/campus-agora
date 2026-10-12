@@ -24,7 +24,7 @@ Keep entries short, dated, and actionable.
 
 - Source: User-authorized comparison follow-up; execution facts moved to done.md and advisor-task-design.md §8.5.
 - Milestone: P2.
-- Status: Relevant official-page read/save/return/reopen flow verified. PR #13 merged the prior follow-up at main 258cc69; new direct-read changes are isolated on feat/direct-source-read from that base. Publication is the handoff follow-up.
+- Status: Relevant official-page read/save/return/reopen flow verified and published in [PR #14](https://github.com/114August514/campus-agora/pull/14). PR #13 merged the prior follow-up at main 258cc69; the new direct-read changes are isolated on feat/direct-source-read from that base. Review/integration remains separate from the implementation result.
 - Next: Editable topic conditions and cancellable/bounded discovery, then optional preparation/contact/resource entries and complete demo/association-repair checks. Take one outcome group at a time; no new broad research or maintenance gate.
 - Dependencies: Existing browser topic store and public HTML API. External model integration remains optional and must preserve explicitly selected personal inputs and truthful send states.
 
