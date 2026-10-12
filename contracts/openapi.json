@@ -52,7 +52,7 @@
         "additionalProperties": false,
         "properties": {
           "query": {
-            "description": "Public interest terms; sent to DuckDuckGo. No private notes or identities.",
+            "description": "Public interest terms sent to DuckDuckGo, or one complete HTTP(S) URL within the academic allowlist, read directly without search or directory fallback. Invalid or unsupported URLs are rejected. No private notes, identities, credentials or private links.",
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -72,7 +72,8 @@
           "provider": {
             "enum": [
               "duckduckgo_html",
-              "official_directory"
+              "official_directory",
+              "direct_url"
             ],
             "type": "string"
           },
@@ -134,14 +135,14 @@
             "type": "string"
           },
           "relevanceEvidence": {
-            "description": "Up to three body passages matching query terms; no model judgment.",
+            "description": "Up to three body passages matching query terms; no model judgment. Empty for direct URL reading, which makes no query-relevance claim.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "searchSnippet": {
-            "description": "Search-index snippet, kept separate from fetched body.",
+            "description": "Search-index snippet, kept separate from fetched body; empty for direct URL reading.",
             "type": "string"
           },
           "title": {
@@ -253,7 +254,7 @@
   "paths": {
     "/api/v1/discoveries": {
       "post": {
-        "description": "DuckDuckGo公开索引中的高校与研究所网站（edu.cn、ac.cn、cas.cn、edu、edu.hk、ac.uk、edu.sg），及已核对的学术主页tqchen.com、xiangwang1223.github.io、xiongyingfei.github.io、cse.ust.hk；最多读取5个公开HTML页面，不覆盖全网、私域、PDF或需登录页面。",
+        "description": "DuckDuckGo公开索引中的高校与研究所网站（edu.cn、ac.cn、cas.cn、edu、edu.hk、ac.uk、edu.sg），及已核对的学术主页tqchen.com、xiangwang1223.github.io、xiongyingfei.github.io、cse.ust.hk、cs.hku.hk、www.cs.hku.hk、jzuming.github.io、songzhuoran.github.io；最多读取5个公开HTML页面，不覆盖全网、私域、PDF或需登录页面。 仅直接读取所提交的一个范围内公开HTML页面（含通过相同校验的重定向），不使用搜索索引或备用目录；最多1,000,000字节、14秒，提取正文最多16,000字。未判断该页是否回答当前疑问，请阅读正文并核对对象；完整内容请到原站查看。",
         "operationId": "discoverSources",
         "requestBody": {
           "content": {
@@ -308,7 +309,7 @@
           }
         },
         "security": [],
-        "summary": "Live public-index search and bounded academic HTML reading"
+        "summary": "Live public-index search or direct reading of one allowed academic HTML URL"
       }
     },
     "/api/v1/meta": {

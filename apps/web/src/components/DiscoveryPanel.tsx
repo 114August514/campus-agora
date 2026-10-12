@@ -40,6 +40,10 @@ export function DiscoveryPanel({
   const [institution, setInstitution] = useState("");
   const [research, setResearch] = useState("");
   const sequence = useRef(0);
+  const readingUrl = /^https?:\/\//i.test(query.trim());
+  const knownPages = targetCandidate?.sources.filter(
+    (source) => source.collection?.method === "web_read",
+  );
   const hasCandidate = targetCandidate
     ? true
     : candidateId === "new"
@@ -83,15 +87,37 @@ export function DiscoveryPanel({
               autoFocus={Boolean(targetCandidate)}
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
-              placeholder="例如 AI systems compiler Tianqi Chen"
+              placeholder="输入公开关键词或学术网页链接"
             />
             <FormControl.Caption>
-              查找内容会发送到DuckDuckGo，资料从原站读取。私人理由和疑问仅保存在此浏览器。
+              关键词会发送到DuckDuckGo；公开链接直接从原站读取。私人笔记不会自动附带，请只输入公开信息。
             </FormControl.Caption>
           </FormControl>
+          {knownPages && knownPages.length > 0 && (
+            <FormControl>
+              <FormControl.Label>也可以选择已收录的官网页面</FormControl.Label>
+              <Select
+                value={knownPages.some((source) => source.url === query) ? query : ""}
+                onChange={(event) => {
+                  if (event.target.value) onQueryChange(event.target.value);
+                }}
+              >
+                <Select.Option value="">选择一个页面，再点击读取</Select.Option>
+                {knownPages.map((source) => (
+                  <Select.Option key={source.url} value={source.url}>
+                    {source.title}
+                  </Select.Option>
+                ))}
+              </Select>
+            </FormControl>
+          )}
           <Stack direction="horizontal" align="center" wrap="wrap">
             <Button type="submit" leadingVisual={SearchIcon} disabled={!query.trim()}>
-              {runningQuery ? "按当前内容重新查找" : "查找外部资料"}
+              {runningQuery
+                ? "按当前内容重新查找"
+                : readingUrl
+                  ? "读取原站正文"
+                  : "查找外部资料"}
             </Button>
             <Text size="small">已有资料也可以直接阅读。</Text>
           </Stack>
@@ -102,7 +128,7 @@ export function DiscoveryPanel({
           <Banner
             variant="info"
             layout="compact"
-            title={`正在检索并读取公开来源：${runningQuery}`}
+            title={`${/^https?:\/\//i.test(runningQuery) ? "正在读取公开页面" : "正在检索并读取公开来源"}：${runningQuery}`}
           />
         )}
         {error && (

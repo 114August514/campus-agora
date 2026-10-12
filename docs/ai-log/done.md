@@ -1,6 +1,6 @@
 # AI Log Done
 
-Last updated: 2026-10-08
+Last updated: 2026-10-12
 
 This file records completed agent-visible work. Keep entries factual and link
 them to commits, files, and verification commands where possible.
@@ -18,6 +18,16 @@ them to commits, files, and verification commands where possible.
 ```
 
 ## Completed
+
+### 2026-10-12 - Complete candidate-specific direct reading and comparison follow-up
+
+- Result: Reused committed navigation/follow-up at 7094fa4, added a choice of previously collected academic pages and direct public HTML reading. URL requests use provider direct_url, bypass search, and never substitute directory/demo results on failure. Existing public-address/redirect/size/time limits remain. The query is the only request field; private reasons/questions are not attached automatically. Social/browser sources retain their existing reading path.
+- Browser evidence: From Jiang's comparison, selected https://jzuming.github.io/ and actually obtained his HKU identity, systems/security/databases and AI research, PhD/RA recruitment statement and recent work. Current places and detailed RA eligibility remain unknown. Saved the same result twice: one supplemental source remained. Returning retained the saved reason and synthetic unsaved draft; a second synthetic topic showed neither record nor source. Reload restored the first topic's source/body, capture date and originally saved records, not the unsaved draft. Existing topics were preserved; two clearly labeled demo topics remain. At 390px there was no document overflow, and Tab from the source menu reached the read button. No screenshots of private records were saved.
+- Changed: application/API direct reading and tests, generated contract/client, DiscoveryPanel and its two presentation tests, follow-up help text, architecture/security/privacy/development docs, overview/milestones/task-design §8.5 and AI logs. No dependency, database, authentication or AI-provider change.
+- Verification: bun run ci:frontend (14 client + 52 Web tests, types/lint/UI checks/build); cargo fmt --all --check; cargo clippy -p campus_agora_application -p campus_agora_api --all-targets -- -D warnings; cargo test -p campus_agora_application -p campus_agora_api (20 tests); bun run api:types; UV_CACHE_DIR=/tmp/campus-agora-uv-cache bun run ci:docs; git diff --check. Independent read-only review found no actionable issues. No unrelated desktop/container/database checks repeated. Local Bun remains 1.4.2 versus pinned 1.3.14; existing roughly 787 kB / 195 kB gzip main-bundle warning remains.
+- Integration: Fresh GitHub inspection confirmed [PR #13](https://github.com/114August514/campus-agora/pull/13) already merged on October 8 as 258cc6962ece6ce2b4c863a7d3cac7a28f98fe46. Its main tree equals the former feature HEAD 7094fa4. Created feat/direct-source-read from fetched origin/main with the local changes intact; no rebase, history rewrite or direct main push.
+- Handoff: Local API/Web running at 8080/5173; public-only source-selection screenshot at /tmp/campus-agora-direct-read-20261012.png. Changes currently local on feat/direct-source-read; historical tools/prototypes/opportunities.html stays untracked. This verifies developer-operated workflow behavior, not student benefit, automated comparison conclusions, current recruitment or complete demo acceptance.
+- Follow-up: Publish the branch changes, then take topic-condition editing and discovery control from todo.md. Preparation/contact/resources, mistaken-association repair and full demo checks remain open.
 
 ### 2026-10-08 - Walk comparison follow-up against a live public lookup
 

@@ -26,7 +26,7 @@ async fn invalid_discovery_query_returns_flat_error_and_request_id_without_searc
 }
 
 #[tokio::test]
-async fn arbitrary_url_input_is_not_a_fetch_endpoint() {
+async fn separate_url_field_is_rejected() {
     let router = build_router_with_state(ApiState::for_tests(ReadinessStatus::Ready));
     let response = router
         .oneshot(
@@ -40,6 +40,53 @@ async fn arbitrary_url_input_is_not_a_fetch_endpoint() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn unsupported_or_malformed_direct_urls_are_rejected_before_discovery() {
+    let router = build_router_with_state(ApiState::for_tests(ReadinessStatus::Ready));
+    for query in [
+        "http://127.0.0.1/",
+        "http://[::1]/",
+        "https://cs.ustc.edu.cn.evil.example/",
+        "https://nested.songzhuoran.github.io/",
+        "https://user:password@cs.ustc.edu.cn/",
+        "https://cs.ustc.edu.cn:9000/",
+        "https:cs.ustc.edu.cn",
+        "https:///cs.ustc.edu.cn",
+        "http//cs.ustc.edu.cn",
+        "https://cs.ustc.edu.cn\\@evil.example",
+        "https://cs.ustc.edu.cn/ research",
+        "//cs.ustc.edu.cn/",
+        "www.cs.hku.hk/",
+        "ftp://cs.ustc.edu.cn/",
+        "file:/etc/passwd",
+    ] {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/discoveries")
+                    .header("content-type", "application/json")
+                    .header("x-request-id", "direct-url-validation")
+                    .body(Body::from(
+                        serde_json::json!({ "query": query }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "accepted {query}"
+        );
+        let body: Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), 4096).await.unwrap()).unwrap();
+        assert_eq!(body["code"], "validation_failed");
+        assert_eq!(body["requestId"], "direct-url-validation");
+        assert!(body["sources"].is_null());
+        assert!(body["provider"].is_null());
+    }
 }
 
 #[test]
@@ -61,4 +108,21 @@ fn live_discovery_contract_preserves_scope_failures_and_separate_evidence() {
     );
     assert!(schemas["DiscoverySource"]["properties"]["searchSnippet"].is_object());
     assert!(schemas["DiscoverySource"]["properties"]["unknowns"].is_object());
+    assert_eq!(
+        schemas["DiscoveryResponse"]["properties"]["provider"]["enum"],
+        serde_json::json!(["duckduckgo_html", "official_directory", "direct_url"])
+    );
+    let query_description = schemas["DiscoveryRequest"]["properties"]["query"]["description"]
+        .as_str()
+        .unwrap();
+    assert!(query_description.contains("read directly without search or directory fallback"));
+    assert_eq!(schemas["DiscoveryRequest"]["additionalProperties"], false);
+    for property in ["searchSnippet", "relevanceEvidence"] {
+        assert!(
+            schemas["DiscoverySource"]["properties"][property]["description"]
+                .as_str()
+                .unwrap()
+                .contains("direct URL reading")
+        );
+    }
 }

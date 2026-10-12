@@ -1,6 +1,6 @@
 # Security
 
-Last updated: 2026-10-04
+Last updated: 2026-10-12
 
 The current demo supports bounded public discovery and private browser-local
 explorations. Controls for identity, shared content, uploads and moderation
@@ -9,11 +9,15 @@ create current community or desktop tasks.
 
 ## Public Discovery Boundary
 
-The discovery endpoint accepts public interest terms, not a URL to proxy.
-Queries are sent to the fixed DuckDuckGo HTML search endpoint. Retrieved page
+The discovery endpoint accepts public interest terms or a single public
+academic HTTP(S) URL in `query`. Keywords are sent to the fixed DuckDuckGo HTML
+search endpoint; direct URLs are validated and read without sending them to the
+search provider or falling back to other pages. Retrieved page
 hosts must fall under `edu.cn`, `ac.cn`, `cas.cn`, `edu`, `edu.hk`, `ac.uk`, or
 `edu.sg`, or equal one of the checked academic hosts `tqchen.com`,
-`xiangwang1223.github.io`, `xiongyingfei.github.io`, and `cse.ust.hk`. A permitted
+`xiangwang1223.github.io`, `xiongyingfei.github.io`, `cse.ust.hk`, `www.cs.hku.hk`,
+`cs.hku.hk`, `jzuming.github.io`, and `songzhuoran.github.io`. The latter HKU and
+personal-page hosts support the October 5 source-checked candidates. A permitted
 hostname is a reading boundary, not an endorsement of its claims.
 
 Every redirect is checked again. HTTP(S) only, allowed ports 80/443, and no URL
@@ -28,7 +32,8 @@ private DNS answers remain blocked.
 
 There are two concurrent discovery permits per process, at most five fetched
 search-result pages, a 1,000,000-byte page cap, and a 14-second bound per
-search/page operation. On search failure, the only fallback is live reading
+search/page operation. Direct URL requests read one page under these same
+limits. On keyword-search failure, the only fallback is live reading
 of Stanford AI Laboratory and CMU Machine Learning public faculty directories,
 with the changed scope and any failures shown in the response. These demo
 bounds are not per-user/IP rate limiting or a production traffic policy.

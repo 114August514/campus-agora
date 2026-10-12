@@ -148,8 +148,8 @@ pub(crate) fn extend_contract(document: &mut Value) {
     document["paths"]["/api/v1/discoveries"] = json!({
         "post": {
             "operationId": "discoverSources",
-            "summary": "Live public-index search and bounded academic HTML reading",
-            "description": discovery::DISCOVERY_SCOPE,
+            "summary": "Live public-index search or direct reading of one allowed academic HTML URL",
+            "description": format!("{} {}", discovery::DISCOVERY_SCOPE, discovery::DIRECT_URL_SCOPE),
             "security": [],
             "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DiscoveryRequest" } } } },
             "responses": {
@@ -161,12 +161,12 @@ pub(crate) fn extend_contract(document: &mut Value) {
         }
     });
     let schemas = &mut document["components"]["schemas"];
-    schemas["DiscoveryRequest"] = json!({ "type": "object", "additionalProperties": false, "required": ["query"], "properties": { "query": { "type": "string", "minLength": 1, "maxLength": 200, "description": "Public interest terms; sent to DuckDuckGo. No private notes or identities." } } });
+    schemas["DiscoveryRequest"] = json!({ "type": "object", "additionalProperties": false, "required": ["query"], "properties": { "query": { "type": "string", "minLength": 1, "maxLength": 200, "description": "Public interest terms sent to DuckDuckGo, or one complete HTTP(S) URL within the academic allowlist, read directly without search or directory fallback. Invalid or unsupported URLs are rejected. No private notes, identities, credentials or private links." } } });
     schemas["DiscoveryResponse"] = json!({ "type": "object", "required": ["query", "provider", "scope", "status", "collectedAt", "sources", "warnings"], "properties": {
-        "query": { "type": "string" }, "provider": { "type": "string", "enum": ["duckduckgo_html", "official_directory"] }, "scope": { "type": "string", "description": "Actual provider and bounded reading scope for this attempt." }, "status": { "type": "string", "enum": ["complete", "partial", "failed"] }, "collectedAt": { "type": "string", "format": "date-time" }, "sources": { "type": "array", "items": { "$ref": "#/components/schemas/DiscoverySource" } }, "warnings": { "type": "array", "items": { "$ref": "#/components/schemas/DiscoveryWarning" } }
+        "query": { "type": "string" }, "provider": { "type": "string", "enum": ["duckduckgo_html", "official_directory", "direct_url"] }, "scope": { "type": "string", "description": "Actual provider and bounded reading scope for this attempt." }, "status": { "type": "string", "enum": ["complete", "partial", "failed"] }, "collectedAt": { "type": "string", "format": "date-time" }, "sources": { "type": "array", "items": { "$ref": "#/components/schemas/DiscoverySource" } }, "warnings": { "type": "array", "items": { "$ref": "#/components/schemas/DiscoveryWarning" } }
     } });
     schemas["DiscoverySource"] = json!({ "type": "object", "required": ["url", "title", "institution", "content", "searchSnippet", "relevanceEvidence", "collectedAt", "unknowns"], "properties": {
-        "url": { "type": "string", "format": "uri" }, "title": { "type": "string" }, "institution": { "type": "string", "description": "Source hostname, not a verified institutional affiliation." }, "content": { "type": "string", "description": "Fetched HTML text; maximum 16000 characters, not a generated summary." }, "searchSnippet": { "type": "string", "description": "Search-index snippet, kept separate from fetched body." }, "relevanceEvidence": { "type": "array", "items": { "type": "string" }, "description": "Up to three body passages matching query terms; no model judgment." }, "collectedAt": { "type": "string", "format": "date-time" }, "publishedAt": { "type": "string", "description": "Unverified original date metadata when present, never inferred from collection time." }, "unknowns": { "type": "array", "items": { "type": "string" } }
+        "url": { "type": "string", "format": "uri" }, "title": { "type": "string" }, "institution": { "type": "string", "description": "Source hostname, not a verified institutional affiliation." }, "content": { "type": "string", "description": "Fetched HTML text; maximum 16000 characters, not a generated summary." }, "searchSnippet": { "type": "string", "description": "Search-index snippet, kept separate from fetched body; empty for direct URL reading." }, "relevanceEvidence": { "type": "array", "items": { "type": "string" }, "description": "Up to three body passages matching query terms; no model judgment. Empty for direct URL reading, which makes no query-relevance claim." }, "collectedAt": { "type": "string", "format": "date-time" }, "publishedAt": { "type": "string", "description": "Unverified original date metadata when present, never inferred from collection time." }, "unknowns": { "type": "array", "items": { "type": "string" } }
     } });
     schemas["DiscoveryWarning"] = json!({ "type": "object", "required": ["code", "message"], "properties": { "code": { "type": "string" }, "message": { "type": "string" }, "url": { "type": "string", "format": "uri" } } });
 }
