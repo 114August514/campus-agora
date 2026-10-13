@@ -1,4 +1,4 @@
-//! Bounded live discovery: a public search index followed by official HTML pages.
+//! Bounded live discovery: public-index search or one allowed academic HTML URL.
 //! Source text is untrusted evidence, never executable instructions.
 use std::collections::HashSet;
 use std::net::{IpAddr, SocketAddr};
@@ -22,8 +22,13 @@ const PERSONAL_HOSTS: &[&str] = &[
     "xiangwang1223.github.io",
     "xiongyingfei.github.io",
     "cse.ust.hk",
+    "cs.hku.hk",
+    "www.cs.hku.hk",
+    "jzuming.github.io",
+    "songzhuoran.github.io",
 ];
-pub const DISCOVERY_SCOPE: &str = "DuckDuckGo公开索引中的高校与研究所网站（edu.cn、ac.cn、cas.cn、edu、edu.hk、ac.uk、edu.sg），及已核对的学术主页tqchen.com、xiangwang1223.github.io、xiongyingfei.github.io、cse.ust.hk；最多读取5个公开HTML页面，不覆盖全网、私域、PDF或需登录页面。";
+pub const DISCOVERY_SCOPE: &str = "DuckDuckGo公开索引中的高校与研究所网站（edu.cn、ac.cn、cas.cn、edu、edu.hk、ac.uk、edu.sg），及已核对的学术主页tqchen.com、xiangwang1223.github.io、xiongyingfei.github.io、cse.ust.hk、cs.hku.hk、www.cs.hku.hk、jzuming.github.io、songzhuoran.github.io；最多读取5个公开HTML页面，不覆盖全网、私域、PDF或需登录页面。";
+pub const DIRECT_URL_SCOPE: &str = "仅直接读取所提交的一个范围内公开HTML页面（含通过相同校验的重定向），不使用搜索索引或备用目录；最多1,000,000字节、14秒，提取正文最多16,000字。未判断该页是否回答当前疑问，请阅读正文并核对对象；完整内容请到原站查看。";
 pub const DIRECTORY_SCOPE: &str = "公开索引本次不可用，改为实时读取并匹配两个有限公开目录：Stanford AI Laboratory导师目录（ai.stanford.edu/faculty/）、CMU Machine Learning导师目录（ml.cmu.edu/people/core-faculty）。仅返回目录正文命中，不是全网搜索或个人推荐；不代表当前招生。";
 const DIRECTORIES: &[(&str, &str)] = &[
     (
@@ -77,9 +82,55 @@ struct SearchHit {
 pub fn validate_query(query: &str) -> Result<String, &'static str> {
     let query = query.trim();
     if query.is_empty() || query.chars().count() > 200 || query.chars().any(char::is_control) {
-        return Err("请输入1至200字的公开兴趣或导师查询。请勿输入私人信息。");
+        return Err(
+            "请输入1至200字的公开兴趣、导师查询或一个范围内公开HTTP(S)链接。请勿输入私人信息。",
+        );
     }
+    direct_url(query)?;
     Ok(query.to_owned())
+}
+
+// Keep malformed/unsupported URL input out of the search-provider request.
+// A colon in a normal query (for example site:stanford.edu) is still a keyword.
+fn direct_url(query: &str) -> Result<Option<Url>, &'static str> {
+    let lower = query.to_ascii_lowercase();
+    let looks_like_url = query.contains("://")
+        || query.starts_with("//")
+        || lower.starts_with("www.")
+        || [
+            "http:",
+            "https:",
+            "http/",
+            "https/",
+            "file:",
+            "ftp:",
+            "data:",
+            "javascript:",
+        ]
+        .iter()
+        .any(|prefix| lower.starts_with(prefix));
+    if !looks_like_url {
+        return Ok(None);
+    }
+    let invalid = "请输入一个完整的范围内公开HTTP(S)链接；不支持凭据、自定义端口或其他网站。";
+    let authority = lower
+        .strip_prefix("https://")
+        .or_else(|| lower.strip_prefix("http://"))
+        .ok_or(invalid)?;
+    if authority.is_empty()
+        || authority.starts_with('/')
+        || query.contains('\\')
+        || query.chars().any(char::is_whitespace)
+    {
+        return Err(invalid);
+    }
+    let mut url = Url::parse(query).map_err(|_| invalid)?;
+    if !allowed_url(&url, false) {
+        return Err(invalid);
+    }
+    // Fragments are local browser navigation, not source requests or identity.
+    url.set_fragment(None);
+    Ok(Some(url))
 }
 
 pub async fn discover(query: String) -> DiscoveryResult {
@@ -93,6 +144,21 @@ pub async fn discover(query: String) -> DiscoveryResult {
         sources: Vec::new(),
         warnings: Vec::new(),
     };
+    match direct_url(&query) {
+        Ok(Some(url)) => return discover_url(result, url).await,
+        Ok(None) => {}
+        Err(message) => {
+            result.provider = "direct_url";
+            result.scope = DIRECT_URL_SCOPE;
+            result.status = "failed";
+            result.warnings.push(DiscoveryWarning {
+                code: "invalid_source",
+                message: message.into(),
+                url: None,
+            });
+            return result;
+        }
+    }
     let mut search_url = Url::parse("https://html.duckduckgo.com/html/").expect("fixed search URL");
     let filter = SUFFIXES
         .iter()
@@ -169,6 +235,34 @@ pub async fn discover(query: String) -> DiscoveryResult {
         } else {
             "partial"
         };
+    }
+    result
+}
+
+async fn discover_url(mut result: DiscoveryResult, url: Url) -> DiscoveryResult {
+    result.provider = "direct_url";
+    result.scope = DIRECT_URL_SCOPE;
+    let original_url = url.to_string();
+    let hit = SearchHit {
+        title: original_url.clone(),
+        url,
+        snippet: String::new(),
+    };
+    // An address is not a research question. Leave relevance evidence empty.
+    match read_source(hit, "").await {
+        Ok(mut source) => {
+            source.unknowns.push("本次按链接读取，没有关键词相关性判断；是否回答疑问及是否属于该候选需要核对。完整正文请查看原站。".into());
+            result.sources.push(source);
+        }
+        Err(code) => {
+            result.status = "failed";
+            result.warnings.push(DiscoveryWarning {
+                code,
+                message: "该链接本次未取得可用HTML正文；没有改用搜索索引、其他目录或演示样本。"
+                    .into(),
+                url: Some(original_url),
+            });
+        }
     }
     result
 }
@@ -267,8 +361,17 @@ fn query_terms(query: &str) -> Vec<String> {
 }
 
 async fn read_source(hit: SearchHit, query: &str) -> Result<DiscoveredSource, &'static str> {
-    let (url, html) = bounded_get(hit.url, false).await?;
-    let (content, published_at) = extract_page(&html);
+    let (url, html) = bounded_get(hit.url.clone(), false).await?;
+    source_from_page(hit, url, &html, query)
+}
+
+fn source_from_page(
+    hit: SearchHit,
+    url: Url,
+    html: &str,
+    query: &str,
+) -> Result<DiscoveredSource, &'static str> {
+    let (content, published_at) = extract_page(html);
     if content.chars().count() < 80 {
         return Err("body_unavailable");
     }
@@ -289,10 +392,21 @@ async fn read_source(hit: SearchHit, query: &str) -> Result<DiscoveredSource, &'
     if published_at.is_none() {
         unknowns.push("原页面未提供可识别的发布日期；采集时间不等于发布时间。".into());
     }
+    let title = if query.is_empty() {
+        Html::parse_document(html)
+            .select(&selector("title"))
+            .next()
+            .map(|title| normalize(&title.text().collect::<Vec<_>>().join(" ")))
+            .filter(|title| !title.is_empty())
+            .map(|title| title.chars().take(200).collect())
+            .unwrap_or(hit.title)
+    } else {
+        hit.title
+    };
     Ok(DiscoveredSource {
         institution: url.host_str().unwrap_or_default().to_owned(),
         url: url.to_string(),
-        title: hit.title,
+        title,
         content,
         search_snippet: hit.snippet,
         relevance_evidence,
@@ -619,6 +733,10 @@ mod tests {
             "https://cs.ustc.edu.cn/people",
             "https://www.cs.columbia.edu/~blei/",
             "https://ict.ac.cn/",
+            "https://www.cs.hku.hk/people/academic-staff",
+            "https://cs.hku.hk/",
+            "https://jzuming.github.io/",
+            "https://songzhuoran.github.io/",
         ] {
             assert!(allowed_url(&Url::parse(url).unwrap(), false));
         }
@@ -642,6 +760,108 @@ mod tests {
             assert!(!public_ip(ip.parse().unwrap()));
         }
         assert!(public_ip("8.8.8.8".parse().unwrap()));
+    }
+
+    #[test]
+    fn direct_url_validation_keeps_invalid_addresses_out_of_search() {
+        for query in [
+            "http://127.0.0.1/",
+            "http://[::1]/",
+            "https://cs.ustc.edu.cn.evil.example/",
+            "https://songzhuoran.github.io.evil.example/",
+            "https://nested.songzhuoran.github.io/",
+            "https://user:password@cs.ustc.edu.cn/",
+            "https://cs.ustc.edu.cn:9000/",
+            "https://[not-an-ip]/",
+            "https://",
+            "https:cs.ustc.edu.cn",
+            "http//cs.ustc.edu.cn",
+            "https:///cs.ustc.edu.cn",
+            "https://cs.ustc.edu.cn\\@evil.example",
+            "https://cs.ustc.edu.cn/ research",
+            "//cs.ustc.edu.cn/",
+            "www.cs.hku.hk/",
+            "ftp://cs.ustc.edu.cn/",
+            "file:/etc/passwd",
+            "data:text/html,example",
+            "javascript:alert(1)",
+        ] {
+            assert!(validate_query(query).is_err(), "accepted {query}");
+            assert!(direct_url(query).is_err(), "would search for {query}");
+        }
+        for query in [
+            "机器学习",
+            "software engineering",
+            "site:stanford.edu research",
+            "导师 https 意思",
+        ] {
+            assert_eq!(validate_query(query).unwrap(), query);
+            assert!(direct_url(query).unwrap().is_none());
+        }
+        let url = direct_url("HTTPS://songzhuoran.github.io/#research")
+            .unwrap()
+            .unwrap();
+        assert_eq!(url.as_str(), "https://songzhuoran.github.io/");
+    }
+
+    #[tokio::test]
+    async fn invalid_direct_input_fails_without_index_or_directory_fallback() {
+        let result = discover("https://cs.ustc.edu.cn:9000/".into()).await;
+        assert_eq!(result.provider, "direct_url");
+        assert_eq!(result.scope, DIRECT_URL_SCOPE);
+        assert_eq!(result.status, "failed");
+        assert!(result.sources.is_empty());
+        assert_eq!(result.warnings.len(), 1);
+        assert_eq!(result.warnings[0].code, "invalid_source");
+    }
+
+    #[tokio::test]
+    async fn direct_read_failure_preserves_failed_url_without_fallback() {
+        // Exercise the read-failure path without DNS or external HTTP requests.
+        let url = Url::parse("http://127.0.0.1/").unwrap();
+        let result = discover_url(
+            DiscoveryResult {
+                query: url.to_string(),
+                provider: "duckduckgo_html",
+                scope: DISCOVERY_SCOPE,
+                collected_at: now(),
+                status: "complete",
+                sources: Vec::new(),
+                warnings: Vec::new(),
+            },
+            url.clone(),
+        )
+        .await;
+        assert_eq!(result.provider, "direct_url");
+        assert_eq!(result.scope, DIRECT_URL_SCOPE);
+        assert_eq!(result.status, "failed");
+        assert!(result.sources.is_empty());
+        assert_eq!(result.warnings.len(), 1);
+        assert_eq!(result.warnings[0].code, "source_out_of_scope");
+        assert_eq!(result.warnings[0].url.as_deref(), Some(url.as_str()));
+    }
+
+    #[test]
+    fn directly_read_page_uses_its_title_and_body_without_url_keyword_matching() {
+        let url = Url::parse("https://songzhuoran.github.io/").unwrap();
+        let html = "<html><head><title>Example Faculty Profile</title></head><body><main><p>Our lab investigates software verification and welcomes students to discuss available research projects. Updated application details are provided separately.</p></main></body></html>";
+        let source = source_from_page(
+            SearchHit {
+                url: url.clone(),
+                title: url.to_string(),
+                snippet: String::new(),
+            },
+            url,
+            html,
+            "",
+        )
+        .unwrap();
+        assert_eq!(source.title, "Example Faculty Profile");
+        assert!(source.content.contains("software verification"));
+        assert!(source.search_snippet.is_empty());
+        assert!(source.relevance_evidence.is_empty());
+        assert!(source.published_at.is_none());
+        assert!(!source.unknowns.is_empty());
     }
 
     #[test]

@@ -20,7 +20,7 @@ export interface DiscoveryRequest {
 
 export interface DiscoveryResponse {
   collectedAt: string;
-  provider: "duckduckgo_html" | "official_directory";
+  provider: "duckduckgo_html" | "official_directory" | "direct_url";
   query: string;
   scope: string;
   sources: Array<DiscoverySource>;

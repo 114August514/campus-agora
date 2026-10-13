@@ -1,6 +1,6 @@
 # Privacy And Data Boundaries
 
-Last updated: 2026-10-06
+Last updated: 2026-10-12
 
 The current advisor-guide demo serves personal exploration, with public
 external discovery and saving in the current browser. It has no account,
@@ -17,7 +17,7 @@ inventory and audit/deletion assumptions are not the current product policy.
 | Candidate snapshots, saved source text, collection/publication labels and matching evidence | Reopen comparison without repeating discovery | Same localStorage, after user saves | Same browser/origin |
 | Reviewed collected batch: professional names, source-backed summaries and reading context | Display existing information without student-side collection | Repository JSON, included in the Web bundle; optional copy to localStorage on save | Anyone receiving the built demo; no collector login or private topic notes included |
 | Private reasons and questions | Preserve the user's own judgments | Same localStorage | Same browser/origin; not sent to the discovery API |
-| Submitted public query | Run live discovery | API request and search-provider request; no project database persistence | API process and DuckDuckGo |
+| Submitted public query | Run live discovery | API request; keywords also reach the search provider, while direct URLs go to the permitted source site; no project database persistence | API process; DuckDuckGo for keywords or the source site for direct URLs |
 | Allowed source hostnames | Resolve and fetch public pages | Network requests; fixed public DNS fallback in the special fake-IP case | Source site; dns.google when the fallback is needed |
 | Request metadata | Debug transport and failures | Current tracing output, under runtime log configuration | Operators; bodies/private exploration records are not logged by this implementation |
 
@@ -25,8 +25,10 @@ inventory and audit/deletion assumptions are not the current product policy.
 
 - The discovery request contains only the query the user submits. Private
   reasons, saved questions and preferences are not automatically attached.
-- The query field is for public interest terms, not private identity or contact
-  information. The service needs no third-party credentials.
+- The query field is for public interest terms or public academic page URLs,
+  not private identity, contact information or authenticated links. Direct URL
+  requests skip DuckDuckGo; keyword requests retain the existing search path.
+  The service needs no third-party credentials.
 - LocalStorage is browser storage, not an encrypted private vault or an account
   backup. Changing browser, profile or site origin does not transfer records.
 - Do not put secrets, tokens, passwords, or raw identity payloads in logs.

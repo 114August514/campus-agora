@@ -1,6 +1,6 @@
 # Backend Architecture
 
-Last updated: 2026-10-04
+Last updated: 2026-10-12
 
 The backend is a Rust API server. Handlers should stay thin; domain and
 application crates carry business rules.
@@ -30,9 +30,16 @@ AI Laboratory faculty and CMU Machine Learning core faculty. The response
 identifies the actual provider and scope; this fallback searches those
 directories, not the whole web or the four demonstration candidates.
 
+A single public HTTP(S) URL in the query instead takes the `direct_url` path:
+read that page with the existing source/address/redirect limits, returning its
+body and capture time. It skips the search provider and never replaces a failed
+direct read with directory matches or stored summaries. URL text is not treated
+as research keywords for relevance passages.
+
 Collection allows at most five search-result pages, 1,000,000 bytes per page,
 and 14 seconds per search/page operation, with two concurrent discovery
-requests per API process. Directory fallback reads two pages. Each request and
+requests per API process. Directory fallback reads two pages; a direct URL
+attempt reads one page. Each request and
 redirect validates the source range and resolved public addresses, then pins
 the connection to those addresses. The special local `198.18.0.0/15` fake-IP
 case uses a fixed `dns.google` public A-record lookup and still requires public

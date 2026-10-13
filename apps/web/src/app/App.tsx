@@ -370,7 +370,7 @@ export function App() {
                 <Button onClick={() => setView("compare")}>返回比较</Button>
               </Stack>
               <Text as="p">
-                按当前比较视角预填了公开检索词，可以改成一个具体问题后再查找。
+                按当前比较视角预填了公开检索词，可以修改问题后查找，也可以选择已收录的官网页面读取正文。
               </Text>
               <DiscoveryPanel
                 key={followupCandidate.candidateId}

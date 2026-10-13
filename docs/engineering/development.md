@@ -1,6 +1,6 @@
 # Development
 
-Last updated: 2026-10-08
+Last updated: 2026-10-12
 
 ## Requirements
 
@@ -39,6 +39,14 @@ the explicitly named Stanford AI and CMU ML directories. The page shows that
 limited scope and any failures; an empty match is not proof that no advisors
 exist. Search text is sent to DuckDuckGo; private topic notes are not. See
 [privacy](../product/privacy.md) for the exact boundary.
+
+For candidate-specific follow-up when search is unavailable, select an already
+collected academic page in the follow-up view, then choose “读取原站正文”. You can
+also enter a public academic URL directly in the same query field. The API reads
+one allowed page, identifies `provider: direct_url`, and keeps its actual body,
+capture time and unknowns. It does not send that URL to the search engine.
+Only pages already collected with `web_read` appear in the candidate shortcut;
+social-platform posts remain available through their existing original-site route.
 
 Create a topic only when saving is useful. Save a reviewed sample, or associate
 a fetched page with a candidate identified from its contents. In “我的探索”, edit

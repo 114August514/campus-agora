@@ -1,6 +1,6 @@
 # AI Log Todo
 
-Last updated: 2026-10-07
+Last updated: 2026-10-12
 
 This file records meaningful pending work for AI agents and collaborators.
 Keep entries short, dated, and actionable.
@@ -20,13 +20,13 @@ Keep entries short, dated, and actionable.
 
 ## Pending
 
-### 2026-10-07 - Follow a comparison question through lookup and saved evidence
+### 2026-10-12 - Continue after verified comparison follow-up
 
-- Source: User accepted the next iteration after PR #12 and asked to start.
-- Milestone: P2, T2/T3/T5.
-- Status: Implemented on feat/comparison-followup and developer-walked on 2026-10-08. A real public lookup returned body text and explicit failure/fallback messages. Saved evidence reloaded on the same topic only. Topic-condition editing, cancellation limits, and preparation entries remain later.
-- Acceptance: Execute an actual external lookup; successful body reads and failures remain explicit. Save a relevant source, return and reload to recover it without duplicate candidates, changed fixed summaries, lost drafts or cross-topic private-record changes. Keep existing Primer UI and same-browser storage.
-- Dependencies: Existing discovery API availability and reading scope. No model/provider or database migration selected for this slice.
+- Source: User-authorized comparison follow-up; execution facts moved to done.md and advisor-task-design.md §8.5.
+- Milestone: P2.
+- Status: Relevant official-page read/save/return/reopen flow verified and published in [PR #14](https://github.com/114August514/campus-agora/pull/14). PR #13 merged the prior follow-up at main 258cc69; the new direct-read changes are isolated on feat/direct-source-read from that base. Review/integration remains separate from the implementation result.
+- Next: Editable topic conditions and cancellable/bounded discovery, then optional preparation/contact/resource entries and complete demo/association-repair checks. Take one outcome group at a time; no new broad research or maintenance gate.
+- Dependencies: Existing browser topic store and public HTML API. External model integration remains optional and must preserve explicitly selected personal inputs and truthful send states.
 
 ### 2026-10-06 - Define subsequent implementation work after PR #12
 

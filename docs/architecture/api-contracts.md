@@ -1,6 +1,6 @@
 # API Contracts
 
-Last updated: 2026-10-04
+Last updated: 2026-10-12
 
 Campus Agora uses `contracts/openapi.json` as the committed API contract
 snapshot. The Rust API crate is the source of this contract.
@@ -48,8 +48,10 @@ regenerate the contract and review the diff before committing.
 ## Live Discovery
 
 `POST /api/v1/discoveries` is public (`security: []`). Its JSON body contains
-only `query`, a nonempty public query of at most 200 characters. It does not
-accept a target URL or browser-private reasons/preferences.
+only `query`, a nonempty public query of at most 200 characters. It accepts
+either keywords or a single public HTTP(S) academic URL, subject to the same
+source restrictions as search results. There is no separate URL field and no
+browser-private reasons/preferences in the request.
 
 ```json
 {"query": "机器学习"}
@@ -58,9 +60,12 @@ accept a target URL or browser-private reasons/preferences.
 The generated `DiscoveryResponse` contains `query`, `provider`, `scope`,
 `status`, `collectedAt`, `sources`, and `warnings`:
 
-- `provider` is `duckduckgo_html` or `official_directory`. The latter means
+- `provider` is `duckduckgo_html`, `official_directory`, or `direct_url`.
+  `official_directory` means
   search failed and the service performed live body matching against only
   Stanford AI Laboratory faculty and CMU Machine Learning core faculty.
+  `direct_url` reads only the submitted page without sending the URL to
+  DuckDuckGo or falling back to another source when reading fails.
   `scope` describes the actual range in Chinese.
 - HTTP 200 represents a completed attempt; `status` is `complete`, `partial`,
   or `failed`, so HTTP success alone does not establish successful discovery.
@@ -70,7 +75,9 @@ The generated `DiscoveryResponse` contains `query`, `provider`, `scope`,
   fetched `content`, separate `searchSnippet`, `relevanceEvidence`, ISO
   `collectedAt`, optional original `publishedAt` metadata, and `unknowns`.
   The hostname is not verified affiliation; the passages are body matches,
-  not model judgments or automatic identification of an advisor.
+  not model judgments or automatic identification of an advisor. Direct URL
+  reading has no search snippet or keyword-matching passages; the body is
+  available for the user to examine before associating it with a candidate.
 - Each `DiscoveryWarning` keeps a stable `code`, readable `message`, and
   optional failed-source `url`. Search failure remains visible after a
   successful directory fallback. Unsupported pages are not substituted with
