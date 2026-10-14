@@ -1,6 +1,6 @@
 # Tools
 
-Last updated: 2026-07-06
+Last updated: 2026-10-14
 
 This directory stores tool-specific configuration that does not need to live in
 the repository root for automatic discovery.
@@ -12,6 +12,10 @@ running nested tool commands directly.
 ## Layout
 
 - `docs/`: MkDocs and uv configuration for the documentation site.
+- `discovery-trial/`: standalone P2 technical trial for external discovery
+  (search, full-text read, extraction, merge) plus the local API the web prototype
+  calls. Not production code; see its README.
+- `prototypes/`: historical text specimens and prototype content.
 
 ## Rules
 

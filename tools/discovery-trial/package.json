@@ -1,0 +1,17 @@
+{
+  "name": "@campus-agora/discovery-trial",
+  "private": true,
+  "type": "module",
+  "description": "P2 technical trial: external discovery (search -> read -> extract -> merge). Not product code.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "check": "node --env-file-if-exists=.env src/cli/check.ts",
+    "discover": "node --env-file-if-exists=.env src/cli/discover.ts",
+    "serve": "node --env-file-if-exists=.env src/server.ts",
+    "serve:synthetic": "DISCOVERY_SYNTHETIC=1 node src/server.ts",
+    "test": "node --test \"test/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

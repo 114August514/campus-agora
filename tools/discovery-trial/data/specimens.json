@@ -1,0 +1,45 @@
+{
+  "note": "Fixed demo data from the 2026-09-29 bounded trial (docs/constraints/mentor-source-reference.md). Public identity keys only, for merge checks; not discovered by this tool and not a recruitment list.",
+  "asOf": "2026-09-29",
+  "candidates": [
+    {
+      "id": "wang-xiang",
+      "names": ["王翔", "Xiang Wang"],
+      "affiliations": ["中国科学技术大学", "University of Science and Technology of China", "USTC"],
+      "urls": [
+        "https://faculty.ustc.edu.cn/xiangwang/zh_CN/index.htm",
+        "https://xiangwang1223.github.io/"
+      ],
+      "researchTopics": ["模型知识更新与保留原知识"]
+    },
+    {
+      "id": "xiong-yingfei",
+      "names": ["熊英飞", "Yingfei Xiong"],
+      "affiliations": ["北京大学", "Peking University", "PKU"],
+      "urls": [
+        "https://cs.pku.edu.cn/info/1084/1716.htm",
+        "https://xiongyingfei.github.io/",
+        "https://xiongyingfei.github.io/index_cn.html"
+      ],
+      "researchTopics": ["自然语言要求与程序状态分析", "程序正确性"]
+    },
+    {
+      "id": "tianqi-chen",
+      "names": ["Tianqi Chen", "陈天奇"],
+      "affiliations": ["Carnegie Mellon University", "CMU", "卡内基梅隆大学"],
+      "urls": ["https://tqchen.com/", "https://tqchen.com/faq"],
+      "researchTopics": ["多GPU推理的计算与通信组织", "机器学习系统"]
+    },
+    {
+      "id": "charles-zhang",
+      "names": ["Charles Zhang"],
+      "affiliations": [
+        "Hong Kong University of Science and Technology",
+        "HKUST",
+        "香港科技大学"
+      ],
+      "urls": ["https://www.cse.ust.hk/~charlesz/"],
+      "researchTopics": ["软件依赖与缺陷分析"]
+    }
+  ]
+}
