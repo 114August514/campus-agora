@@ -1,0 +1,10 @@
+/* The sole document theme mapping; page layout and controls use Primer components. */
+:root {
+  color-scheme: light;
+  color: var(--fgColor-default);
+  background-color: var(--bgColor-default);
+}
+
+:root[data-color-mode="dark"] {
+  color-scheme: dark;
+}

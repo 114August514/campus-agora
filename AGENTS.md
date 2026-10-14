@@ -1,6 +1,6 @@
 # Agent Notes
 
-Last updated: 2026-10-03
+Last updated: 2026-10-14
 
 This file is the project-level instruction sheet for AI agents and human
 collaborators. Follow it before making changes.
@@ -148,7 +148,7 @@ credits/GPA and other recognition; only applicable rules support eligibility.
 
 ## UI Rules
 
-Follow `docs/product/ui-system.md` before any UI or prototype work. Use only Primer React Product UI + Primer Primitives + Octicons. No Tailwind, handwritten CSS/CSS Modules, inline style, sx or CSS-in-JS. Use library layouts and one declarative theme configuration. Fix light neutral palette with Primer blue interaction, system sans-serif and normal letter spacing. Ban emoji icons, eyebrows, subtitles/taglines, gradients, bordered content cards, display monospace and tracking. Keep necessary field borders and keyboard focus. Existing Web and HTML prototype are pending migration, not compliant templates. Reference sites inform interaction only; they cannot override these rules.
+Follow `docs/product/ui-system.md` before any UI or prototype work. Use only Primer React Product UI + Primer Primitives + Octicons. No Tailwind, handwritten page CSS/CSS Modules, inline style, sx or CSS-in-JS. Use library layouts and one declarative root theme mapping. Default to Primer light; the user authorized a persistent light/dark switch on 2026-10-14. Use matching Primer semantic palettes, blue interaction, system sans-serif and normal letter spacing. The sole root theme mapping may bind document foreground/background to Primer tokens and set color-scheme; it must not style page layouts or controls. Ban emoji icons, eyebrows, subtitles/taglines, gradients, bordered content cards, display monospace and tracking. Keep necessary field borders and keyboard focus. The current Web uses Primer; the historical HTML prototype is not a compliant template. Reference sites inform interaction only; they cannot override these rules.
 
 ## Collaboration Rules
 

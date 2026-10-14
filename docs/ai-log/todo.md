@@ -1,6 +1,6 @@
 # AI Log Todo
 
-Last updated: 2026-10-03
+Last updated: 2026-10-14
 
 This file records meaningful pending work for AI agents and collaborators.
 Keep entries short, dated, and actionable.
@@ -20,11 +20,39 @@ Keep entries short, dated, and actionable.
 
 ## Pending
 
+### 2026-10-14 - Refine the Web experience and apply the new logo
+
+- Source: User requested improvement of the Web design after the logo proposal.
+- Milestone: P2 interaction and visual refinement.
+- Status: Reviewing the running Web app; root owns shell/home/brand, delegated agents own discovery rows and advisor/comparison pages.
+- Acceptance: Clear shared navigation and page hierarchy, useful home discovery and topic continuation, responsive filters/lists/detail/comparison, integrated brand asset; retain source/time/unknown/private-record and real-discovery behavior. Primer-only layout and the sole root theme mapping; verify lint, types, production build and desktop/mobile browser flows.
+- User addition: Persistent light/dark switching and a portable HTML that can open by double-click; source entry should lead to the built export. Browser tooling rejects file: navigation, so verify standalone structure plus HTTP runtime and report the manual-opening limit explicitly.
+
 ### 2026-10-01 - Review aligned requirements and choose demo tasks
 
 - Source: Requirements alignment; requirements analysis v1.0.
 - Status: Requirements v1.0 merged via PR #10 into main at `09cb425` on 2026-10-03; teammate review still pending. Task design v0.3 covers result handling, topic isolation and selected personal AI input, plus user-adopted cancellation/run limits, mistaken-merge correction and truthful send states; P3 wording aligned. Delivery of these additions uses docs/requirements-handoff and a PR to protected main; implementation and user testing remain open.
 - Acceptance: Resolve actual review differences and apply task design v0.3 plus handoff 8.2 to concrete demo content, technical trials and the complete walkthrough. Choose search/AI/persistence mechanisms, declare per-run limits and explain storage/service boundaries. No new broad research or long-term staffing gate.
+
+### 2026-10-14 - Primer frontend prototype for the advisor guide
+
+- Source: User asked to see the frontend before wiring real providers.
+- Milestone: P2 prototype (task design v0.3 pages).
+- Status: apps/web rebuilt on Primer React 38.40.1 / Primitives 11.10.0 / Octicons 19.40.0 (exact pins, bun.lock updated; bun 1.4.3 installed via Homebrew). Legacy shell and handwritten CSS removed. Pages: 找导师 (search, route/region filters, explicit-only), advisor detail, 比较 (table on wide, stacked on narrow), 资源与入口, 我的探索 (per-topic private reasons in localStorage). External lookup panel replays a clearly labelled synthetic run (progress, partial failure, cancel, merge outcomes). `bun run lint`, `typecheck`, `build` pass; browser walkthrough at 1280px and 375px: save same advisor to two topics with separate reasons, reload restores both, deleting A leaves B intact, cancel keeps partial results, no horizontal page scroll.
+- Acceptance: Peer/user review of the prototype.
+- Update 2026-10-14: synthetic in-page script replaced by the real pipeline behind a local API (tools/discovery-trial/src/server.ts, run-manager.ts; Vite proxies /api/discovery). Web shows recipients before sending, send state, live steps, cancel, limit/failure banners and merge outcomes; unverified quotes hidden by default. `npm run serve:synthetic` exercises the full pipeline without keys (always labelled). Verified: 16 trial tests pass; HTTP smoke test (409 busy, 400 bad body, 503 unconfigured); browser walkthrough of not-started, unconfigured, synthetic complete and cancel (no late writes after 6 s). Real-provider run still pending keys.
+- Update 2026-10-14 (visual pass, "简约大气" within ui-system.md): single-row header, large search, result rows reduced to name/question/route status with invisible compare/save actions, fixed-sample and original-site notes moved to a footer, consistent page-header spacing, quieter discovery intro; checked at 1440px and 375px.
+- Update 2026-10-14 (production build): Vite `base: "./"` so the hash-routed bundle works from any sub-path; `bun --cwd apps/web build` → apps/web/dist/index.html as a single file (JS and Primer CSS inlined by a small plugin in vite.config.ts, 846 kB / 223 kB gzip) so it also opens from file://, where module scripts are blocked; verified with headless Chrome via file://. Added `preview` script (port 4180); served dist and verified routing, assets and no console errors. Static hosting alone leaves 外部补查 showing “服务未启动” unless /api/discovery is reverse-proxied to the discovery API.
+- Notes: Known gap: Primer has no 24px title variant (h1 stays 32px), recorded in docs/product/ui-system.md. Build bundle is ~531 kB (Vite size warning, not addressed). Fixed sample data dated 2026-09-29.
+
+### 2026-10-14 - External discovery pipeline technical trial
+
+- Source: Task design v0.3 §6 and handoff 8.2 "实际发现"; user chose to start implementation from the discovery pipeline.
+- Milestone: P2 technical trial (prerequisite for P3 demo).
+- Status: Model chosen by user on 2026-10-14: Zhipu GLM-4.7-Flash (BigModel.cn free tier, OpenAI-compatible API, free tier concurrency 1). Page reader chosen by user: Jina Reader (non-commercial competition use; works keyless at a low rate limit, or with a key's one-time free tokens). Search chosen 2026-10-14 for lowest cost with no idle charges: domestic Baidu Qianfan `web_search` (free monthly/daily quota per docs, which conflict on 1500/month vs 100/day; postpaid ¥0.036/call only if enabled) and overseas Tavily (1,000 free credits/month, no card; $0.008/credit pay-as-you-go only beyond that). Connectivity of Tavily/Jina from the user's network is untested. Code skeleton added in tools/discovery-trial/ (zero-dependency Node 22 TypeScript): providers, budget/cancel, extraction with verbatim-quote check, conservative merge, run records; `npm test` 12/12 offline tests pass and keyless Jina check succeeded. Next: user adds keys locally, run `npm run check`, then 2–3 real queries. Typecheck/biome not run (no node_modules installed).
+- Acceptance: CLI script runs search → full-text read → GLM relevance/extraction → structured candidate/evidence JSON with source URL, quote, retrieval time and link to the input question; merges against the four existing specimens (reuse known objects, mark conflicts/unknown identity, no duplicate on repeated read); records per-run time/call limits, cancellation and failures. Compare 2–3 real queries; record result quality, latency and failures.
+- Dependencies: User-provided API keys in local env vars only (never committed or logged). Provider-agnostic OpenAI-compatible client so a paid fallback can be swapped by config for demo day.
+- Notes: GLM-4.7-Flash free tier is approved for public web content only. Sending user-selected private content to external AI still requires checking the chosen service's retention/deletion terms per docs/product/privacy.md; do not reuse the free tier for that by default. Free model names/quotas may change (GLM-4.5-Flash was retired 2026-01-30).
 
 ## Historical and conditional research backlog
 

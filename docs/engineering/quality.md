@@ -1,5 +1,7 @@
 # Quality Gates
 
+Last updated: 2026-10-14
+
 M0.1 turns the repository skeleton into a checked engineering loop.
 
 ## Required Local Checks
@@ -48,6 +50,18 @@ suite. New UI primitives must still provide:
 - Keyboard-reachable controls.
 
 ## UI Regression Boundary
+
+The current Web uses Primer components and library styles. `bun run lint:styles`
+checks its sole document theme mapping at `apps/web/src/app/theme.css`; it no
+longer targets the removed `src/styles` directory. That mapping is limited to
+document foreground/background tokens and native color-scheme. Page and control
+layout remain library-owned; see the [UI rules](../product/ui-system.md).
+
+For portable HTML changes, run `bun --cwd apps/web build` and check that the output
+contains no external scripts, styles or image assets. The build rejects unmatched
+entry tags and leftover assets; the classic script executes after the root element.
+Review the built page over HTTP as well as checking the standalone structure;
+report file-opening verification separately when browser tooling blocks `file:`.
 
 Before screenshot regression exists, review UI changes against:
 
