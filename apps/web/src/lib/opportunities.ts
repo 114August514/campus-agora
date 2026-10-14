@@ -1,0 +1,445 @@
+// Opportunities, resources and rules across types, reused from the P1 research notes
+// (docs/constraints/opportunity-needs-map.md, mentor-source-reference.md,
+// tools/prototypes/opportunity-content.md). Facts are only what those notes record.
+// Ended batches are historical reference: they help understand what exists and how
+// it works, never a list of what is open now.
+/** Where the information was read and when; not the page's own publish date. */
+export interface OpportunityEntry {
+  label: string;
+  url: string;
+  checkedAt: string;
+}
+
+/** Opportunity types across the product; one item may carry several. */
+export type OpportunityType =
+  | "research"
+  | "graduate"
+  | "internship"
+  | "competition"
+  | "exchange"
+  | "activity"
+  | "support"
+  | "rules";
+
+/**
+ * historical = a dated batch that has ended (reference only, not open now);
+ * standing = a service or rule without a batch deadline;
+ * unknown = current state not confirmed.
+ */
+export type OpportunityTiming = "historical" | "standing" | "unknown";
+
+export interface Opportunity {
+  id: string;
+  name: string;
+  types: OpportunityType[];
+  timing: OpportunityTiming;
+  /** Which batch/year/time the information describes. */
+  period: string;
+  summary: string;
+  /** Who it is for and key conditions, as stated by the source. */
+  conditions: string;
+  /** Support, cost or other practical notes, if the source states them. */
+  support?: string;
+  /** What must not be inferred from this source. */
+  caveat: string;
+  entry: OpportunityEntry;
+}
+
+export const opportunityTypeText: Record<OpportunityType, string> = {
+  research: "科研与导师",
+  graduate: "升学",
+  internship: "实习与实践",
+  competition: "竞赛",
+  exchange: "交流与暑校",
+  activity: "活动与讲座",
+  support: "资源与支持",
+  rules: "规则与认定",
+};
+
+export const opportunityTypes = Object.keys(opportunityTypeText) as OpportunityType[];
+
+export const opportunities: Opportunity[] = [
+  {
+    id: "ustc-research-plan",
+    name: "大学生研究计划（2025–2026）",
+    types: ["research"],
+    timing: "historical",
+    period: "2025–2026 轮，截止 2025-12-19",
+    summary:
+      "在导师指导下开展研究并获得项目支持；在综合教务系统申报，导师审核、院系评定。",
+    conditions: "历史通知面向二、三年级。",
+    support: "重点／一般项目原则上最高支持 8000／3000 元；另有管理办法和经费细则。",
+    caveat: "该轮已截止，不是当前申报；下一轮通知及可列支范围需另行核实。",
+    entry: {
+      label: "教务处通知",
+      url: "https://www.teach.ustc.edu.cn/notice/notice-teaching/19630.html",
+      checkedAt: "2026-09-24",
+    },
+  },
+  {
+    id: "fusep-2026",
+    name: "FuSEP 2026 科研交流项目",
+    types: ["research", "exchange"],
+    timing: "historical",
+    period: "2026 项目",
+    summary: "六周科研，含导师选择；同时属于科研和交流。",
+    conditions: "有语言和就读阶段要求；选择指定名单外导师另有材料要求。",
+    support: "项目页列出资助及所需材料。",
+    caveat: "2026 项目已结束；参加资格须查原文，不能推断科大学生都适用。",
+    entry: {
+      label: "项目页",
+      url: "https://fusep.ustc.edu.cn/fusep/",
+      checkedAt: "2026-09-23",
+    },
+  },
+  {
+    id: "mpi-internship",
+    name: "Max Planck 计算机科研实习",
+    types: ["research", "internship", "exchange"],
+    timing: "unknown",
+    period: "常设项目说明，具体批次以原站为准",
+    summary:
+      "在信息学、软件系统、安全与隐私相关研究所开展 CS 研究，课题录取后与导师商定。",
+    conditions: "较强 CS 基础、优秀学业表现；相当于本科前三年课程和／或相关研究经历。",
+    support: "官网说明提供生活津贴、住宿及往返旅费支持。",
+    caveat:
+      "通常 12—14 周；5—8 月开始须前一年 11 月 1 日前申请。具体团队指导方式未知。",
+    entry: {
+      label: "项目说明",
+      url: "https://www.cis.mpg.de/internships/",
+      checkedAt: "2026-09-26",
+    },
+  },
+  {
+    id: "ista-internship",
+    name: "ISTA 全年科研实习",
+    types: ["research", "internship", "exchange"],
+    timing: "unknown",
+    period: "全年申请，具体安排以原站为准",
+    summary: "加入研究组开展科研，需先找与兴趣相关的组；覆盖多个学科。",
+    conditions: "自然科学、计算机、数学等相关领域本科／硕士在读；良好英语。",
+    support: "雇员实习有工资；外部奖学金访问学生是另一条途径，不能混算待遇。",
+    caveat: "2 个月至 1 年；系统登记至少早于开始两个月，之前还需团队审阅。",
+    entry: {
+      label: "项目说明",
+      url: "https://phd.ista.ac.at/scientific-internships/",
+      checkedAt: "2026-09-26",
+    },
+  },
+  {
+    id: "hkust-ugvis",
+    name: "HKUST 本科生短期科研访问（UGVIS）",
+    types: ["research", "exchange"],
+    timing: "unknown",
+    period: "制度说明，批次以原站为准",
+    summary: "外校本科生到 HKUST 短期参与科研。",
+    conditions: "申请前需取得接收教师同意。",
+    caveat: "制度存在不代表具体教师接收。",
+    entry: {
+      label: "UGVIS 说明",
+      url: "https://www.join.hkust.edu.hk/admissions/visiting",
+      checkedAt: "2026-09-29",
+    },
+  },
+  {
+    id: "hkust-cse-pg",
+    name: "HKUST CSE 研究生招生",
+    types: ["graduate"],
+    timing: "unknown",
+    period: "按年度招生",
+    summary: "MPhil／PhD 申请的院系入口。",
+    conditions: "按院系当年招生要求。",
+    caveat: "院系入口不代表某位导师有名额。",
+    entry: {
+      label: "院系研究生入口",
+      url: "https://cse.hkust.edu.hk/pg/admissions/",
+      checkedAt: "2026-09-29",
+    },
+  },
+  {
+    id: "ict-2027-tuimian",
+    name: "中科院计算所 2027 年推免招生简章",
+    types: ["graduate"],
+    timing: "unknown",
+    period: "2027 届",
+    summary: "研究所推免流程及相关入口。",
+    conditions: "按简章要求。",
+    caveat: "属于 2027 届信息，不一定对应你的目标年份；导师信息尚待关联。",
+    entry: {
+      label: "推免简章",
+      url: "https://www.ict.ac.cn/yjsjy/zsxx/sszs/202608/t20260828_8266523.html",
+      checkedAt: "2026-09-23",
+    },
+  },
+  {
+    id: "stanford-cs-phd",
+    name: "Stanford CS PhD 申请",
+    types: ["graduate"],
+    timing: "unknown",
+    period: "按年度申请",
+    summary: "院系博士申请入口。",
+    conditions: "按项目当年规则。",
+    caveat: "本轮仅检索发现，尚未读取正文。",
+    entry: {
+      label: "PhD Admissions",
+      url: "https://www.cs.stanford.edu/admissions/phd-admissions",
+      checkedAt: "2026-09-23",
+    },
+  },
+  {
+    id: "sse-jobs-2027",
+    name: "软件学院 2027 届就业岗位提醒",
+    types: ["internship"],
+    timing: "unknown",
+    period: "2026-09-16 发布",
+    summary:
+      "学院从 20 多家企事业单位整理 300 多个岗位，经信息群与班级群转发，并列出学校就业网、学院栏目及企业渠道。",
+    conditions: "面向 2027 届毕业生。",
+    caveat: "数量为学院自述；具体岗位是否仍开放以各单位渠道为准。",
+    entry: {
+      label: "学院通知",
+      url: "https://sse.ustc.edu.cn/2026/0916/c19741a753533/pagem.htm",
+      checkedAt: "2026-09-23",
+    },
+  },
+  {
+    id: "ta-2026-spring",
+    name: "本科课程助教（2026 春季）",
+    types: ["internship"],
+    timing: "historical",
+    period: "2026 春季学期",
+    summary: "校内教学实践岗位；录用后有邮件和短信通知。",
+    conditions:
+      "面向硕博及符合条件的高年级本科生；有导师同意、年级、培训等要求，首次担任者须参加培训。",
+    caveat: "历史通知，不能套为以后学期的固定规则。",
+    entry: {
+      label: "教务处通知",
+      url: "https://www.teach.ustc.edu.cn/notice/notice-teaching/19814.html",
+      checkedAt: "2026-09-23",
+    },
+  },
+  {
+    id: "physics-experiment-2026",
+    name: "科大 2026 物理实验竞赛",
+    types: ["competition"],
+    timing: "historical",
+    period: "2026 年，校内报名 3 月 6–31 日",
+    summary: "含创新作品与讲课视频类别；校内报名后另有评选与优化环节。",
+    conditions: "大一至大三本科生，不限专业；团队最多五人。",
+    support: "学校提供教师、场地和器材。",
+    caveat: "该批报名已结束，不能显示为现在可报名。",
+    entry: {
+      label: "教务处通知",
+      url: "https://www.teach.ustc.edu.cn/notice/notice-info/19853.html",
+      checkedAt: "2026-09-23",
+    },
+  },
+  {
+    id: "ustcpc-2026",
+    name: "USTCPC 2026 程序设计竞赛",
+    types: ["competition"],
+    timing: "historical",
+    period: "2026-03-29，五小时",
+    summary: "1–3 人组队；正式与打星队伍分开，组队不要求同校同学历；有奖品和伴手礼。",
+    conditions: "正式队伍另有科大在读及线下条件。",
+    caveat: "赛事奖项不等于综测或学分认定，未核到认定依据。",
+    entry: {
+      label: "赛制与问答",
+      url: "https://oj.ustc.edu.cn/d/ustcpc/",
+      checkedAt: "2026-09-25",
+    },
+  },
+  {
+    id: "competition-rules",
+    name: "本科生学科竞赛管理办法与认定表",
+    types: ["competition", "rules"],
+    timing: "standing",
+    period: "教字〔2025〕2 号，附认定表 2024 版",
+    summary: "学校层面的学科竞赛管理办法，附件为学科竞赛认定表。",
+    conditions: "按办法与认定表适用。",
+    caveat:
+      "办法规定认定列表动态更新，不能断言目录此后没有调整；院系综测细则另行规定。",
+    entry: {
+      label: "办法及附件",
+      url: "https://www.teach.ustc.edu.cn/?attachment_id=18790",
+      checkedAt: "2026-09-25",
+    },
+  },
+  {
+    id: "c9-summer-2026",
+    name: "西安交大 2026“中国传统文化”C9 暑校",
+    types: ["exchange", "activity"],
+    timing: "historical",
+    period: "2026 年暑期",
+    summary: "C9 高校间的文化主题暑校，经科大校内通知报名。",
+    conditions: "限定部分年级。",
+    support: "区分学校承担和个人自付费用，并涉及垫付及凭证。",
+    caveat: "活动期已过；原文活动年与报名段落年份不一致，未确认更正值。",
+    entry: {
+      label: "校内通知",
+      url: "https://www.teach.ustc.edu.cn/notice/notice-exchange/20168.html",
+      checkedAt: "2026-09-23",
+    },
+  },
+  {
+    id: "hanhai-salon-2026",
+    name: "2026“瀚海策源荟”沙龙",
+    types: ["activity"],
+    timing: "historical",
+    period: "2026 年",
+    summary: "面向相关兴趣的本硕博学术沙龙；有提前阅读材料、提出问题及提前到场要求。",
+    conditions: "限 90 人，通过第二课堂报名。",
+    caveat: "活动已结束；公开总容量不等于剩余名额。",
+    entry: {
+      label: "学校通知",
+      url: "https://www.ustc.edu.cn/info/1364/24990.htm",
+      checkedAt: "2026-09-23",
+    },
+  },
+  {
+    id: "xingce-signup",
+    name: "形势与政策讲座报名",
+    types: ["activity"],
+    timing: "standing",
+    period: "课程预告持续更新",
+    summary: "扫描课程预告页二维码查看近期大报告和小课堂，按报名表报名。",
+    conditions: "参加情况以教室签到为准。",
+    caveat: "列表同时包含可报名和已结束课程；尚未核对具体场次与余位。",
+    entry: {
+      label: "马院课程预告",
+      url: "https://marx.ustc.edu.cn/2023/0606/c30320a605104/page.htm",
+      checkedAt: "2026-09-24",
+    },
+  },
+  {
+    id: "xingce-rules",
+    name: "形势与政策讲座要求",
+    types: ["rules", "activity"],
+    timing: "standing",
+    period: "教字〔2024〕19 号",
+    summary:
+      "在校期间参加不少于 8 场形势与政策讲座，主要为人文社科、理论宣讲和科技政策，不含专业学术报告；三年级按教务 FAQ 在瀚海教学网提交报告。",
+    conditions: "本科生培养要求。",
+    caveat: "听课报名与报告提交是两条入口；第二课堂、科学与社会研讨课不能互相代替。",
+    entry: {
+      label: "教字〔2024〕19 号",
+      url: "https://www.teach.ustc.edu.cn/wp-content/uploads/2024/07/%E6%95%99%E5%AD%97202419%E5%8F%B7-%E5%85%B3%E4%BA%8E%E6%80%9D%E6%83%B3%E6%94%BF%E6%B2%BB%E7%90%86%E8%AE%BA%E8%AF%BE%E6%89%A7%E8%A1%8C%E6%96%B9%E6%A1%88%E7%9A%84%E9%80%9A%E7%9F%A5.pdf",
+      checkedAt: "2026-09-24",
+    },
+  },
+  {
+    id: "second-classroom",
+    name: "第二课堂制度与平台",
+    types: ["activity", "rules"],
+    timing: "standing",
+    period: "学校公开介绍",
+    summary: "学校第二课堂制度与平台的公开介绍，部分活动通过它报名。",
+    conditions: "按制度适用。",
+    caveat:
+      "未确认是否有按场次标注“计入”的清单；第二课堂活动不能直接认定为形势与政策学分。",
+    entry: {
+      label: "公开介绍",
+      url: "https://news.ustc.edu.cn/info/1055/72977.htm",
+      checkedAt: "2026-09-23",
+    },
+  },
+  {
+    id: "scc-register",
+    name: "超算用户注册",
+    types: ["support"],
+    timing: "standing",
+    period: "常设服务",
+    summary: "申请科研计算账号。",
+    conditions: "学生必须填写负责人邮箱，负责人须提前注册门户。",
+    support: "默认 5000 元是机时费限额，不是免费额度；提高限额涉及导师账号操作。",
+    caveat: "具体可用 GPU、收费、审批时间及独立本科生的接入办法未确认。",
+    entry: {
+      label: "注册入口",
+      url: "https://scc.ustc.edu.cn/portal/register",
+      checkedAt: "2026-09-24",
+    },
+  },
+  {
+    id: "scc-ai-platform",
+    name: "智算平台",
+    types: ["support"],
+    timing: "standing",
+    period: "常设服务",
+    summary:
+      "用于 AI 开发调试、模型服务及研究；云主机通过 cloud.ustc.edu.cn 提交用途、规格、周期并审核。",
+    conditions: "面向校内单位、科研团队等。",
+    caveat:
+      "训练作业权限申请标为“待上线”，不能写成现可申请；个人学生申请资格和费用未确认。",
+    entry: {
+      label: "平台概述",
+      url: "https://scc.ustc.edu.cn/40921/list.htm",
+      checkedAt: "2026-09-24",
+    },
+  },
+  {
+    id: "library-eresources",
+    name: "图书馆全域电子资源访问",
+    types: ["support"],
+    timing: "standing",
+    period: "常设服务",
+    summary: "获取学校采购的数据库文献；提供校内外统一入口及数据库导航。",
+    conditions: "按图书馆账号与授权范围。",
+    caveat: "特定数据库授权范围及目标文献是否有全文未验证。",
+    entry: {
+      label: "访问说明",
+      url: "https://lib.ustc.edu.cn/电子资源/全域（校内、校外）电子资源访问系统/",
+      checkedAt: "2026-09-24",
+    },
+  },
+  {
+    id: "library-ill",
+    name: "文献传递与馆际互借",
+    types: ["support"],
+    timing: "standing",
+    period: "常设服务",
+    summary: "馆藏无法直接提供的文献，可转 CSDL、CALIS／CASHL 或馆员协助。",
+    conditions: "先查已有馆藏；有借阅权限者按指定系统申请。",
+    support: "页面载明可获年度最多 500 元、单次最多 200 元补贴。",
+    caveat: "补贴不等于所有申请免费；具体文献能否提供及到达时间未知。",
+    entry: {
+      label: "服务指南",
+      url: "https://lib.ustc.edu.cn/服务指南/文献传递与馆际互借/",
+      checkedAt: "2026-09-24",
+    },
+  },
+  {
+    id: "instrument-sharing",
+    name: "仪器共享目录",
+    types: ["support"],
+    timing: "standing",
+    period: "常设服务",
+    summary: "查仪器与使用方法，进一步咨询预约。",
+    conditions: "具体设备的资格、费用和可用时段另看。",
+    caveat: "部分实验中心要求培训考核和操作许可，不能推广为全校所有仪器规则。",
+    entry: {
+      label: "共享目录",
+      url: "https://gxpt.ustc.edu.cn/ins/index.html",
+      checkedAt: "2026-09-24",
+    },
+  },
+];
+
+export function findOpportunity(id: string): Opportunity | undefined {
+  return opportunities.find((o) => o.id === id);
+}
+
+export function matchesOpportunity(opportunity: Opportunity, query: string): boolean {
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const text = [
+    opportunity.name,
+    opportunity.summary,
+    opportunity.conditions,
+    opportunity.support ?? "",
+    opportunity.period,
+    ...opportunity.types.map((type) => opportunityTypeText[type]),
+  ]
+    .join(" ")
+    .toLowerCase();
+  return terms.every((term) => text.includes(term));
+}

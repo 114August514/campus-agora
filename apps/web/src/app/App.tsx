@@ -5,6 +5,7 @@ import {
   Button,
   FormControl,
   Heading,
+  Link,
   PageLayout,
   Select,
   Stack,
@@ -19,6 +20,8 @@ import {
   type ComparisonNotes,
 } from "../components/AdvisorComparison";
 import { DiscoveryPanel } from "../components/DiscoveryPanel";
+import { ExploreHome } from "../components/ExploreHome";
+import { OpportunityBrowser } from "../components/OpportunityBrowser";
 import { SourceView } from "../components/SourceView";
 import {
   type ComparisonPerspective,
@@ -30,8 +33,14 @@ import { getFollowupQuery, getSupplementalSources } from "../lib/comparison-foll
 import {
   type CandidateSnapshot,
   type ExplorationTopic,
+  type TopicOpportunity,
   createExplorationStore,
 } from "../lib/exploration-store";
+import {
+  type Opportunity,
+  type OpportunityType,
+  opportunityTypeText,
+} from "../lib/opportunities";
 
 function loadExplorations() {
   try {
@@ -50,9 +59,10 @@ export function App() {
   const [initial] = useState(loadExplorations);
   const [topics, setTopics] = useState(initial.topics);
   const [topicId, setTopicId] = useState(initial.topics[0]?.id ?? "");
-  const [view, setView] = useState<"explore" | "saved" | "compare" | "followup">(
-    "explore",
-  );
+  const [view, setView] = useState<
+    "home" | "explore" | "opportunities" | "saved" | "compare" | "followup"
+  >("home");
+  const [opportunityType, setOpportunityType] = useState<OpportunityType | "">("");
   const [followupCandidate, setFollowupCandidate] = useState<Advisor>();
   const [comparisonIds, setComparisonIds] = useState<string[]>([]);
   const [perspective, setPerspective] = useState<ComparisonPerspective>("research");
@@ -154,6 +164,25 @@ export function App() {
     });
   }
 
+  function saveOpportunity(opportunity: Opportunity) {
+    mutate(() => {
+      if (!activeTopic)
+        throw new Error("先选择或创建一个探索主题；浏览不要求创建主题。");
+      initial.store?.saveOpportunity(activeTopic.id, {
+        opportunityId: opportunity.id,
+        name: opportunity.name,
+        types: opportunity.types.map((type) => opportunityTypeText[type]),
+        period: opportunity.period,
+        summary: opportunity.summary,
+        entryUrl: opportunity.entry.url,
+        checkedAt: opportunity.entry.checkedAt,
+      });
+      setMessage(
+        `已保存${opportunity.name}到“${activeTopic.name}”。已有的私人理由和疑问会保留。`,
+      );
+    });
+  }
+
   function startFollowup(candidate: Advisor) {
     setFollowupCandidate(candidate);
     setQuery(getFollowupQuery(candidate, perspective));
@@ -178,9 +207,18 @@ export function App() {
       <PageLayout.Header>
         <Stack gap="condensed">
           <Heading as="h1" variant="medium">
-            选导师
+            Campus Agora
           </Heading>
           <UnderlineNav aria-label="主导航" variant="flush">
+            <UnderlineNav.Item
+              aria-current={view === "home" ? "page" : undefined}
+              onSelect={(event) => {
+                event.preventDefault();
+                setView("home");
+              }}
+            >
+              探索
+            </UnderlineNav.Item>
             <UnderlineNav.Item
               aria-current={view === "explore" ? "page" : undefined}
               onSelect={(event) => {
@@ -188,7 +226,16 @@ export function App() {
                 setView("explore");
               }}
             >
-              探索
+              找导师
+            </UnderlineNav.Item>
+            <UnderlineNav.Item
+              aria-current={view === "opportunities" ? "page" : undefined}
+              onSelect={(event) => {
+                event.preventDefault();
+                setView("opportunities");
+              }}
+            >
+              机会与入口
             </UnderlineNav.Item>
             <UnderlineNav.Item
               counter={comparisonIds.length}
@@ -251,9 +298,11 @@ export function App() {
                   const created = initial.store?.createTopic({
                     name: topicName,
                     question:
-                      view === "compare"
-                        ? `了解${comparisonCandidates.map((item) => item.name).join("、") || "候选导师"}的${perspective === "research" ? "研究内容" : perspective === "graduate" ? "读研参与途径" : "本科科研、RA 或短访途径"}`
-                        : query,
+                      view === "home" || view === "opportunities" || view === "saved"
+                        ? ""
+                        : view === "compare"
+                          ? `了解${comparisonCandidates.map((item) => item.name).join("、") || "候选导师"}的${perspective === "research" ? "研究内容" : perspective === "graduate" ? "读研参与途径" : "本科科研、RA 或短访途径"}`
+                          : query,
                   });
                   if (created) {
                     setTopicId(created.id);
@@ -283,7 +332,27 @@ export function App() {
               </Stack>
             </form>
           </Stack>
-          {view === "explore" ? (
+          {view === "home" ? (
+            <ExploreHome
+              advisors={advisors}
+              onOpenAdvisors={() => setView("explore")}
+              onOpenAdvisor={(candidateId) => {
+                setSelectedAdvisor(candidateId);
+                setView("explore");
+              }}
+              onOpenType={(type) => {
+                setOpportunityType(type);
+                setView("opportunities");
+              }}
+            />
+          ) : view === "opportunities" ? (
+            <OpportunityBrowser
+              type={opportunityType}
+              onTypeChange={setOpportunityType}
+              canSave={Boolean(activeTopic && initial.store)}
+              onSave={saveOpportunity}
+            />
+          ) : view === "explore" ? (
             <>
               <DiscoveryPanel
                 query={query}
@@ -424,11 +493,12 @@ export function App() {
               {activeTopic && (
                 <>
                   <Text as="p">创建时的问题：{activeTopic.question || "未填写"}</Text>
-                  {activeTopic.candidates.length === 0 && (
-                    <Text as="p">
-                      还没有保存候选。可以回到探索，看见值得保留的内容时再保存。
-                    </Text>
-                  )}
+                  {activeTopic.candidates.length === 0 &&
+                    (activeTopic.opportunities ?? []).length === 0 && (
+                      <Text as="p">
+                        还没有保存内容。可以回到探索，看见值得保留的导师或机会时再保存。
+                      </Text>
+                    )}
                   {activeTopic.candidates.map((record) => (
                     <SavedCandidate
                       key={`${activeTopic.id}-${record.candidate.candidateId}`}
@@ -456,6 +526,31 @@ export function App() {
                           clearComparisonDrafts(
                             activeTopic.id,
                             record.candidate.candidateId,
+                          );
+                          setMessage("已从这个主题移除，其他主题不受影响。");
+                        })
+                      }
+                    />
+                  ))}
+                  {(activeTopic.opportunities ?? []).map((record) => (
+                    <SavedOpportunity
+                      key={`${activeTopic.id}-${record.opportunity.opportunityId}`}
+                      record={record}
+                      onUpdate={(reason, questions) =>
+                        mutate(() => {
+                          initial.store?.updateOpportunity(
+                            activeTopic.id,
+                            record.opportunity.opportunityId,
+                            { reason, questions },
+                          );
+                          setMessage("私人理由和疑问已保存。");
+                        })
+                      }
+                      onRemove={() =>
+                        mutate(() => {
+                          initial.store?.removeOpportunity(
+                            activeTopic.id,
+                            record.opportunity.opportunityId,
                           );
                           setMessage("已从这个主题移除，其他主题不受影响。");
                         })
@@ -636,6 +731,71 @@ function SavedCandidate({
         </Button>
         <Button variant="invisible" onClick={onRemove}>
           从此主题移除候选
+        </Button>
+      </Stack>
+    </Stack>
+  );
+}
+
+function SavedOpportunity({
+  record,
+  onUpdate,
+  onRemove,
+}: {
+  record: TopicOpportunity;
+  onUpdate: (reason: string, questions: string[]) => void;
+  onRemove: () => void;
+}) {
+  const [reason, setReason] = useState(record.reason);
+  const [question, setQuestion] = useState(record.questions.join("\n"));
+  const { opportunity } = record;
+  return (
+    <Stack as="section" gap="normal">
+      <Heading as="h3" variant="small">
+        {opportunity.name}
+      </Heading>
+      <Text as="p" size="small">
+        {opportunity.types.join("、")} · {opportunity.period} · 保存时信息于{" "}
+        {opportunity.checkedAt} 查看
+      </Text>
+      <Text as="p">{opportunity.summary}</Text>
+      <Link href={opportunity.entryUrl} target="_blank" rel="noreferrer">
+        打开原站入口
+      </Link>
+      <FormControl>
+        <FormControl.Label>私人理由</FormControl.Label>
+        <Textarea
+          block
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          rows={3}
+        />
+      </FormControl>
+      <FormControl>
+        <FormControl.Label>待问问题（一行一个）</FormControl.Label>
+        <Textarea
+          block
+          value={question}
+          onChange={(event) => setQuestion(event.target.value)}
+          rows={2}
+        />
+      </FormControl>
+      <Stack direction="horizontal" wrap="wrap">
+        <Button
+          onClick={() =>
+            onUpdate(
+              reason,
+              question
+                .split("\n")
+                .map((line) => line.trim())
+                .filter(Boolean),
+            )
+          }
+        >
+          保存记录
+        </Button>
+        <Button variant="invisible" onClick={onRemove}>
+          从此主题移除
         </Button>
       </Stack>
     </Stack>

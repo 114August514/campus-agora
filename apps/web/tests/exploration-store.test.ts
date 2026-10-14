@@ -3,6 +3,7 @@ import {
   type CandidateSnapshot,
   EXPLORATION_STORAGE_KEY,
   ExplorationStoreError,
+  type OpportunitySnapshot,
   createExplorationStore,
 } from "../src/lib/exploration-store";
 
@@ -273,4 +274,95 @@ describe("exploration store", () => {
     storage.failRead = true;
     expect(() => createExplorationStore(storage).listTopics()).toThrow("无法读取");
   });
+
+  test("keeps per-topic private records for the same saved opportunity", () => {
+    const storage = new MemoryStorage();
+    const store = createExplorationStore(storage);
+    const contests = store.createTopic({ name: "今年的竞赛" });
+    const recognition = store.createTopic({ name: "综测与认定" });
+    store.saveOpportunity(contests.id, opportunity(), { reason: "想组队试试" });
+    store.saveOpportunity(recognition.id, opportunity(), {
+      reason: "看奖项能否认定",
+      questions: ["学院是否计入综测"],
+    });
+
+    const reopened = createExplorationStore(storage);
+    expect(reopened.getTopic(contests.id)?.opportunities?.[0]).toMatchObject({
+      opportunity: opportunity(),
+      reason: "想组队试试",
+      questions: [],
+    });
+    reopened.removeOpportunity(contests.id, "physics-experiment");
+    expect(reopened.getTopic(contests.id)?.opportunities).toHaveLength(0);
+    expect(reopened.getTopic(recognition.id)?.opportunities?.[0]).toMatchObject({
+      reason: "看奖项能否认定",
+      questions: ["学院是否计入综测"],
+    });
+  });
+
+  test("re-saving an opportunity refreshes public fields but keeps the private record", () => {
+    const store = createExplorationStore(new MemoryStorage());
+    const topic = store.createTopic({ name: "竞赛" });
+    store.saveOpportunity(topic.id, opportunity(), { reason: "原有理由" });
+    store.updateOpportunity(topic.id, "physics-experiment", {
+      questions: ["需要几人"],
+    });
+    store.saveOpportunity(
+      topic.id,
+      { ...opportunity(), period: "2027 年" },
+      {
+        reason: "不应覆盖",
+      },
+    );
+    expect(store.getTopic(topic.id)?.opportunities).toEqual([
+      expect.objectContaining({
+        opportunity: { ...opportunity(), period: "2027 年" },
+        reason: "原有理由",
+        questions: ["需要几人"],
+      }),
+    ]);
+  });
+
+  test("loads topics saved before opportunities existed and rejects incomplete ones", () => {
+    const storage = new MemoryStorage();
+    storage.setItem(
+      EXPLORATION_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        topics: [
+          {
+            id: "legacy",
+            name: "旧主题",
+            question: "",
+            preferences: "",
+            createdAt: "2026-10-01T00:00:00.000Z",
+            updatedAt: "2026-10-01T00:00:00.000Z",
+            candidates: [],
+          },
+        ],
+      }),
+    );
+    const store = createExplorationStore(storage);
+    expect(store.getTopic("legacy")?.opportunities).toBeUndefined();
+    store.saveOpportunity("legacy", opportunity());
+    expect(store.getTopic("legacy")?.opportunities).toHaveLength(1);
+
+    const invalid = { ...opportunity(), entryUrl: "javascript:alert(1)" };
+    expect(() => store.saveOpportunity("legacy", invalid)).toThrow("入口不完整");
+    expect(() => store.updateOpportunity("legacy", "missing", { reason: "x" })).toThrow(
+      "不在这个主题",
+    );
+  });
 });
+
+function opportunity(): OpportunitySnapshot {
+  return {
+    opportunityId: "physics-experiment",
+    name: "物理实验竞赛",
+    types: ["competition"],
+    period: "2026 年",
+    summary: "含创新作品与讲课视频类别。",
+    entryUrl: "https://example.org/notice",
+    checkedAt: "2026-09-23",
+  };
+}
