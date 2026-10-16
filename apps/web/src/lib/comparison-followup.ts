@@ -1,17 +1,20 @@
-import type { ComparisonPerspective } from "./advisor-comparison";
+import type { AnyComparisonPerspective } from "./advisor-comparison";
 import type { Advisor } from "./advisors";
 import type { ExplorationTopic, SourceSnapshot } from "./exploration-store";
 
-const searchTerms: Record<ComparisonPerspective, string> = {
+const searchTerms: Record<AnyComparisonPerspective, string> = {
   research: "近期研究 论文",
   graduate: "研究生招生 PhD admission",
   "short-term": "本科科研 RA visiting students",
+  role: "实习 岗位职责 requirements",
+  growth: "转正 培养 return offer",
+  practical: "实习时间 工作地点 招聘要求",
 };
 
 /** Start with public candidate fields; private topic notes are never query input. */
 export function getFollowupQuery(
   advisor: Advisor,
-  perspective: ComparisonPerspective,
+  perspective: AnyComparisonPerspective,
 ): string {
   return `${advisor.name} ${advisor.institution} ${searchTerms[perspective]}`;
 }

@@ -1,3 +1,4 @@
+import internshipBatchOctober16 from "../data/internship-batch-2026-10-16.json";
 import recruitmentBatchOctober4 from "../data/xhs-recruitment-2026-10-04.json";
 import recruitmentBatchOctober5 from "../data/xhs-recruitment-2026-10-05.json";
 import { mergeCollectedAdvisors, parseCollectedBatch } from "./collected-batch";
@@ -100,14 +101,24 @@ const sampleAdvisors: Advisor[] = [
   },
 ];
 
-export const collectedBatches = [
+export const advisorBatches = [
   parseCollectedBatch(recruitmentBatchOctober4),
   parseCollectedBatch(recruitmentBatchOctober5),
 ];
+
+export const internshipBatches = [parseCollectedBatch(internshipBatchOctober16)];
+
+export const collectedBatches = advisorBatches;
+
 export const advisors: Advisor[] = mergeCollectedAdvisors(
   sampleAdvisors,
-  collectedBatches,
+  advisorBatches,
 );
+
+export const internships: Advisor[] = mergeCollectedAdvisors([], internshipBatches);
+
+export const allOpportunities: Advisor[] = [...advisors, ...internships];
+export const allBatches = [...advisorBatches, ...internshipBatches];
 
 export function sourceDate(date: string): string {
   return new Date(date).toLocaleDateString("zh-CN");

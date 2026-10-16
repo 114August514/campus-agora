@@ -5,8 +5,10 @@ import {
   Button,
   FormControl,
   Heading,
+  Label,
   Link,
   PageLayout,
+  SegmentedControl,
   Select,
   Stack,
   Text,
@@ -24,11 +26,22 @@ import { ExploreHome } from "../components/ExploreHome";
 import { OpportunityBrowser } from "../components/OpportunityBrowser";
 import { SourceView } from "../components/SourceView";
 import {
+  type AnyComparisonFocus,
+  type AnyComparisonPerspective,
   type ComparisonPerspective,
   type ResearchFocus,
   comparisonSupportedCandidateIds,
+  internshipComparisonSupportedCandidateIds,
 } from "../lib/advisor-comparison";
-import { type Advisor, advisors, collectedBatches, sourceDate } from "../lib/advisors";
+import {
+  type Advisor,
+  advisors,
+  allBatches,
+  allOpportunities,
+  collectedBatches,
+  internships,
+  sourceDate,
+} from "../lib/advisors";
 import { getFollowupQuery, getSupplementalSources } from "../lib/comparison-followup";
 import {
   type CandidateSnapshot,
@@ -39,6 +52,7 @@ import {
 import {
   type Opportunity,
   type OpportunityType,
+  getScenario,
   opportunityTypeText,
 } from "../lib/opportunities";
 
@@ -65,8 +79,8 @@ export function App() {
   const [opportunityType, setOpportunityType] = useState<OpportunityType | "">("");
   const [followupCandidate, setFollowupCandidate] = useState<Advisor>();
   const [comparisonIds, setComparisonIds] = useState<string[]>([]);
-  const [perspective, setPerspective] = useState<ComparisonPerspective>("research");
-  const [focus, setFocus] = useState<ResearchFocus>("open");
+  const [perspective, setPerspective] = useState<AnyComparisonPerspective>("research");
+  const [focus, setFocus] = useState<AnyComparisonFocus>("open");
   const [comparisonDrafts, setComparisonDrafts] = useState<
     Record<string, ComparisonNotes>
   >({});
@@ -76,10 +90,24 @@ export function App() {
   const [error, setError] = useState(initial.error);
   const [message, setMessage] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [candidateScenario, setCandidateScenario] = useState<
+    "all" | "advisor" | "internship"
+  >("all");
   const activeTopic = topics.find((topic) => topic.id === topicId);
-  const advisor = advisors.find((item) => item.candidateId === selectedAdvisor);
+  const activeScenario = getScenario(
+    candidateScenario === "all" ? "advisor" : candidateScenario,
+  );
+  const visibleCandidates =
+    candidateScenario === "advisor"
+      ? advisors
+      : candidateScenario === "internship"
+        ? internships
+        : allOpportunities;
+  const advisor =
+    allOpportunities.find((item) => item.candidateId === selectedAdvisor) ??
+    advisors.find((item) => item.candidateId === selectedAdvisor);
   const comparisonCandidates = comparisonIds.flatMap((id) => {
-    const candidate = advisors.find((item) => item.candidateId === id);
+    const candidate = allOpportunities.find((item) => item.candidateId === id);
     return candidate ? [candidate] : [];
   });
   const comparisonNotes = Object.fromEntries(
@@ -96,7 +124,7 @@ export function App() {
       ];
     }),
   );
-  const latestCollection = collectedBatches.reduce((latest, batch) =>
+  const latestCollection = allBatches.reduce((latest, batch) =>
     Date.parse(batch.completedAt) > Date.parse(latest.completedAt) ? batch : latest,
   );
 
@@ -301,7 +329,7 @@ export function App() {
                       view === "home" || view === "opportunities" || view === "saved"
                         ? ""
                         : view === "compare"
-                          ? `了解${comparisonCandidates.map((item) => item.name).join("、") || "候选导师"}的${perspective === "research" ? "研究内容" : perspective === "graduate" ? "读研参与途径" : "本科科研、RA 或短访途径"}`
+                          ? `了解${comparisonCandidates.map((item) => item.name).join("、") || "候选"}的${perspective === "research" ? "研究内容" : perspective === "graduate" ? "读研参与途径" : perspective === "role" ? "业务职责" : perspective === "growth" ? "转正与成长途径" : "时间要求或参与途径"}`
                           : query,
                   });
                   if (created) {
@@ -334,7 +362,7 @@ export function App() {
           </Stack>
           {view === "home" ? (
             <ExploreHome
-              advisors={advisors}
+              advisors={allOpportunities}
               onOpenAdvisors={() => setView("explore")}
               onOpenAdvisor={(candidateId) => {
                 setSelectedAdvisor(candidateId);
@@ -354,18 +382,48 @@ export function App() {
             />
           ) : view === "explore" ? (
             <>
+              <Stack
+                direction="horizontal"
+                justify="space-between"
+                align="center"
+                wrap="wrap"
+              >
+                <SegmentedControl aria-label="候选场景类型">
+                  <SegmentedControl.Button
+                    selected={candidateScenario === "all"}
+                    onClick={() => setCandidateScenario("all")}
+                  >
+                    {`全部（${allOpportunities.length}）`}
+                  </SegmentedControl.Button>
+                  <SegmentedControl.Button
+                    selected={candidateScenario === "advisor"}
+                    onClick={() => setCandidateScenario("advisor")}
+                  >
+                    {`选导师（${advisors.length}）`}
+                  </SegmentedControl.Button>
+                  <SegmentedControl.Button
+                    selected={candidateScenario === "internship"}
+                    onClick={() => setCandidateScenario("internship")}
+                  >
+                    {`找实习（${internships.length}）`}
+                  </SegmentedControl.Button>
+                </SegmentedControl>
+              </Stack>
               <DiscoveryPanel
                 query={query}
                 onQueryChange={setQuery}
                 canSave={Boolean(activeTopic && initial.store)}
                 onSave={save}
+                scenario={activeScenario}
+                candidateList={visibleCandidates}
               />
               <Stack as="section" gap="normal">
                 <Heading as="h2" variant="small">
                   已有候选资料
                 </Heading>
                 <Text as="p">
-                  共{advisors.length}名候选，包含研究样稿与{collectedBatches.length}
+                  共{visibleCandidates.length}项候选，包含研究样稿、岗位与
+                  {allBatches.length}
                   次预采集资料；最近整理于{sourceDate(latestCollection.completedAt)}。
                   这里复用已保存的资料，不会实时重查。资料范围和仍待确认的信息见候选详情。
                 </Text>
@@ -373,18 +431,33 @@ export function App() {
                   <Button
                     onClick={() => {
                       setComparisonIds([...comparisonSupportedCandidateIds]);
+                      setPerspective("research");
+                      setFocus("open");
                       setView("compare");
                     }}
                   >
-                    比较本次采集的两名候选
+                    比较两名导师候选
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setComparisonIds([...internshipComparisonSupportedCandidateIds]);
+                      setPerspective("role");
+                      setFocus("open");
+                      setView("compare");
+                    }}
+                  >
+                    比较两项实习岗位
                   </Button>
                   <Button onClick={() => setView("compare")}>
                     查看当前比较（{comparisonIds.length}）
                   </Button>
                   {advisor &&
-                    comparisonSupportedCandidateIds.some(
-                      (id) => id === advisor.candidateId,
-                    ) && (
+                    (comparisonSupportedCandidateIds.includes(
+                      advisor.candidateId as (typeof comparisonSupportedCandidateIds)[number],
+                    ) ||
+                      internshipComparisonSupportedCandidateIds.includes(
+                        advisor.candidateId as (typeof internshipComparisonSupportedCandidateIds)[number],
+                      )) && (
                       <Button
                         aria-pressed={comparisonIds.includes(advisor.candidateId)}
                         onClick={() =>
@@ -402,13 +475,20 @@ export function App() {
                     )}
                 </Stack>
                 <ActionList showDividers selectionVariant="single">
-                  {advisors.map((item) => (
+                  {visibleCandidates.map((item) => (
                     <ActionList.Item
                       key={item.candidateId}
                       selected={selectedAdvisor === item.candidateId}
                       onSelect={() => setSelectedAdvisor(item.candidateId)}
                     >
-                      {item.name}
+                      <Stack direction="horizontal" gap="condensed" align="center">
+                        <Text>{item.name}</Text>
+                        <Label
+                          variant={item.type === "internship" ? "primary" : "accent"}
+                        >
+                          {item.type === "internship" ? "实习岗位" : "导师"}
+                        </Label>
+                      </Stack>
                       <ActionList.Description variant="block">
                         {item.institution}。{item.research}
                       </ActionList.Description>
@@ -452,33 +532,55 @@ export function App() {
               />
             </Stack>
           ) : view === "compare" ? (
-            <AdvisorComparison
-              candidates={comparisonCandidates}
-              perspective={perspective}
-              focus={focus}
-              topicName={initial.store ? activeTopic?.name : undefined}
-              notes={comparisonNotes}
-              supplementalSources={Object.fromEntries(
-                comparisonCandidates.map((candidate) => [
-                  candidate.candidateId,
-                  getSupplementalSources(candidate, activeTopic),
-                ]),
-              )}
-              onFollowup={startFollowup}
-              onPerspectiveChange={setPerspective}
-              onFocusChange={setFocus}
-              onRemove={(id) =>
-                setComparisonIds((ids) => ids.filter((item) => item !== id))
-              }
-              onReturn={() => setView("explore")}
-              onNotesChange={(id, notes) =>
-                setComparisonDrafts((drafts) => ({
-                  ...drafts,
-                  [`${topicId}:${id}`]: notes,
-                }))
-              }
-              onSave={saveComparison}
-            />
+            <Stack as="section" gap="normal">
+              <Stack direction="horizontal" wrap="wrap" align="center">
+                <Button
+                  onClick={() => {
+                    setComparisonIds([...comparisonSupportedCandidateIds]);
+                    setPerspective("research");
+                    setFocus("open");
+                  }}
+                >
+                  比较导师候选（江祖铭 / 宋卓然）
+                </Button>
+                <Button
+                  onClick={() => {
+                    setComparisonIds([...internshipComparisonSupportedCandidateIds]);
+                    setPerspective("role");
+                    setFocus("open");
+                  }}
+                >
+                  比较实习岗位（上海 AI 实验室 / MSRA）
+                </Button>
+              </Stack>
+              <AdvisorComparison
+                candidates={comparisonCandidates}
+                perspective={perspective}
+                focus={focus}
+                topicName={initial.store ? activeTopic?.name : undefined}
+                notes={comparisonNotes}
+                supplementalSources={Object.fromEntries(
+                  comparisonCandidates.map((candidate) => [
+                    candidate.candidateId,
+                    getSupplementalSources(candidate, activeTopic),
+                  ]),
+                )}
+                onFollowup={startFollowup}
+                onPerspectiveChange={setPerspective}
+                onFocusChange={setFocus}
+                onRemove={(id) =>
+                  setComparisonIds((ids) => ids.filter((item) => item !== id))
+                }
+                onReturn={() => setView("explore")}
+                onNotesChange={(id, notes) =>
+                  setComparisonDrafts((drafts) => ({
+                    ...drafts,
+                    [`${topicId}:${id}`]: notes,
+                  }))
+                }
+                onSave={saveComparison}
+              />
+            </Stack>
           ) : (
             <Stack as="section" gap="normal">
               <Heading as="h2" variant="small">
@@ -618,16 +720,25 @@ function AdvisorDetail({
   const [question, setQuestion] = useState("");
   return (
     <Stack as="section" gap="normal">
-      <Heading as="h2" variant="small">
-        {advisor.name}
-      </Heading>
+      <Stack direction="horizontal" gap="condensed" align="center">
+        <Heading as="h2" variant="small">
+          {advisor.name}
+        </Heading>
+        <Label variant={advisor.type === "internship" ? "primary" : "accent"}>
+          {advisor.type === "internship" ? "实习岗位" : "导师"}
+        </Label>
+      </Stack>
       <Text as="p">
-        <Text weight="semibold">研究问题：</Text>
+        <Text weight="semibold">
+          {advisor.type === "internship" ? "岗位方向与课题：" : "研究问题："}
+        </Text>
         {advisor.research}
       </Text>
       <Text as="p">{advisor.approach}</Text>
       <Text as="p">
-        <Text weight="semibold">参与途径：</Text>
+        <Text weight="semibold">
+          {advisor.type === "internship" ? "入职与出勤要求：" : "参与途径："}
+        </Text>
         {advisor.participation}
       </Text>
       <Text as="p">
@@ -686,9 +797,14 @@ function SavedCandidate({
   const [question, setQuestion] = useState(record.questions.join("\n"));
   return (
     <Stack as="section" gap="normal">
-      <Heading as="h3" variant="small">
-        {record.candidate.name} · {record.candidate.institution}
-      </Heading>
+      <Stack direction="horizontal" gap="condensed" align="center">
+        <Heading as="h3" variant="small">
+          {record.candidate.name} · {record.candidate.institution}
+        </Heading>
+        <Label variant={record.candidate.type === "internship" ? "primary" : "accent"}>
+          {record.candidate.type === "internship" ? "实习岗位" : "导师"}
+        </Label>
+      </Stack>
       <Text as="p">{record.candidate.research}</Text>
       {record.candidate.sources.map((source, index) => (
         <SourceView

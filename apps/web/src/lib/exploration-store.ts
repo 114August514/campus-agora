@@ -28,6 +28,10 @@ export interface CandidateSnapshot {
   institution: string;
   research: string;
   sources: SourceSnapshot[];
+  type?: string;
+  title?: string;
+  description?: string;
+  metadata?: Record<string, string>;
 }
 
 export interface TopicCandidate {
@@ -261,6 +265,10 @@ function cloneCandidate(candidate: CandidateSnapshot): CandidateSnapshot {
     name: candidate.name,
     institution: candidate.institution,
     research: candidate.research,
+    ...(candidate.type ? { type: candidate.type } : {}),
+    ...(candidate.title ? { title: candidate.title } : {}),
+    ...(candidate.description ? { description: candidate.description } : {}),
+    ...(candidate.metadata ? { metadata: { ...candidate.metadata } } : {}),
     sources: candidate.sources.map((source) => ({
       url: source.url,
       ...(source.lookupUrl !== undefined ? { lookupUrl: source.lookupUrl } : {}),
