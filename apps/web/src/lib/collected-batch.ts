@@ -11,6 +11,7 @@ export interface CollectedBatch {
   status: "complete" | "partial" | "failed";
   warnings: string[];
   advisors: Advisor[];
+  opportunities?: Advisor[];
 }
 
 /** Reuse each candidate once while retaining independently captured sources. */
@@ -211,6 +212,7 @@ export function parseCollectedBatch(input: unknown): CollectedBatch {
       "status",
       "warnings",
       "advisors",
+      "opportunities",
     ],
     "批次",
   );
@@ -224,9 +226,10 @@ export function parseCollectedBatch(input: unknown): CollectedBatch {
   }
   const batchId = text(record.batchId, "批次标识");
   const query = text(record.query, "查询", true);
-  if (!Array.isArray(record.advisors)) throw new Error("预采集候选需要是数组。");
+  const rawList = record.opportunities ?? record.advisors;
+  if (!Array.isArray(rawList)) throw new Error("预采集候选需要是数组。");
   const ids = new Set<string>();
-  const advisors = record.advisors.map((value): Advisor => {
+  const advisors = rawList.map((value): Advisor => {
     const advisor = object(
       value,
       [
@@ -238,6 +241,10 @@ export function parseCollectedBatch(input: unknown): CollectedBatch {
         "participation",
         "unknowns",
         "sources",
+        "type",
+        "title",
+        "description",
+        "metadata",
       ],
       "候选",
     );
@@ -255,6 +262,14 @@ export function parseCollectedBatch(input: unknown): CollectedBatch {
       approach: text(advisor.approach, "工作说明", true),
       participation: text(advisor.participation, "参与说明", true),
       unknowns: text(advisor.unknowns, "候选未知事项", true),
+      ...(advisor.type ? { type: text(advisor.type, "候选类型") } : {}),
+      ...(advisor.title ? { title: text(advisor.title, "标题") } : {}),
+      ...(advisor.description
+        ? { description: text(advisor.description, "描述") }
+        : {}),
+      ...(advisor.metadata && typeof advisor.metadata === "object"
+        ? { metadata: advisor.metadata as Record<string, string> }
+        : {}),
       sources: advisor.sources.map((value) => source(value, batchId, query)),
     };
   });
@@ -268,5 +283,6 @@ export function parseCollectedBatch(input: unknown): CollectedBatch {
     status: record.status as CollectedBatch["status"],
     warnings: texts(record.warnings, "读取限制"),
     advisors,
+    opportunities: advisors,
   };
 }

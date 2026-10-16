@@ -11,8 +11,9 @@ import {
   TextInput,
 } from "@primer/react";
 import { useRef, useState } from "react";
-import { type Advisor, advisors } from "../lib/advisors";
+import { type Advisor, advisors, allOpportunities } from "../lib/advisors";
 import type { CandidateSnapshot, SourceSnapshot } from "../lib/exploration-store";
+import { type ScenarioDefinition, getScenario } from "../lib/opportunities";
 import { SourceView } from "./SourceView";
 
 interface Props {
@@ -22,6 +23,8 @@ interface Props {
   canSave: boolean;
   targetCandidate?: Advisor;
   saveTargetName?: string;
+  scenario?: ScenarioDefinition;
+  candidateList?: Advisor[];
 }
 
 export function DiscoveryPanel({
@@ -31,7 +34,10 @@ export function DiscoveryPanel({
   canSave,
   targetCandidate,
   saveTargetName,
+  scenario,
+  candidateList = allOpportunities,
 }: Props) {
+  const activeScenario = scenario ?? getScenario("advisor");
   const [result, setResult] = useState<DiscoveryResponse | null>(null);
   const [runningQuery, setRunningQuery] = useState("");
   const [error, setError] = useState("");
@@ -81,13 +87,23 @@ export function DiscoveryPanel({
       >
         <Stack gap="condensed">
           <FormControl>
-            <FormControl.Label>想了解什么研究或哪位导师？</FormControl.Label>
+            <FormControl.Label>
+              {targetCandidate
+                ? `围绕${targetCandidate.name}补查`
+                : activeScenario.searchPlaceholder
+                  ? `想了解什么${activeScenario.shortLabel}？`
+                  : "想了解什么研究或哪位导师？"}
+            </FormControl.Label>
             <TextInput
               block
               autoFocus={Boolean(targetCandidate)}
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
-              placeholder="输入公开关键词或学术网页链接"
+              placeholder={
+                targetCandidate
+                  ? "输入公开关键词或学术网页链接"
+                  : activeScenario.searchPlaceholder
+              }
             />
             <FormControl.Caption>
               关键词会发送到DuckDuckGo；公开链接直接从原站读取。私人笔记不会自动附带，请只输入公开信息。
@@ -174,28 +190,34 @@ export function DiscoveryPanel({
           )}
           {result.sources.length > 0 && !targetCandidate && (
             <FormControl>
-              <FormControl.Label>需要保存时，将依据关联到哪位候选？</FormControl.Label>
+              <FormControl.Label>
+                需要保存时，将依据关联到哪位{activeScenario.candidateEntityName}？
+              </FormControl.Label>
               <Select
                 value={candidateId}
                 onChange={(event) => setCandidateId(event.target.value)}
               >
-                <Select.Option value="">选择候选</Select.Option>
-                <Select.Option value="new">新候选（自行填写）</Select.Option>
-                {advisors.map((advisor) => (
-                  <Select.Option key={advisor.candidateId} value={advisor.candidateId}>
-                    {advisor.name}
+                <Select.Option value="">
+                  选择{activeScenario.candidateEntityName}
+                </Select.Option>
+                <Select.Option value="new">
+                  新{activeScenario.candidateEntityName}（自行填写）
+                </Select.Option>
+                {candidateList.map((item) => (
+                  <Select.Option key={item.candidateId} value={item.candidateId}>
+                    {item.name}（{item.institution}）
                   </Select.Option>
                 ))}
               </Select>
               <FormControl.Caption>
-                由你判断关系；学校目录或论文共同作者不自动认作实际指导人。
+                由你判断关系；公开目录或网页提及不自动认作确定选项。
               </FormControl.Caption>
             </FormControl>
           )}
           {result.sources.length > 0 && !targetCandidate && candidateId === "new" && (
             <Stack gap="condensed">
               <FormControl required>
-                <FormControl.Label>导师姓名</FormControl.Label>
+                <FormControl.Label>{activeScenario.nameLabel}</FormControl.Label>
                 <TextInput
                   block
                   value={candidateName}
@@ -204,7 +226,7 @@ export function DiscoveryPanel({
                 />
               </FormControl>
               <FormControl required>
-                <FormControl.Label>所属机构</FormControl.Label>
+                <FormControl.Label>{activeScenario.institutionLabel}</FormControl.Label>
                 <TextInput
                   block
                   value={institution}
@@ -213,7 +235,9 @@ export function DiscoveryPanel({
                 />
               </FormControl>
               <FormControl>
-                <FormControl.Label>研究方向（可不填）</FormControl.Label>
+                <FormControl.Label>
+                  {activeScenario.researchLabel}（可不填）
+                </FormControl.Label>
                 <TextInput
                   block
                   value={research}
@@ -221,7 +245,7 @@ export function DiscoveryPanel({
                   maxLength={500}
                 />
                 <FormControl.Caption>
-                  按已读依据填写；目录中的人和论文作者未必是招生导师。
+                  按已读依据填写；公开信息未提及的内容保留为未知。
                 </FormControl.Caption>
               </FormControl>
             </Stack>
@@ -252,10 +276,11 @@ export function DiscoveryPanel({
                             name: candidateName.trim(),
                             institution: institution.trim(),
                             research: research.trim(),
+                            type: activeScenario.type,
                             sources: [],
                           }
-                        : advisors.find(
-                            (advisor) => advisor.candidateId === candidateId,
+                        : candidateList.find(
+                            (item) => item.candidateId === candidateId,
                           ));
                     if (candidate) onSave({ ...candidate, sources: [snapshot] });
                   }}

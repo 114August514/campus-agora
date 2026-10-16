@@ -10,10 +10,17 @@ import {
 } from "@primer/react";
 import { type Column, DataTable } from "@primer/react/experimental";
 import {
+  type AnyComparisonFocus,
+  type AnyComparisonPerspective,
   type ComparisonPerspective,
+  type InternshipFocus,
+  type InternshipPerspective,
   type ResearchFocus,
   buildComparisonRows,
+  buildInternshipComparisonRows,
+  buildInternshipFocusHints,
   buildResearchFocusHints,
+  isInternshipComparison,
 } from "../lib/advisor-comparison";
 import type { Advisor } from "../lib/advisors";
 import type { SourceSnapshot } from "../lib/exploration-store";
@@ -48,25 +55,30 @@ export function AdvisorComparison({
   onSave,
 }: {
   candidates: Advisor[];
-  perspective: ComparisonPerspective;
-  focus: ResearchFocus;
+  perspective: AnyComparisonPerspective;
+  focus: AnyComparisonFocus;
   topicName?: string;
   notes: Record<string, ComparisonNotes>;
   supplementalSources: Record<string, SourceSnapshot[]>;
   onFollowup: (advisor: Advisor) => void;
-  onPerspectiveChange: (value: ComparisonPerspective) => void;
-  onFocusChange: (value: ResearchFocus) => void;
+  onPerspectiveChange: (value: AnyComparisonPerspective) => void;
+  onFocusChange: (value: AnyComparisonFocus) => void;
   onRemove: (candidateId: string) => void;
   onReturn: () => void;
   onNotesChange: (candidateId: string, value: ComparisonNotes) => void;
   onSave: (advisor: Advisor, notes: ComparisonNotes) => void;
 }) {
-  const rows = buildComparisonRows(candidates, perspective);
-  const hints = buildResearchFocusHints(candidates, focus);
+  const isInternship = isInternshipComparison(candidates);
+  const rows = isInternship
+    ? buildInternshipComparisonRows(candidates, perspective as InternshipPerspective)
+    : buildComparisonRows(candidates, perspective as ComparisonPerspective);
+  const hints = isInternship
+    ? buildInternshipFocusHints(candidates, focus as InternshipFocus)
+    : buildResearchFocusHints(candidates, focus as ResearchFocus);
   const columns: Column<ComparisonItem>[] = [
     {
       id: "candidate",
-      header: "候选",
+      header: isInternship ? "岗位" : "候选",
       rowHeader: true,
       width: 96,
       renderCell: ({ advisor }) => (
@@ -114,10 +126,12 @@ export function AdvisorComparison({
     <Stack as="section" gap="spacious">
       <Stack gap="normal">
         <Heading as="h2" variant="small">
-          候选比较
+          {isInternship ? "实习岗位比较" : "候选比较"}
         </Heading>
         <Text as="p">
-          这次比较复用2026年10月5日采集的整理摘要。招生年份和途径按来源分别说明，当前名额与实际指导体验仍待了解。
+          {isInternship
+            ? "这次比较复用2026年10月16日采集整理的实习岗位信息。岗位招聘要求与入职途径按来源分别说明，当期剩余HC与转正指标仍需面试确认。"
+            : "这次比较复用2026年10月5日采集的整理摘要。招生年份和途径按来源分别说明，当前名额与实际指导体验仍待了解。"}
         </Text>
         <Stack direction="horizontal" wrap="wrap" align="center">
           <Button onClick={onReturn}>返回候选资料</Button>
@@ -140,27 +154,57 @@ export function AdvisorComparison({
           <Stack direction={{ narrow: "vertical", regular: "horizontal" }} gap="normal">
             <FormControl>
               <FormControl.Label>现在想了解什么</FormControl.Label>
-              <Select
-                value={perspective}
-                onChange={(event) =>
-                  onPerspectiveChange(event.target.value as ComparisonPerspective)
-                }
-              >
-                <Select.Option value="research">研究内容</Select.Option>
-                <Select.Option value="graduate">读研参与途径</Select.Option>
-                <Select.Option value="short-term">本科科研、RA 或短访</Select.Option>
-              </Select>
+              {isInternship ? (
+                <Select
+                  value={perspective}
+                  onChange={(event) =>
+                    onPerspectiveChange(event.target.value as InternshipPerspective)
+                  }
+                >
+                  <Select.Option value="role">业务职责与课题</Select.Option>
+                  <Select.Option value="growth">转正与成长途径</Select.Option>
+                  <Select.Option value="practical">时间地点与要求</Select.Option>
+                </Select>
+              ) : (
+                <Select
+                  value={perspective}
+                  onChange={(event) =>
+                    onPerspectiveChange(event.target.value as ComparisonPerspective)
+                  }
+                >
+                  <Select.Option value="research">研究内容</Select.Option>
+                  <Select.Option value="graduate">读研参与途径</Select.Option>
+                  <Select.Option value="short-term">本科科研、RA 或短访</Select.Option>
+                </Select>
+              )}
             </FormControl>
             <FormControl>
-              <FormControl.Label>研究关注点（可不选）</FormControl.Label>
-              <Select
-                value={focus}
-                onChange={(event) => onFocusChange(event.target.value as ResearchFocus)}
-              >
-                <Select.Option value="open">暂未明确</Select.Option>
-                <Select.Option value="software">软件可靠性与安全</Select.Option>
-                <Select.Option value="ai-systems">AI 系统与 GPU 优化</Select.Option>
-              </Select>
+              <FormControl.Label>
+                {isInternship ? "技术侧重点（可不选）" : "研究关注点（可不选）"}
+              </FormControl.Label>
+              {isInternship ? (
+                <Select
+                  value={focus}
+                  onChange={(event) =>
+                    onFocusChange(event.target.value as InternshipFocus)
+                  }
+                >
+                  <Select.Option value="open">暂未明确</Select.Option>
+                  <Select.Option value="systems">大规模分布式系统</Select.Option>
+                  <Select.Option value="evaluation">大模型评测与对齐</Select.Option>
+                </Select>
+              ) : (
+                <Select
+                  value={focus}
+                  onChange={(event) =>
+                    onFocusChange(event.target.value as ResearchFocus)
+                  }
+                >
+                  <Select.Option value="open">暂未明确</Select.Option>
+                  <Select.Option value="software">软件可靠性与安全</Select.Option>
+                  <Select.Option value="ai-systems">AI 系统与 GPU 优化</Select.Option>
+                </Select>
+              )}
             </FormControl>
           </Stack>
           {candidates.length === 1 && (

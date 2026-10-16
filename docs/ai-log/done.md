@@ -1,6 +1,6 @@
 # AI Log Done
 
-Last updated: 2026-10-15
+Last updated: 2026-10-16
 
 This file records completed agent-visible work. Keep entries factual and link
 them to commits, files, and verification commands where possible.
@@ -18,6 +18,39 @@ them to commits, files, and verification commands where possible.
 ```
 
 ## Completed
+
+### 2026-10-16 - Integrate authentic internship batch and multi-perspective comparison engine
+
+- Result: Integrated authentic internship dataset (`apps/web/src/data/internship-batch-2026-10-16.json` covering Shanghai AI Lab and MSRA system/eval roles) with the multi-type opportunities architecture on `main`. Extended candidate snapshots and parsing with candidate `type`, `title`, `description`, `metadata`. Built a dedicated source-bound internship comparison engine with role-specific perspectives (`role` 业务职责与课题, `growth` 转正与成长途径, `practical` 时间地点与要求) and technical focus options (`systems` 大规模分布式系统, `evaluation` 大模型评测与对齐). Added candidate scenario switcher (`全部` / `选导师` / `找实习`) and quick-switch comparison actions in both Explore and Compare views.
+- Changed:
+  - `apps/web/src/data/internship-batch-2026-10-16.json`: authentic 2026-10-16 partial batch with Shanghai AI Lab and MSRA positions.
+  - `apps/web/src/lib/collected-batch.ts`: accept `opportunities` array and candidate `type`, `title`, `description`, `metadata`.
+  - `apps/web/src/lib/exploration-store.ts`: CandidateSnapshot extended with type and metadata; cloning and persistence preserve these attributes.
+  - `apps/web/src/lib/advisors.ts`: exports `internships`, `allOpportunities`, `allBatches`.
+  - `apps/web/src/lib/advisor-comparison.ts`: added `InternshipPerspective`, `InternshipFocus`, unified `AnyComparisonPerspective`, `AnyComparisonFocus`, internship profiles and comparison builders.
+  - `apps/web/src/lib/comparison-followup.ts`: supports `AnyComparisonPerspective` for query seeding.
+  - `apps/web/src/lib/opportunities.ts`: appended authentic internship positions to opportunities list and added scenario definitions (`SCENARIOS`, `getScenario`).
+  - `apps/web/src/components/AdvisorComparison.tsx`: dynamically renders internship comparison tables, controls, and focus hints.
+  - `apps/web/src/components/DiscoveryPanel.tsx`: scenario-aware placeholders and candidate list.
+  - `apps/web/src/components/ExploreHome.tsx`: candidate section heading updated to "导师与岗位候选".
+  - `apps/web/src/app/App.tsx`: scenario switcher segmented controls, comparison quick-switch buttons, candidate type badges, and contextual detail labels.
+  - `apps/web/tests/internship-comparison.test.ts`: test suite for internship comparison engine.
+  - `apps/web/tests/exploration-store.test.ts`: tests for candidate snapshots with type/metadata.
+  - `apps/web/tests/opportunities.test.ts`: tests for scenario fallback and opportunity items.
+- Verification:
+  - `bun run discovery:validate apps/web/src/data/internship-batch-2026-10-16.json` (3 positions, 4 sources, partial batch validated).
+  - `bun run ci:frontend` (65 tests pass across 8 test suites, TypeScript typecheck, Biome linting, Vite production build).
+  - `cargo test --workspace` (20 tests passed).
+  - `git diff --check` passed with 0 errors.
+- Follow-up: Changes are verified on branch `feat/integrate-internship-comparison` ready for review or PR.
+
+### 2026-10-16 - Review and squash merge PR #16
+
+- Result: At the user's request, reviewed and squash merged [PR #16](https://github.com/114August514/campus-agora/pull/16) into main as 16767aa24d308e727d176aa48bc85300e5726bf6. Fresh GitHub reads confirm MERGED and the main ref points to this commit. The merge request matched the reviewed head 8bad5da6144dfd49d65cfa398d9866cbc9610e73.
+- Review: Focused independent review confirmed multi-type opportunity browsing (23 sourced opportunities across 8 categories), exploration home entry search, type-based filtering with ended-batch historical indicators, backward-compatible topic opportunity persistence with isolated private reasons/questions, and strict Primer component/layout compliance. No blocking issue or UI rule violation found.
+- Verification: CI run 38596754235 belongs to the exact PR head; frontend, backend, desktop, contract, docs, and container all succeeded. Fresh local `bun run ci:frontend` (59 tests across 7 files, typecheck, Biome lint, Vite build), `cargo test --workspace` (20 tests), and `git diff --check` passed.
+- Local integration: Fetched origin/main, confirmed old local main was its ancestor, then moved local main to 16767aa via fast-forward. Existing feature branches (including feat/internship-deep-comparison) and untracked tools/prototypes/opportunities.html were preserved.
+- Handoff: Merge-record updates to AI logs remain local. Next: integrate the internship deep comparison and authentic batch from feat/internship-deep-comparison on top of the newly expanded multi-type base.
 
 ### 2026-10-15 - Extend the Web beyond advisors: multi-type entries and saved opportunities
 

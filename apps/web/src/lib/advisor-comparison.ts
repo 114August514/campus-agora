@@ -4,6 +4,12 @@ import type { SourceSnapshot } from "./exploration-store";
 export type ComparisonPerspective = "research" | "graduate" | "short-term";
 export type ResearchFocus = "open" | "software" | "ai-systems";
 
+export type InternshipPerspective = "role" | "growth" | "practical";
+export type InternshipFocus = "open" | "systems" | "evaluation";
+
+export type AnyComparisonPerspective = ComparisonPerspective | InternshipPerspective;
+export type AnyComparisonFocus = ResearchFocus | InternshipFocus;
+
 export interface ComparisonCell {
   candidateId: string;
   text: string;
@@ -19,6 +25,11 @@ export interface ComparisonRow {
 export const comparisonSupportedCandidateIds = [
   "zuming-jiang",
   "zhuoran-song",
+] as const;
+
+export const internshipComparisonSupportedCandidateIds = [
+  "sh-ai-lab-eval-intern",
+  "msra-systems-intern",
 ] as const;
 
 interface SourceBoundText {
@@ -220,5 +231,214 @@ export function buildResearchFocusHints(
   if (focus === "open") return [];
   return advisors.map((advisor) =>
     bindText(advisor, profiles[advisor.candidateId]?.focus[focus]),
+  );
+}
+
+const internshipBatchId = "internship-batch-2026-10-16";
+const internshipCollectedAt = "2026-10-16T12:00:00.000Z";
+
+const shLab = {
+  careers: "https://www.shlab.org.cn/careers/intern",
+  github: "https://github.com/open-compass/opencompass",
+};
+const msra = {
+  careers:
+    "https://www.microsoft.com/en-us/research/lab/microsoft-research-asia/careers/",
+};
+
+interface InternshipComparisonProfile {
+  role: SourceBoundText;
+  methods: SourceBoundText;
+  routes: Record<Exclude<InternshipPerspective, "role">, SourceBoundText>;
+  unknowns: SourceBoundText;
+  next: Record<InternshipPerspective, SourceBoundText>;
+  focus: Record<Exclude<InternshipFocus, "open">, SourceBoundText>;
+}
+
+const internshipProfiles: Record<string, InternshipComparisonProfile> = {
+  "sh-ai-lab-eval-intern": {
+    role: {
+      text: "开源大模型全生命周期评测体系、红蓝对抗与安全对齐工具链开发；参与 OpenCompass 核心模块研发。",
+      urls: [shLab.careers, shLab.github],
+    },
+    methods: {
+      text: "基于 Python 与 PyTorch 进行大模型探针设计、越狱对抗防御与安全基准测试；结合算力集群开展实验。",
+      urls: [shLab.careers, shLab.github],
+    },
+    routes: {
+      growth: {
+        text: "提供高算力集群支持与实验室资深研究员联合指导；支持开源社区贡献与高水平学术论文发表。校招转正需依当届统招政策与名额确定。",
+        urls: [shLab.careers],
+      },
+      practical: {
+        text: "要求每周现场出勤至少 4 天，连续实习不少于 4 个月。地点在上海徐汇。异地房补与餐补需与 HR 进一步沟通。",
+        urls: [shLab.careers],
+      },
+    },
+    unknowns: {
+      text: "当期转正指标、异地住宿补贴标准与具体业务团队归属待 HR 进一步确认。",
+      urls: [shLab.careers],
+    },
+    next: {
+      role: {
+        text: "可先查阅 OpenCompass 开源仓库的代码与评测基准，评估是否对评测套件与安全攻防感兴趣。",
+        urls: [shLab.github],
+      },
+      growth: {
+        text: "若看重学术产出，可先确认意向课题方向及发表署名规范；若看重就业转正，需提前询问往届转正比例。",
+        urls: [shLab.careers],
+      },
+      practical: {
+        text: "需核实本学期课业与学分安排是否支持全职出勤，并向学院/导师沟通校外实习报备。",
+        urls: [shLab.careers],
+      },
+    },
+    focus: {
+      systems: {
+        text: "如果你更关注超大规模分布式训练与底层系统，该岗位的评测与对齐工具链可能更偏应用与算法层。",
+        urls: [shLab.github],
+      },
+      evaluation: {
+        text: "如果你关注大模型能力评测、安全基准与对齐，上海AI实验室的 OpenCompass 项目是国内核心标杆之一。",
+        urls: [shLab.careers, shLab.github],
+      },
+    },
+  },
+  "msra-systems-intern": {
+    role: {
+      text: "大规模异构 GPU/NPU 集群分布式训练系统、通信拓扑优化与显存调度算法研发。",
+      urls: [msra.careers],
+    },
+    methods: {
+      text: "结合 DeepSpeed/Megatron 等分布式框架，进行跨节点网络通信优化、长序列上下文加速与容错系统设计。",
+      urls: [msra.careers],
+    },
+    routes: {
+      growth: {
+        text: "Tomorrow's Partner 高校联合培养模式，配备资深系统研究员一对一 Mentor，学术研究与工程系统实践并重。转正通道通常通过校招实习生绿色通道推荐。",
+        urls: [msra.careers],
+      },
+      practical: {
+        text: "要求每周现场至少 4 天，连续实习不少于 3 个月。地点在北京。全日制实习需提供导师书面同意书。",
+        urls: [msra.careers],
+      },
+    },
+    unknowns: {
+      text: "具体入职月份要求、专属卡位与算力配额以具体课题组最终安排为准。",
+      urls: [msra.careers],
+    },
+    next: {
+      role: {
+        text: "建议先阅读 MSRA 近年在 OSDI/SOSP/NSDI 上的分布式系统近期工作，评估技术契合度。",
+        urls: [msra.careers],
+      },
+      growth: {
+        text: "了解联合培养 Mentor 的学术发表方向与往届实习生毕业去向；明确研究论文与工程代码的产出预期。",
+        urls: [msra.careers],
+      },
+      practical: {
+        text: "提前取得所在高校导师签字的知情同意书，确认实习期间能够兼顾学业与考勤。",
+        urls: [msra.careers],
+      },
+    },
+    focus: {
+      systems: {
+        text: "如果你关注大规模异构硬件、分布式通信优化与算力集群调度，MSRA 系统组具有顶尖的学术积累与工程落地场景。",
+        urls: [msra.careers],
+      },
+      evaluation: {
+        text: "如果你更偏好大模型评测与具体应用对齐，该岗位的底层系统通信与显存调度相对偏底层硬核系统架构。",
+        urls: [msra.careers],
+      },
+    },
+  },
+};
+
+function bindInternshipText(advisor: Advisor, claim?: SourceBoundText): ComparisonCell {
+  if (!claim) return { candidateId: advisor.candidateId, text: "待了解", sources: [] };
+  const verifiedSources = claim.urls
+    .map((url) =>
+      advisor.sources.find(
+        (source) =>
+          source.url === url &&
+          source.collection?.batchId === internshipBatchId &&
+          source.collectedAt === internshipCollectedAt,
+      ),
+    )
+    .filter((source): source is SourceSnapshot => Boolean(source));
+  if (verifiedSources.length !== claim.urls.length) {
+    return { candidateId: advisor.candidateId, text: "待了解", sources: [] };
+  }
+  return {
+    candidateId: advisor.candidateId,
+    text: claim.text,
+    sources: verifiedSources,
+  };
+}
+
+export function isInternshipComparison(candidates: Advisor[]): boolean {
+  return (
+    candidates.length > 0 &&
+    candidates.every(
+      (c) =>
+        c.type === "internship" ||
+        internshipComparisonSupportedCandidateIds.includes(
+          c.candidateId as (typeof internshipComparisonSupportedCandidateIds)[number],
+        ),
+    )
+  );
+}
+
+export function buildInternshipComparisonRows(
+  advisors: Advisor[],
+  perspective: InternshipPerspective,
+): ComparisonRow[] {
+  const rows: {
+    id: string;
+    label: string;
+    field:
+      | keyof Pick<InternshipComparisonProfile, "role" | "methods" | "unknowns">
+      | "routes"
+      | "next";
+  }[] = [
+    { id: "role", label: "职责与课题", field: "role" },
+    { id: "methods", label: "技术要求与方法", field: "methods" },
+  ];
+  if (perspective !== "role") {
+    rows.push({
+      id: "route",
+      label: perspective === "growth" ? "转正与成长途径" : "时间地点与要求",
+      field: "routes",
+    });
+  }
+  rows.push(
+    { id: "unknowns", label: "还有哪些未知", field: "unknowns" },
+    { id: "next", label: "可以继续了解什么", field: "next" },
+  );
+  return rows.map(({ id, label, field }) => ({
+    id,
+    label,
+    cells: advisors.map((advisor) => {
+      const profile = internshipProfiles[advisor.candidateId];
+      let claim: SourceBoundText | undefined;
+      if (field === "routes") {
+        if (perspective !== "role") claim = profile?.routes[perspective];
+      } else if (field === "next") {
+        claim = profile?.next[perspective];
+      } else {
+        claim = profile?.[field];
+      }
+      return bindInternshipText(advisor, claim);
+    }),
+  }));
+}
+
+export function buildInternshipFocusHints(
+  advisors: Advisor[],
+  focus: InternshipFocus,
+): ComparisonCell[] {
+  if (focus === "open") return [];
+  return advisors.map((advisor) =>
+    bindInternshipText(advisor, internshipProfiles[advisor.candidateId]?.focus[focus]),
   );
 }
