@@ -37,6 +37,24 @@ export interface TopicCandidate {
   savedAt: string;
 }
 
+/** Public opportunity fields copied at save time, so a topic survives data changes. */
+export interface OpportunitySnapshot {
+  opportunityId: string;
+  name: string;
+  types: string[];
+  period: string;
+  summary: string;
+  entryUrl: string;
+  checkedAt: string;
+}
+
+export interface TopicOpportunity {
+  opportunity: OpportunitySnapshot;
+  reason: string;
+  questions: string[];
+  savedAt: string;
+}
+
 export interface ExplorationTopic {
   id: string;
   name: string;
@@ -45,6 +63,8 @@ export interface ExplorationTopic {
   createdAt: string;
   updatedAt: string;
   candidates: TopicCandidate[];
+  /** Optional so version-1 records saved before opportunities existed stay valid. */
+  opportunities?: TopicOpportunity[];
 }
 
 export type ExplorationStoreErrorCode =
@@ -175,6 +195,31 @@ function isTopicCandidate(value: unknown): value is TopicCandidate {
   );
 }
 
+function isOpportunity(value: unknown): value is OpportunitySnapshot {
+  return (
+    isObject(value) &&
+    isNonemptyText(value.opportunityId) &&
+    isNonemptyText(value.name) &&
+    Array.isArray(value.types) &&
+    value.types.every(isNonemptyText) &&
+    isText(value.period) &&
+    isText(value.summary) &&
+    isWebUrl(value.entryUrl) &&
+    isNonemptyText(value.checkedAt)
+  );
+}
+
+function isTopicOpportunity(value: unknown): value is TopicOpportunity {
+  return (
+    isObject(value) &&
+    isOpportunity(value.opportunity) &&
+    isText(value.reason) &&
+    Array.isArray(value.questions) &&
+    value.questions.every(isText) &&
+    isDate(value.savedAt)
+  );
+}
+
 function hasUniqueIds(ids: string[]): boolean {
   return new Set(ids).size === ids.length;
 }
@@ -190,7 +235,13 @@ function isTopic(value: unknown): value is ExplorationTopic {
     isDate(value.updatedAt) &&
     Array.isArray(value.candidates) &&
     value.candidates.every(isTopicCandidate) &&
-    hasUniqueIds(value.candidates.map((entry) => entry.candidate.candidateId))
+    hasUniqueIds(value.candidates.map((entry) => entry.candidate.candidateId)) &&
+    (value.opportunities === undefined ||
+      (Array.isArray(value.opportunities) &&
+        value.opportunities.every(isTopicOpportunity) &&
+        hasUniqueIds(
+          value.opportunities.map((entry) => entry.opportunity.opportunityId),
+        )))
   );
 }
 
@@ -236,6 +287,18 @@ function cloneCandidate(candidate: CandidateSnapshot): CandidateSnapshot {
           }
         : {}),
     })),
+  };
+}
+
+function cloneOpportunity(opportunity: OpportunitySnapshot): OpportunitySnapshot {
+  return {
+    opportunityId: opportunity.opportunityId,
+    name: opportunity.name,
+    types: [...opportunity.types],
+    period: opportunity.period,
+    summary: opportunity.summary,
+    entryUrl: opportunity.entryUrl,
+    checkedAt: opportunity.checkedAt,
   };
 }
 
@@ -350,6 +413,7 @@ export function createExplorationStore(
         createdAt: now,
         updatedAt: now,
         candidates: [],
+        opportunities: [],
       };
       data.topics.push(topic);
       write(data);
@@ -407,6 +471,56 @@ export function createExplorationStore(
       return mutateTopic(topicId, (topic) => {
         topic.candidates = topic.candidates.filter(
           (entry) => entry.candidate.candidateId !== candidateId,
+        );
+      });
+    },
+    saveOpportunity(
+      topicId: string,
+      opportunity: OpportunitySnapshot,
+      privateRecord: PrivateRecordPatch = {},
+    ) {
+      if (!isOpportunity(opportunity)) {
+        throw new ExplorationStoreError("validation_failed", "机会内容或入口不完整。");
+      }
+      return mutateTopic(topicId, (topic) => {
+        const records = topic.opportunities ?? [];
+        const existing = records.find(
+          (entry) => entry.opportunity.opportunityId === opportunity.opportunityId,
+        );
+        // Refresh public fields only; private reason and questions stay as saved.
+        if (existing) {
+          existing.opportunity = cloneOpportunity(opportunity);
+        } else {
+          records.push({
+            opportunity: cloneOpportunity(opportunity),
+            reason: privateRecord.reason ?? "",
+            questions: [...(privateRecord.questions ?? [])],
+            savedAt: new Date().toISOString(),
+          });
+        }
+        topic.opportunities = records;
+      });
+    },
+    updateOpportunity(
+      topicId: string,
+      opportunityId: string,
+      patch: PrivateRecordPatch,
+    ) {
+      return mutateTopic(topicId, (topic) => {
+        const entry = topic.opportunities?.find(
+          (record) => record.opportunity.opportunityId === opportunityId,
+        );
+        if (!entry) {
+          throw new ExplorationStoreError("not_found", "这项机会已不在这个主题里。");
+        }
+        if (patch.reason !== undefined) entry.reason = patch.reason;
+        if (patch.questions !== undefined) entry.questions = [...patch.questions];
+      });
+    },
+    removeOpportunity(topicId: string, opportunityId: string) {
+      return mutateTopic(topicId, (topic) => {
+        topic.opportunities = (topic.opportunities ?? []).filter(
+          (entry) => entry.opportunity.opportunityId !== opportunityId,
         );
       });
     },

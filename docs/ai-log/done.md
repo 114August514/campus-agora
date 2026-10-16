@@ -1,6 +1,6 @@
 # AI Log Done
 
-Last updated: 2026-10-12
+Last updated: 2026-10-15
 
 This file records completed agent-visible work. Keep entries factual and link
 them to commits, files, and verification commands where possible.
@@ -18,6 +18,14 @@ them to commits, files, and verification commands where possible.
 ```
 
 ## Completed
+
+### 2026-10-15 - Extend the Web beyond advisors: multi-type entries and saved opportunities
+
+- Source: User corrected that the product is not only advisor search (requirements v1.0 §2.1, §6.2: other types offer lightweight entry/condition lookups). Rebuilt on main after closing the duplicate PR #15.
+- Result: Header renamed Campus Agora; new default 探索 view searches advisors plus 23 sourced opportunities/resources/rules and browses 8 types; 机会与入口 filters by type and can hide ended batches (labelled 历史参考, never shown as open); topics can save opportunities with per-topic private reasons/questions. Existing 找导师/比较/补查 flows unchanged.
+- Changed: apps/web/src/lib/opportunities.ts (data from docs/constraints/opportunity-needs-map.md and earlier notes); lib/exploration-store.ts (optional `opportunities` on version-1 topics, validation, save/update/remove); components/ExploreHome.tsx, OpportunityBrowser.tsx; app/App.tsx; index.html; tests/opportunities.test.ts and new store tests.
+- Verification: `bun test tests/*.test.ts tests/*.test.tsx` 59 pass (AppleDouble `._*` files on the external drive must be excluded from the glob); typecheck, Biome, `lint:styles`, build pass; browser at 1280px/375px: cross-type search, type jump, topic save, reason edit and reload restore, no console errors after fixing an ActionList.GroupHeading crash.
+- Follow-up: Logo, light/dark switching and the single-file export were built in a parallel session on the closed branch and conflict with main's fixed-light rule and no-CSS check; port them separately once that work settles. Comparison and public lookup still cover advisors only.
 
 ### 2026-10-12 - Complete candidate-specific direct reading and comparison follow-up
 
