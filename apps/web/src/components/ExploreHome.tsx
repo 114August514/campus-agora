@@ -93,8 +93,8 @@ export function ExploreHome({
             <>
               {foundAdvisors.length > 0 && (
                 <Stack gap="condensed">
-                  <Text weight="semibold">导师</Text>
-                  <ActionList showDividers aria-label="导师">
+                  <Text weight="semibold">导师与岗位候选</Text>
+                  <ActionList showDividers aria-label="导师与岗位候选">
                     {foundAdvisors.map((advisor) => (
                       <ActionList.Item
                         key={advisor.candidateId}

@@ -422,6 +422,62 @@ export const opportunities: Opportunity[] = [
       checkedAt: "2026-09-24",
     },
   },
+  {
+    id: "sh-ai-lab-eval-intern",
+    name: "上海人工智能实验室：开源大模型评测体系与工具链实习生",
+    types: ["internship", "research"],
+    timing: "standing",
+    period: "2026 年批次（招满即止）",
+    summary:
+      "参与 OpenCompass 核心模块研发，针对大语言模型开展评测套件与安全攻防工具链开发。",
+    conditions:
+      "要求计算机或相关专业在读；熟悉 Python/PyTorch；每周现场出勤至少 4 天，连续实习不少于 4 个月。",
+    support:
+      "高算力集群支持、资助与资深研究员联合指导；异地住宿与补贴需与 HR 进一步沟通。",
+    caveat: "实习招募不保证当届转正名额；需提前确认学校与导师的知情同意与报备。",
+    entry: {
+      label: "官方招聘说明",
+      url: "https://www.shlab.org.cn/careers/intern",
+      checkedAt: "2026-10-16",
+    },
+  },
+  {
+    id: "msra-systems-intern",
+    name: "微软亚洲研究院（MSRA）：异构系统与 AI 系统实习生",
+    types: ["internship", "research"],
+    timing: "standing",
+    period: "2026 年批次（招满即止）",
+    summary: "从事大规模分布式深度学习系统、通信拓扑优化与集群显存调度算法研发。",
+    conditions:
+      "掌握 C++/Python 及主流分布式框架；每周至少 4 天现场，实习期不少于 3 个月；需经导师书面同意。",
+    support:
+      "明日之星联合培养模式、资深系统研究员一对一指导、顶会论文发表支持与校招绿色通道。",
+    caveat: "需经导师书面同意并遵守全日制实习规定；具体入职日期需协调。",
+    entry: {
+      label: "MSRA 招聘主页",
+      url: "https://www.microsoft.com/en-us/research/lab/microsoft-research-asia/careers/",
+      checkedAt: "2026-10-16",
+    },
+  },
+  {
+    id: "bytedance-ai-lab-intern",
+    name: "字节跳动 AI Lab：大模型研究型实习生",
+    types: ["internship", "research"],
+    timing: "standing",
+    period: "2026 年批次（招满即止）",
+    summary:
+      "开展多模态生成、强化学习对齐与推理加速等前沿课题研究，推动技术在真实业务场景落地。",
+    conditions:
+      "硕士及以上在读（优秀本科生可放宽）；有顶会发表或高水平开源经历者优先；实习至少 3 个月。",
+    support:
+      "工业界海量计算资源与真实业务数据、团队 Mentor 指导、具有竞争力的实习津贴与转正机会。",
+    caveat: "岗位录取与名额竞争激烈，转正通道受当年度统招 HC 动态调配影响。",
+    entry: {
+      label: "字节跳动校园招聘",
+      url: "https://job.bytedance.com/campus/position",
+      checkedAt: "2026-10-16",
+    },
+  },
 ];
 
 export function findOpportunity(id: string): Opportunity | undefined {
@@ -442,4 +498,70 @@ export function matchesOpportunity(opportunity: Opportunity, query: string): boo
     .join(" ")
     .toLowerCase();
   return terms.every((term) => text.includes(term));
+}
+
+export interface ScenarioDefinition {
+  type: string;
+  title: string;
+  shortLabel: string;
+  badgeVariant: "primary" | "accent" | "attention" | "secondary";
+  searchPlaceholder: string;
+  candidateEntityName: string;
+  nameLabel: string;
+  institutionLabel: string;
+  researchLabel: string;
+}
+
+export const SCENARIOS: Record<string, ScenarioDefinition> = {
+  advisor: {
+    type: "advisor",
+    title: "选导师",
+    shortLabel: "导师",
+    badgeVariant: "accent",
+    searchPlaceholder: "输入研究方向、导师姓名或主页链接，例如 数据库、周志华",
+    candidateEntityName: "导师候选",
+    nameLabel: "导师姓名",
+    institutionLabel: "所属高校/研究所",
+    researchLabel: "研究方向与领域",
+  },
+  internship: {
+    type: "internship",
+    title: "找实习",
+    shortLabel: "实习",
+    badgeVariant: "primary",
+    searchPlaceholder: "输入研究型实习、大模型系统或具体实验室，例如 异构计算、MSRA",
+    candidateEntityName: "实习岗位",
+    nameLabel: "岗位名称与团队",
+    institutionLabel: "企业/实验室名称",
+    researchLabel: "职责领域与技术栈",
+  },
+  competition: {
+    type: "competition",
+    title: "打比赛",
+    shortLabel: "竞赛",
+    badgeVariant: "attention",
+    searchPlaceholder: "输入学科竞赛、系统设计赛或赛事名称",
+    candidateEntityName: "竞赛项目",
+    nameLabel: "竞赛项目名称",
+    institutionLabel: "主办单位/学校",
+    researchLabel: "赛道方向与要求",
+  },
+  general: {
+    type: "general",
+    title: "综合机会",
+    shortLabel: "机会",
+    badgeVariant: "secondary",
+    searchPlaceholder: "输入公开关键词或网页链接",
+    candidateEntityName: "机会对象",
+    nameLabel: "对象名称",
+    institutionLabel: "所属机构",
+    researchLabel: "内容描述",
+  },
+};
+
+export function getScenario(type?: string): ScenarioDefinition {
+  if (type && type in SCENARIOS) {
+    return SCENARIOS[type];
+  }
+  return SCENARIOS.advisor;
 }

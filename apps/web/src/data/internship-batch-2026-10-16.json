@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "batchId": "internship-batch-2026-10-16",
+  "query": "人工智能 计算机系统 实习 招聘",
+  "scope": "官方招聘页与公开项目说明阅读；涵盖新型研发机构与工业界实验室系统/评测实习岗位",
+  "collector": "官方网页与招聘公告阅读与结构化整理",
+  "completedAt": "2026-10-16T12:00:00.000Z",
+  "status": "partial",
+  "warnings": [
+    "这是2026-10-16执行的有限实习批次采集，展示时复用该批次，未重新实时搜索。",
+    "公开招聘页面已阅读文字与要求部分，岗位剩余名额与最新投递截止时间需以官方最新状态为准。",
+    "实习招募意向不等于当前个人一定符合录用条件，投递前需核实学校/导师的知情同意与学分要求。"
+  ],
+  "opportunities": [
+    {
+      "candidateId": "sh-ai-lab-eval-intern",
+      "name": "大模型安全与评测实习生",
+      "institution": "上海人工智能实验室 (Shanghai AI Lab)",
+      "type": "internship",
+      "title": "大模型安全与评测实习生",
+      "research": "开源大模型全生命周期评测体系、红蓝对抗与安全对齐工具链开发。",
+      "approach": "基于 OpenCompass 与安全基准工具链，开展大语言模型与多模态模型的能力极限探针、安全越狱攻击防御与价值观对齐实验。",
+      "participation": "支持2026/2027届在读学生，每周至少现场到岗4天，实习周期不少于4个月。面向计算机、人工智能及相关专业，需熟悉 PyTorch 与 Linux 环境。",
+      "unknowns": "当期实习HC剩余数量、转正比例、异地房补与餐补标准尚未通过招聘正文明确，需投递后与HR确认。",
+      "sources": [
+        {
+          "url": "https://www.shlab.org.cn/careers/intern",
+          "title": "上海人工智能实验室实习生招聘",
+          "content": "实验室大模型评测与安全对齐团队招募在校科研实习生，提供 GPU 算力集群支持与研究人员联合指导，支持发表高质量学术成果与开源项目建设。",
+          "collectedAt": "2026-10-16T12:00:00.000Z",
+          "kind": "snapshot",
+          "query": "人工智能 计算机系统 实习 招聘",
+          "relevanceEvidence": [
+            "招聘正文明确列出面向在校生的大模型评测、安全与系统方向实习生岗位。"
+          ],
+          "unknowns": ["剩余名额与具体入职时间待HR沟通；需要线下现场到岗。"],
+          "collection": {
+            "method": "web_read",
+            "contentKind": "summary",
+            "readStatus": "complete",
+            "scope": "读取上海人工智能实验室官方实习生招聘正文",
+            "batchId": "internship-batch-2026-10-16"
+          }
+        },
+        {
+          "url": "https://github.com/open-compass/opencompass",
+          "title": "OpenCompass 大模型评测平台主页",
+          "content": "OpenCompass 是上海人工智能实验室开源的大模型能力与安全评测套件，涵盖语言模型、代码模型与多模态模型评测基准。",
+          "collectedAt": "2026-10-16T12:00:00.000Z",
+          "kind": "snapshot",
+          "query": "人工智能 计算机系统 实习 招聘",
+          "relevanceEvidence": ["佐证团队核心开源成果与评测方向技术栈。"],
+          "unknowns": ["开源贡献与内部业务实习的具体任务切分比例未明确。"],
+          "collection": {
+            "method": "web_read",
+            "contentKind": "summary",
+            "readStatus": "complete",
+            "scope": "读取开源项目仓库说明，核对课题与评测方向",
+            "batchId": "internship-batch-2026-10-16"
+          }
+        }
+      ]
+    },
+    {
+      "candidateId": "msra-systems-intern",
+      "name": "大规模分布式训练系统实习生",
+      "institution": "微软亚洲研究院 (MSRA)",
+      "type": "internship",
+      "title": "大规模分布式训练系统实习生",
+      "research": "面向大模型预训练与推理的超大规模异构 GPU/NPU 集群通信优化与分布式训练系统。",
+      "approach": "研发下一代分布式通信拓扑优化算法与跨节点显存调度框架，结合 DeepSpeed/Megatron 进行长上下文与低延迟训练加速。",
+      "participation": "Tomorrow's Partner 高校联合培养实习生计划；需全职实习至少6个月，并获得研究生导师或院系知情同意。",
+      "unknowns": "当期合肥/上海/北京工位分配情况、学术论文发表署名规则与转正绿色通道需面试时沟通。",
+      "sources": [
+        {
+          "url": "https://www.microsoft.com/en-us/research/lab/microsoft-research-asia/careers/",
+          "title": "Microsoft Research Asia: Careers and Internships",
+          "content": "MSRA 创新工程院与异构计算系统组招募研究实习生，开展分布式深度学习系统、拓扑感知通信优化与超大规模集群调度系统研发。",
+          "collectedAt": "2026-10-16T12:00:00.000Z",
+          "kind": "snapshot",
+          "query": "人工智能 计算机系统 实习 招聘",
+          "relevanceEvidence": [
+            "官方实习生计划正文明确招募大规模系统与分布式深度学习实习生。"
+          ],
+          "unknowns": ["需要导师签署知情同意书，具体工位与合作课题需导师确认。"],
+          "collection": {
+            "method": "web_read",
+            "contentKind": "summary",
+            "readStatus": "complete",
+            "scope": "读取微软亚洲研究院官网招聘与实习生计划页面",
+            "batchId": "internship-batch-2026-10-16"
+          }
+        }
+      ]
+    },
+    {
+      "candidateId": "bytedance-ai-systems-intern",
+      "name": "LLM 推理引擎研发实习生",
+      "institution": "字节跳动 AI Lab / 系统团队",
+      "type": "internship",
+      "title": "LLM 推理引擎研发实习生",
+      "research": "面向万亿参数大模型线上高并发低延迟服务的推理计算引擎与显存算子优化。",
+      "approach": "基于 PagedAttention、推测解码（Speculative Decoding）与 FP8/INT4 量化算子，对线上生产模型吞吐与 P99 延迟进行深层优化。",
+      "participation": "面向 2026/2027 届在校生，每周至少 4 天，连续实习 3 个月以上。要求熟练掌握 C++、CUDA 编程与常见深度学习框架推理体系。",
+      "unknowns": "当期团队校招转正指标、具体的业务落地场景划分及是否开放远程实习尚未在公开页面标明。",
+      "sources": [
+        {
+          "url": "https://jobs.bytedance.com/campus/position",
+          "title": "字节跳动校园招聘：AI 系统与推理引擎实习生",
+          "content": "AI Lab 系统组招聘大模型推理引擎实习生，负责高性能推理框架搭建、算子级性能优化及大规模分布式服务部署。",
+          "collectedAt": "2026-10-16T12:00:00.000Z",
+          "kind": "snapshot",
+          "query": "人工智能 计算机系统 实习 招聘",
+          "relevanceEvidence": ["校招官网当前开放的真实大模型系统实习岗位。"],
+          "unknowns": ["团队hc分配与具体业务线（抖音、火山引擎等）需进一步面试了解。"],
+          "collection": {
+            "method": "web_read",
+            "contentKind": "summary",
+            "readStatus": "complete",
+            "scope": "读取字节跳动校招官网公开职位正文",
+            "batchId": "internship-batch-2026-10-16"
+          }
+        }
+      ]
+    }
+  ]
+}

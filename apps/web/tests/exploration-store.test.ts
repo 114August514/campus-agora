@@ -353,6 +353,39 @@ describe("exploration store", () => {
       "不在这个主题",
     );
   });
+
+  test("persists and restores candidate snapshots with optional type and metadata", () => {
+    const storage = new MemoryStorage();
+    const store = createExplorationStore(storage);
+    const topic = store.createTopic({ name: "实习探索" });
+    const internSnapshot: CandidateSnapshot = {
+      candidateId: "sh-ai-lab-eval-intern",
+      name: "开源大模型评测实习生",
+      institution: "上海人工智能实验室",
+      research: "OpenCompass评测与安全对齐",
+      type: "internship",
+      title: "大模型评测",
+      description: "评测体系研发",
+      metadata: { location: "上海徐汇", duration: "4个月" },
+      sources: [
+        {
+          url: "https://www.shlab.org.cn/careers/intern",
+          title: "招聘说明",
+          content: "要求每周4天",
+          collectedAt: "2026-10-16T12:00:00.000Z",
+          kind: "snapshot",
+        },
+      ],
+    };
+
+    store.saveCandidate(topic.id, internSnapshot, { reason: "方向很契合" });
+    const reopened = createExplorationStore(storage);
+    const saved = reopened.getTopic(topic.id)?.candidates[0];
+    expect(saved?.candidate.type).toBe("internship");
+    expect(saved?.candidate.title).toBe("大模型评测");
+    expect(saved?.candidate.metadata?.location).toBe("上海徐汇");
+    expect(saved?.reason).toBe("方向很契合");
+  });
 });
 
 function opportunity(): OpportunitySnapshot {
