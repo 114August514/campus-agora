@@ -28,11 +28,11 @@ export class CampusAgoraApiError extends Error {
   }
 }
 
-export async function requestJson<T>(
+export async function requestResponse(
   options: RequestOptions,
   path: string,
   init: RequestInit = {},
-): Promise<T> {
+): Promise<Response> {
   let response: Response;
   const headers = requestHeaders(options);
   new Headers(init.headers).forEach((value, key) => headers.set(key, value));
@@ -72,6 +72,15 @@ export async function requestJson<T>(
     });
   }
 
+  return response;
+}
+
+export async function requestJson<T>(
+  options: RequestOptions,
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const response = await requestResponse(options, path, init);
   return (await response.json()) as T;
 }
 

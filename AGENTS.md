@@ -132,6 +132,15 @@ subsequent work. See advisor-task-design.md v0.4 §8.4.
 
 ## Requirements Analysis Work Order
 
+On 2026-10-22 the topic-condition and bounded-discovery slice was implemented:
+explicit topic name/question/preference editing preserves saved/private records;
+the discovery endpoint can stream cumulative body snapshots, supports abort and
+declares server/run/read limits. Browser and controlled checks are recorded in
+`docs/product/advisor-task-design.md` §8.6. Query text remains the only discovery
+input; editing conditions does not send them. Cancellation does not retract
+already sent public requests. This does not complete mistaken-merge repair,
+external-AI delivery, optional preparation/resource entries or full demo acceptance.
+
 Before prioritizing prototype or implementation work, follow the eight-part
 analysis contract in `docs/product/requirements.md`: problem background, target
 users/tasks, existing solutions, unmet needs/causes, value/positioning,

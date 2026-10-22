@@ -101,6 +101,64 @@ describe("exploration store", () => {
     expect(publicCandidate).toEqual(candidate());
   });
 
+  test("editing and clearing topic conditions survives reopening without changing records or another topic", () => {
+    const storage = new MemoryStorage();
+    const store = createExplorationStore(storage);
+    const first = store.createTopic({
+      name: "old",
+      question: "old question",
+      preferences: "old preference",
+    });
+    const second = store.createTopic({
+      name: "another",
+      question: "private B",
+      preferences: "B only",
+    });
+    store.saveCandidate(first.id, candidate(), {
+      reason: "private A",
+      questions: ["keep this"],
+    });
+    store.saveCandidate(second.id, candidate(), { reason: "private B" });
+    const beforeFirst = store.getTopic(first.id);
+    const beforeSecond = store.getTopic(second.id);
+    store.updateTopic(first.id, {
+      name: "renamed",
+      question: "new question",
+      preferences: "new preference",
+    });
+    const reopened = createExplorationStore(storage);
+    expect(reopened.getTopic(first.id)).toMatchObject({
+      name: "renamed",
+      question: "new question",
+      preferences: "new preference",
+      candidates: beforeFirst?.candidates,
+    });
+    expect(reopened.getTopic(second.id)).toEqual(beforeSecond);
+    store.updateTopic(first.id, { question: "", preferences: "" });
+    expect(createExplorationStore(storage).getTopic(first.id)).toMatchObject({
+      question: "",
+      preferences: "",
+      candidates: beforeFirst?.candidates,
+    });
+  });
+
+  test("a failed conditions save leaves stored content intact and can be retried", () => {
+    const storage = new MemoryStorage();
+    const store = createExplorationStore(storage);
+    const topic = store.createTopic({ name: "before", question: "keep" });
+    const raw = storage.getItem(EXPLORATION_STORAGE_KEY);
+    storage.failWrite = true;
+    expect(() =>
+      store.updateTopic(topic.id, { name: "draft", preferences: "draft preference" }),
+    ).toThrow();
+    expect(storage.getItem(EXPLORATION_STORAGE_KEY)).toBe(raw);
+    storage.failWrite = false;
+    store.updateTopic(topic.id, { name: "draft", preferences: "draft preference" });
+    expect(createExplorationStore(storage).getTopic(topic.id)?.name).toBe("draft");
+    expect(() => store.updateTopic(topic.id, { name: "  " })).toThrow();
+    expect(store.getTopic(topic.id)?.name).toBe("draft");
+  });
+
   test("saving again adds evidence while preserving private reasons and old snapshots", () => {
     const storage = new MemoryStorage();
     const store = createExplorationStore(storage);

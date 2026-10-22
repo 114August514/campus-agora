@@ -97,6 +97,11 @@ fn live_discovery_contract_preserves_scope_failures_and_separate_evidence() {
     assert_eq!(operation["operationId"], "discoverSources");
     assert!(operation["responses"]["422"].is_object());
     assert!(operation["responses"]["429"].is_object());
+    assert!(
+        contract["paths"]["/api/v1/discoveries"]["post"]["responses"]["200"]["content"]
+            ["application/x-ndjson"]
+            .is_object()
+    );
     let schemas = &contract["components"]["schemas"];
     assert_eq!(
         schemas["DiscoveryResponse"]["properties"]["status"]["enum"],

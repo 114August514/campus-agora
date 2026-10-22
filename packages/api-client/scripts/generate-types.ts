@@ -64,6 +64,8 @@ function renderType(schema: JsonSchema): string {
     return "string";
   }
 
+  if (schema.type === "integer" || schema.type === "number") return "number";
+
   if (schema.type === "boolean") {
     return "boolean";
   }

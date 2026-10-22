@@ -1,4 +1,3 @@
-import { type DiscoveryResponse, discoverSources } from "@campus-agora/api-client";
 import { SearchIcon } from "@primer/octicons-react";
 import {
   Banner,
@@ -10,8 +9,9 @@ import {
   Text,
   TextInput,
 } from "@primer/react";
-import { useRef, useState } from "react";
-import { type Advisor, advisors, allOpportunities } from "../lib/advisors";
+import { useEffect, useState } from "react";
+import { type Advisor, allOpportunities } from "../lib/advisors";
+import { type DiscoveryRunState, createDiscoveryRun } from "../lib/discovery-run";
 import type { CandidateSnapshot, SourceSnapshot } from "../lib/exploration-store";
 import { type ScenarioDefinition, getScenario } from "../lib/opportunities";
 import { SourceView } from "./SourceView";
@@ -38,14 +38,21 @@ export function DiscoveryPanel({
   candidateList = allOpportunities,
 }: Props) {
   const activeScenario = scenario ?? getScenario("advisor");
-  const [result, setResult] = useState<DiscoveryResponse | null>(null);
-  const [runningQuery, setRunningQuery] = useState("");
-  const [error, setError] = useState("");
+  const [runState, setRunState] = useState<DiscoveryRunState>({
+    query: "",
+    phase: "idle",
+    result: null,
+    error: "",
+  });
+  const [run] = useState(() => createDiscoveryRun(setRunState));
+  useEffect(() => () => run.dispose(), [run]);
+  const { result, error } = runState;
+  const runningQuery = runState.phase === "running" ? runState.query : "";
+  const currentResult = result?.query === runState.query ? result : null;
   const [candidateId, setCandidateId] = useState("");
   const [candidateName, setCandidateName] = useState("");
   const [institution, setInstitution] = useState("");
   const [research, setResearch] = useState("");
-  const sequence = useRef(0);
   const readingUrl = /^https?:\/\//i.test(query.trim());
   const knownPages = targetCandidate?.sources.filter(
     (source) => source.collection?.method === "web_read",
@@ -56,25 +63,8 @@ export function DiscoveryPanel({
       ? Boolean(candidateName.trim() && institution.trim())
       : Boolean(candidateId);
 
-  async function search() {
-    const input = query.trim();
-    if (!input) return;
-    const request = ++sequence.current;
-    setRunningQuery(input);
-    setError("");
-    try {
-      const response = await discoverSources(input);
-      if (request === sequence.current) setResult(response);
-    } catch (failure) {
-      if (request === sequence.current)
-        setError(
-          failure instanceof Error
-            ? failure.message
-            : "外部查找失败，可重试或继续查看已有资料。",
-        );
-    } finally {
-      if (request === sequence.current) setRunningQuery("");
-    }
+  function search() {
+    void run.start(query);
   }
 
   return (
@@ -127,6 +117,13 @@ export function DiscoveryPanel({
               </Select>
             </FormControl>
           )}
+          <Text as="p" size="small">
+            本轮服务端最多30秒、5个正文、6次读取（含检索）；每次读取最多14秒、1 MB。
+            连同传输等待最多35秒。停止后保留已收到的正文，不自动重试；不调用收费模型或搜索API。
+          </Text>
+          <Text as="p" size="small">
+            外部HTTP请求最多48次，包含重定向与地址解析备用请求。
+          </Text>
           <Stack direction="horizontal" align="center" wrap="wrap">
             <Button type="submit" leadingVisual={SearchIcon} disabled={!query.trim()}>
               {runningQuery
@@ -135,6 +132,7 @@ export function DiscoveryPanel({
                   ? "读取原站正文"
                   : "查找外部资料"}
             </Button>
+            {runningQuery && <Button onClick={() => run.stop()}>中止本轮查找</Button>}
             <Text size="small">已有资料也可以直接阅读。</Text>
           </Stack>
         </Stack>
@@ -145,6 +143,13 @@ export function DiscoveryPanel({
             variant="info"
             layout="compact"
             title={`${/^https?:\/\//i.test(runningQuery) ? "正在读取公开页面" : "正在检索并读取公开来源"}：${runningQuery}`}
+          />
+        )}
+        {(runState.phase === "cancelled" || runState.phase === "limit_reached") && (
+          <Banner
+            variant="warning"
+            layout="compact"
+            title={`${runState.phase === "cancelled" ? "已中止本轮查找" : currentResult?.stopReason === "source_limit" ? "已达到本轮来源上限" : "已达到本轮时间上限"}：“${runState.query}”。已收到${currentResult?.sources.length ?? 0}条正文，仍可阅读或保存；已发出的公开查询不能撤回。`}
           />
         )}
         {error && (
@@ -162,11 +167,14 @@ export function DiscoveryPanel({
           </Heading>
           <Text as="p">
             这组结果对应“{result.query}”。{result.scope}
+            已完成{result.completedReads}／{result.startedReads}次读取，取得
+            {result.sources.length}条正文。
+            {!result.finished && "这组结果尚未完整结束。"}
           </Text>
           {query.trim() !== result.query && (
             <Text as="p">查找内容已修改；下面仍是上次条件的结果，可重新查找。</Text>
           )}
-          {result.sources.length === 0 && (
+          {result.sources.length === 0 && !runningQuery && (
             <Text as="p">
               没有取得可展示的相关正文。可以换关键词，或先查看已有资料；这不代表没有相关导师。
             </Text>

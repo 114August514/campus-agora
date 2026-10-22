@@ -1,6 +1,6 @@
 # Development
 
-Last updated: 2026-10-12
+Last updated: 2026-10-22
 
 ## Requirements
 
@@ -85,6 +85,30 @@ does not remove a saved candidate. Unsaved edits disappear on refresh. New topic
 created during a comparison record that question. Preparation/resources and
 complete demo walkthroughs remain later slices under
 [task design](../product/advisor-task-design.md#84).
+
+## Topic Conditions and Bounded Reading
+
+Choose an existing topic and use “编辑主题条件” to change its name, current question
+and optional preferences. Save explicitly. Closing a dirty dialog offers save,
+discard or continue; browser reload warns about unsaved edits. Storage failure
+keeps the draft. The saved view shows current conditions, and candidate/source/
+private records remain unchanged. Conditions never automatically become a query.
+
+Discovery now consumes cumulative NDJSON snapshots from the existing endpoint.
+Limits are declared before starting: 30 server seconds, five source pages, six
+logical reads including the index, and at most 48 outbound HTTP requests including
+redirects and fixed DNS fallback; each read retains 14 seconds / 1 MB. The browser
+stops waiting after 35 seconds. Use “中止本轮查找” to abort; already received bodies
+remain readable/saveable, and no automatic retry starts. A revised query requires
+explicit submission. Topic/candidate/scenario changes and unmount invalidate the
+run before aborting, so stale callbacks cannot affect the next context.
+
+`apps/web/tests/discovery-run.test.ts` uses controlled transports for partial
+results, cancel/restart/late-response isolation, deadlines, failure and disposal.
+API-client tests exercise chunked UTF-8, missing final snapshots and abort while
+buffered data remains. Rust tests check preserved completed sources when pending
+reads are dropped and concurrency-permit release when a response body is dropped.
+These deterministic tests are separate from actual external-source walkthroughs.
 
 ## Browser Collection and Precollected Batches
 

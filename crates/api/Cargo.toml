@@ -8,6 +8,7 @@ default-run = "campus-agora-api"
 
 [dependencies]
 axum.workspace = true
+futures-core = "0.3"
 campus_agora_application = { path = "../application" }
 campus_agora_db = { path = "../db" }
 campus_agora_domain = { path = "../domain" }

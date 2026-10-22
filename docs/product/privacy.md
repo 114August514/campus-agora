@@ -1,6 +1,6 @@
 # Privacy And Data Boundaries
 
-Last updated: 2026-10-12
+Last updated: 2026-10-22
 
 The current advisor-guide demo serves personal exploration, with public
 external discovery and saving in the current browser. It has no account,
@@ -33,6 +33,20 @@ inventory and audit/deletion assumptions are not the current product policy.
   backup. Changing browser, profile or site origin does not transfer records.
 - Do not put secrets, tokens, passwords, or raw identity payloads in logs.
 - Do not store real student data in seed data, mock data, tests, or AI LOG.
+
+### Topic edits and transient discovery progress
+
+Topic name, question and preferences can be edited with explicit saving. A failed
+save keeps the editor open with its draft; closing unsaved edits offers save,
+discard or continue. Editing conditions does not change stored candidates,
+source snapshots, private reasons/questions or another topic. It does not
+populate a public query or send topic conditions to any external service.
+
+Progress snapshots remain in the current discovery view's memory until replaced
+or unmounted; only an explicit source save copies evidence into localStorage.
+Stopping preserves already received evidence and invalidates late callbacks.
+It attempts transport cancellation, but cannot retract already sent public
+queries. No external-AI send path or delivery guarantee was added.
 
 ### Retention
 
