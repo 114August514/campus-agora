@@ -1,9 +1,14 @@
 # API Contracts
 
-Last updated: 2026-10-12
+Last updated: 2026-10-22
 
-Campus Agora uses `contracts/openapi.json` as the committed API contract
+Campus Lumen uses `contracts/openapi.json` as the committed API contract
 snapshot. The Rust API crate is the source of this contract.
+
+After the 2026-10-22 project rename, metadata `appName` is `Campus Lumen` and
+the OpenAPI title is `Campus Lumen API`. Regenerate both contract snapshots
+from the Rust source. Endpoint paths, internal crate/package names and browser
+storage identifiers retain compatibility.
 
 ## Generate
 

@@ -1,6 +1,6 @@
 # 导师信息来源试采
 
-Last updated: 2026-09-29
+Last updated: 2026-10-22
 
 ## 用途与状态
 
@@ -30,7 +30,7 @@ Last updated: 2026-09-29
 
 ## 2026-09-29 有限试采：四名候选与参与途径
 
-本轮决定：能否用相同内容结构支持研究方向比较，并准确连接参与途径。选取既有十名人物中的王翔、熊英飞、Tianqi Chen、Charles Zhang，覆盖科大、北大、CMU、HKUST；不继续扩名单。产物见[文字样稿](https://github.com/114August514/campus-agora/blob/docs/requirements-handoff/tools/prototypes/opportunity-content.md)末节，当前新增内容尚未推送时以本地同路径为准。
+本轮决定：能否用相同内容结构支持研究方向比较，并准确连接参与途径。选取既有十名人物中的王翔、熊英飞、Tianqi Chen、Charles Zhang，覆盖科大、北大、CMU、HKUST；不继续扩名单。产物见[文字样稿](https://github.com/114August514/campus-lumen/blob/docs/requirements-handoff/tools/prototypes/opportunity-content.md)末节，当前新增内容尚未推送时以本地同路径为准。
 
 ### 来源与实际读取
 

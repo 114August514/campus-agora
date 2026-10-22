@@ -56,7 +56,7 @@ export async function requestJson<T>(
     const headerRequestId = response.headers.get("x-request-id") ?? undefined;
     const fallback = {
       code: statusCodeToErrorCode(response.status),
-      message: `Campus Agora API request failed with ${response.status}`,
+      message: `Campus Lumen API request failed with ${response.status}`,
       requestId: headerRequestId,
     };
 

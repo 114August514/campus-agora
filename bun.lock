@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "campus-agora",
+      "name": "campus-lumen",
       "devDependencies": {
         "@biomejs/biome": "^1.9.4",
       },

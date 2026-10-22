@@ -1,7 +1,7 @@
 [project]
-name = "campus-agora-docs"
+name = "campus-lumen-docs"
 version = "0.1.0"
-description = "Documentation tooling for Campus Agora."
+description = "Documentation tooling for Campus Lumen."
 requires-python = ">=3.12"
 dependencies = [
   "mkdocs==1.6.1",

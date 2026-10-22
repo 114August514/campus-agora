@@ -235,7 +235,7 @@ export function App() {
       <PageLayout.Header>
         <Stack gap="condensed">
           <Heading as="h1" variant="medium">
-            Campus Agora
+            Campus Lumen
           </Heading>
           <UnderlineNav aria-label="主导航" variant="flush">
             <UnderlineNav.Item

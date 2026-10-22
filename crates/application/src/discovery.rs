@@ -562,7 +562,7 @@ async fn safe_get(mut url: Url, search: bool) -> Result<(Url, String), &'static 
             .no_proxy()
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(10))
-            .user_agent("CampusAgoraDemo/0.1 (public academic discovery)")
+            .user_agent("CampusLumenDemo/0.1 (public academic discovery)")
             .resolve_to_addrs(host, &addresses)
             .build()
             .map_err(|_| "client_failed")?;

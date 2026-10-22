@@ -1,6 +1,8 @@
 # Architecture Overview
 
-Campus Agora is a monorepo with explicit boundaries between frontend,
+Last updated: 2026-10-22
+
+Campus Lumen is a monorepo with explicit boundaries between frontend,
 desktop shell, shared API client, backend crates, contracts, and documentation.
 
 ## Repository Areas

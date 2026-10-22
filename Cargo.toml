@@ -11,7 +11,7 @@ resolver = "2"
 [workspace.package]
 edition = "2021"
 license = "Apache-2.0"
-repository = "https://github.com/114August514/campus-agora"
+repository = "https://github.com/114August514/campus-lumen"
 
 [workspace.dependencies]
 axum = "0.7"

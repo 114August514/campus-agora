@@ -47,7 +47,7 @@ export interface DiscoveryWarning {
 }
 
 export interface MetaResponse {
-  appName: "Campus Agora";
+  appName: "Campus Lumen";
   capabilities: CapabilityFlags;
   version: string;
 }

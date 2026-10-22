@@ -34,7 +34,7 @@ export function createCampusAgoraApiClient(
       });
 
       if (!response.ok) {
-        throw new Error(`Campus Agora health check failed with ${response.status}`);
+        throw new Error(`Campus Lumen health check failed with ${response.status}`);
       }
 
       return (await response.text()) as HealthResponse;

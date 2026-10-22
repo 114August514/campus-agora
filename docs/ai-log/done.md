@@ -1,6 +1,6 @@
 # AI Log Done
 
-Last updated: 2026-10-16
+Last updated: 2026-10-22
 
 This file records completed agent-visible work. Keep entries factual and link
 them to commits, files, and verification commands where possible.
@@ -18,6 +18,32 @@ them to commits, files, and verification commands where possible.
 ```
 
 ## Completed
+
+### 2026-10-22 - Consolidate legacy sibling Git worktrees
+
+- Result: Moved `campus-agora-advisor-prototype` to `campus-lumen/.worktrees/advisor-prototype` and `campus-agora-explore-focus` to `.worktrees/explore-focus` using `git worktree move`. Both held independent uncommitted files; preserved them and their branches instead of deleting or merging. The only remaining `campus-agora*` entry in Projects is the main checkout's compatibility symlink, still used by the current chat/saved project.
+- Verification: Recorded pre-move fingerprints in ignored `work/2026-10-22-worktree-organization/`. Post-move checks matched root inodes, HEAD, branch, full Git status, staged/unstaged binary diff hashes and 145/138/138 source file hashes for main/prototype/focus respectively. `git worktree repair` fixed the nested Claude worktree registration; all four registered roots now use canonical campus-lumen paths. Strict `bun run ci:docs` with the local work cache and `git diff --check` passed; `git worktree prune --dry-run --verbose` proposed no removals. Source locations and disposition are documented in `docs/engineering/repository-layout.md`.
+- Decisions: `.worktrees/` holds local branch checkouts; `work/` holds intermediate notes/output. No file content, branch or uncommitted work was deleted; no commit/push. Reuse/removal of the retained experimental work remains a later deliberate decision.
+
+### 2026-10-22 - Rename local checkout directory
+
+- Result: Moved the actual checkout to `/home/august/Projects/campus-lumen`. The old `/home/august/Projects/campus-agora` is a relative symlink to `campus-lumen`, preserving the current chat, saved project entry and existing local absolute paths without copying files. Updated the canonical-path guidance in `docs/engineering/repository-layout.md`.
+- Verification: Before/after directory and `.git` inodes, HEAD, branch, complete Git status and origin matched. `git rev-parse --show-toplevel` and offline Cargo metadata report the new root. From the new directory, `bun run typecheck` and strict `bun run ci:docs` with the local work cache passed; existing process files remain present. `git diff --check` passed. Origin remains `git@github.com:114August514/campus-lumen.git`.
+- Decisions: The saved Codex project still references the compatibility path; future project/terminal selections should use the canonical new path. Keep the link until those entries have migrated. No commit, push or file deletion.
+
+### 2026-10-22 - Rename project and GitHub repository to Campus Lumen
+
+- Result: Under explicit user authorization, renamed GitHub `114August514/campus-agora` to `114August514/campus-lumen` and set its description to “帮大学生跨机构发现科研、实习、竞赛、交流等机会，看懂实际任务与条件，自主决定下一步。” Repository ID remained `1290513122`. Updated local `origin` fetch/push URL to `git@github.com:114August514/campus-lumen.git`; `git ls-remote --symref origin HEAD` succeeded, resolving main at `7fae667dab18650b17a40e1b4f4a64094fd63d0d`.
+- Changed: Current README/product/docs identity and repository links; root Bun/Cargo repository metadata; Web title/heading; Tauri display names; API metadata/OpenAPI title and regenerated snapshots; client mock/error messages and existing test expectations; discovery user-agent; MkDocs/uv project identity and lock metadata. Remote description no longer advertises the retired community product. No product scope expansion.
+- Verification: `bun run ci:frontend` passed type/style/lint checks, 14 API-client and 65 Web tests, and production build (existing bundle-size warning retained). `cargo fmt --all --check` and `cargo test --workspace` passed 21 tests. Repeated `bun run api:types` preserved both generated file hashes; JSON assertions confirmed new display names and retained compatibility keys. `bun install --frozen-lockfile --offline`, strict `bun run ci:docs` with the local work cache, and `git diff --check` passed. GitHub PATCH and fresh GET confirmed name, description and stable ID.
+- Decisions: Preserve `@campus-agora/*`, `campus_agora_*`, existing database/app identifiers and browser storage key to avoid unrelated data migrations. Keep historical records and the local checkout folder name; document naming compatibility in `docs/engineering/repository-layout.md`. GitHub rename/description and local remote are applied; local source/doc edits are not committed or pushed, including the prior folder-organization work.
+
+### 2026-10-22 - Explain folder responsibilities and isolate intermediate work
+
+- Result: Added `docs/engineering/repository-layout.md` and `work/README.md`; documented directory roles and a local `work/YYYY-MM-DD-task/` convention. Only the work guide is eligible for normal Git inclusion; drafts/output stay ignored. AGENTS and root/tool entry points now carry this rule; MkDocs includes the layout guide.
+- Moved: `temp/temp1.md` → `work/legacy/notes/temp1.md`; untracked `tools/prototypes/opportunities.html` → `work/legacy/prototype/opportunities.html`. Both SHA-256 comparisons passed; removed the empty `temp/` directory and updated current preview/UI-reference paths. Reviewed text specimens, source paths and historical records were preserved.
+- Verification: `git diff --check`; `git check-ignore -v` for moved and hypothetical process paths; Python checks for guide visibility and relative Markdown file targets; `UV_CACHE_DIR="$PWD/work/2026-10-22-folder-organization/uv-cache" bun run ci:docs` passed the strict MkDocs build and historical-site exclusions. Initial sandbox attempts encountered a read-only cache and unavailable dependency downloads; the network-enabled retry installed locked dependencies and passed.
+- Decisions: Keep AI Log to short pending/completed facts; promote accepted decisions, reusable tools and reviewed data into their maintained directories. Work files stay local and cannot be build or handoff dependencies. No runtime behavior changed; no commit or push.
 
 ### 2026-10-16 - Integrate authentic internship batch and multi-perspective comparison engine
 

@@ -9,7 +9,7 @@ export function createCampusAgoraMockFetch(
   options: CampusAgoraMockFetchOptions = {},
 ): typeof fetch {
   const meta: MetaResponse = {
-    appName: "Campus Agora",
+    appName: "Campus Lumen",
     version: "0.1.0",
     capabilities: {
       authMockEnabled: true,
