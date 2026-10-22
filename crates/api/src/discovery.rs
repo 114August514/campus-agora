@@ -1,3 +1,10 @@
+use std::{
+    convert::Infallible,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
+use axum::body::{Body, Bytes};
 use axum::extract::rejection::JsonRejection;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -5,9 +12,11 @@ use axum::Json;
 use campus_agora_application::discovery::{
     self, DiscoveredSource, DiscoveryResult, DiscoveryWarning as Warning,
 };
+use futures_core::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::Semaphore;
+use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{api_error_response, request_id_from_headers};
 
@@ -23,12 +32,27 @@ pub struct DiscoveryRequest {
 #[serde(rename_all = "camelCase")]
 pub struct DiscoveryResponse {
     pub query: String,
+    pub finished: bool,
+    pub stop_reason: &'static str,
+    pub started_reads: usize,
+    pub completed_reads: usize,
+    pub limits: DiscoveryLimits,
     pub provider: &'static str,
     pub scope: &'static str,
     pub status: &'static str,
     pub collected_at: String,
     pub sources: Vec<DiscoverySource>,
     pub warnings: Vec<DiscoveryWarning>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveryLimits {
+    pub max_seconds: u64,
+    pub max_sources: usize,
+    pub max_reads: usize,
+    pub max_http_requests: usize,
+    pub max_page_bytes: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -83,7 +107,7 @@ pub(crate) async fn discover(
             .into_response()
         }
     };
-    let Ok(_permit) = DISCOVERY_PERMITS.try_acquire() else {
+    let Ok(permit) = DISCOVERY_PERMITS.try_acquire() else {
         return api_error_response(
             StatusCode::TOO_MANY_REQUESTS,
             "discovery_busy",
@@ -93,13 +117,76 @@ pub(crate) async fn discover(
         )
         .into_response();
     };
+    if headers
+        .get("accept")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value
+                .split(',')
+                .any(|part| part.trim() == "application/x-ndjson")
+        })
+    {
+        let (sender, receiver) = mpsc::unbounded_channel();
+        let worker = tokio::spawn(async move {
+            let _permit = permit;
+            discovery::discover_with_progress(query, Some(sender)).await;
+        });
+        return (
+            [
+                ("content-type", "application/x-ndjson"),
+                ("cache-control", "no-store"),
+                ("x-accel-buffering", "no"),
+            ],
+            Body::from_stream(DiscoveryStream { receiver, worker }),
+        )
+            .into_response();
+    }
+    let _permit = permit;
     Json(DiscoveryResponse::from(discovery::discover(query).await)).into_response()
+}
+
+// The HTTP body owns the worker. A disconnected/cancelled client drops the body,
+// aborting the bounded application future and its JoinSet of pending reads.
+struct DiscoveryStream {
+    receiver: mpsc::UnboundedReceiver<DiscoveryResult>,
+    worker: JoinHandle<()>,
+}
+
+impl Drop for DiscoveryStream {
+    fn drop(&mut self) {
+        self.worker.abort();
+    }
+}
+
+impl Stream for DiscoveryStream {
+    type Item = Result<Bytes, Infallible>;
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.receiver.poll_recv(cx).map(|result| {
+            result.map(|result| {
+                let mut bytes = serde_json::to_vec(&DiscoveryResponse::from(result))
+                    .expect("discovery response serializes");
+                bytes.push(b'\n');
+                Ok(Bytes::from(bytes))
+            })
+        })
+    }
 }
 
 impl From<DiscoveryResult> for DiscoveryResponse {
     fn from(result: DiscoveryResult) -> Self {
         Self {
             query: result.query,
+            finished: result.finished,
+            stop_reason: result.stop_reason,
+            started_reads: result.started_reads,
+            completed_reads: result.completed_reads,
+            limits: DiscoveryLimits {
+                max_seconds: discovery::MAX_SECONDS,
+                max_sources: discovery::MAX_SOURCES,
+                max_reads: discovery::MAX_READS,
+                max_http_requests: discovery::MAX_HTTP_REQUESTS,
+                max_page_bytes: discovery::MAX_PAGE_BYTES,
+            },
             provider: result.provider,
             scope: result.scope,
             status: result.status,
@@ -153,7 +240,7 @@ pub(crate) fn extend_contract(document: &mut Value) {
             "security": [],
             "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DiscoveryRequest" } } } },
             "responses": {
-                "200": { "description": "Live attempt, including explicit partial or failed results; never cached demo replacements", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DiscoveryResponse" } } } },
+                "200": { "description": "Live attempt, including explicit partial or failed results; never cached demo replacements", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DiscoveryResponse" } }, "application/x-ndjson": { "schema": { "$ref": "#/components/schemas/DiscoveryResponse" }, "description": "One cumulative DiscoveryResponse per line, initially finished=false and finally finished=true. Dropping the response cancels server work; completed sources in prior lines remain available to the client." } } },
                 "422": { "description": "Invalid public query", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
                 "429": { "description": "Two discovery requests already running", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
                 "413": { "description": "Request body exceeds configured limit", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } }
@@ -162,11 +249,45 @@ pub(crate) fn extend_contract(document: &mut Value) {
     });
     let schemas = &mut document["components"]["schemas"];
     schemas["DiscoveryRequest"] = json!({ "type": "object", "additionalProperties": false, "required": ["query"], "properties": { "query": { "type": "string", "minLength": 1, "maxLength": 200, "description": "Public interest terms sent to DuckDuckGo, or one complete HTTP(S) URL within the academic allowlist, read directly without search or directory fallback. Invalid or unsupported URLs are rejected. No private notes, identities, credentials or private links." } } });
-    schemas["DiscoveryResponse"] = json!({ "type": "object", "required": ["query", "provider", "scope", "status", "collectedAt", "sources", "warnings"], "properties": {
+    schemas["DiscoveryResponse"] = json!({ "type": "object", "required": ["query", "provider", "scope", "status", "collectedAt", "sources", "warnings", "finished", "stopReason", "startedReads", "completedReads", "limits"], "properties": {
+        "finished": { "type": "boolean" }, "stopReason": { "type": "string", "enum": ["", "time_limit", "source_limit"] }, "startedReads": { "type": "integer" }, "completedReads": { "type": "integer" }, "limits": { "$ref": "#/components/schemas/DiscoveryLimits" },
         "query": { "type": "string" }, "provider": { "type": "string", "enum": ["duckduckgo_html", "official_directory", "direct_url"] }, "scope": { "type": "string", "description": "Actual provider and bounded reading scope for this attempt." }, "status": { "type": "string", "enum": ["complete", "partial", "failed"] }, "collectedAt": { "type": "string", "format": "date-time" }, "sources": { "type": "array", "items": { "$ref": "#/components/schemas/DiscoverySource" } }, "warnings": { "type": "array", "items": { "$ref": "#/components/schemas/DiscoveryWarning" } }
+    } });
+    schemas["DiscoveryLimits"] = json!({ "type": "object", "required": ["maxSeconds", "maxSources", "maxReads", "maxHttpRequests", "maxPageBytes"], "properties": {
+        "maxSeconds": { "type": "integer" }, "maxSources": { "type": "integer" }, "maxReads": { "type": "integer" }, "maxHttpRequests": { "type": "integer" }, "maxPageBytes": { "type": "integer" }
     } });
     schemas["DiscoverySource"] = json!({ "type": "object", "required": ["url", "title", "institution", "content", "searchSnippet", "relevanceEvidence", "collectedAt", "unknowns"], "properties": {
         "url": { "type": "string", "format": "uri" }, "title": { "type": "string" }, "institution": { "type": "string", "description": "Source hostname, not a verified institutional affiliation." }, "content": { "type": "string", "description": "Fetched HTML text; maximum 16000 characters, not a generated summary." }, "searchSnippet": { "type": "string", "description": "Search-index snippet, kept separate from fetched body; empty for direct URL reading." }, "relevanceEvidence": { "type": "array", "items": { "type": "string" }, "description": "Up to three body passages matching query terms; no model judgment. Empty for direct URL reading, which makes no query-relevance claim." }, "collectedAt": { "type": "string", "format": "date-time" }, "publishedAt": { "type": "string", "description": "Unverified original date metadata when present, never inferred from collection time." }, "unknowns": { "type": "array", "items": { "type": "string" } }
     } });
     schemas["DiscoveryWarning"] = json!({ "type": "object", "required": ["code", "message"], "properties": { "code": { "type": "string" }, "message": { "type": "string" }, "url": { "type": "string", "format": "uri" } } });
+}
+
+#[cfg(test)]
+mod stream_tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn dropping_the_http_body_aborts_its_worker_and_releases_admission() {
+        let permits = Arc::new(Semaphore::new(1));
+        let permit = permits.clone().try_acquire_owned().unwrap();
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let (_sender, receiver) = mpsc::unbounded_channel();
+        let worker = tokio::spawn(async move {
+            let _permit = permit;
+            let _ = started.send(());
+            std::future::pending::<()>().await;
+        });
+        let body = Body::from_stream(DiscoveryStream { receiver, worker });
+        ready.await.unwrap();
+        assert_eq!(permits.available_permits(), 0);
+        drop(body);
+        let recovered = tokio::time::timeout(Duration::from_secs(1), permits.acquire())
+            .await
+            .unwrap()
+            .unwrap();
+        drop(recovered);
+        assert_eq!(permits.available_permits(), 1);
+    }
 }

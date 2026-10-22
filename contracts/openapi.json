@@ -48,6 +48,33 @@
         ],
         "type": "object"
       },
+      "DiscoveryLimits": {
+        "properties": {
+          "maxHttpRequests": {
+            "type": "integer"
+          },
+          "maxPageBytes": {
+            "type": "integer"
+          },
+          "maxReads": {
+            "type": "integer"
+          },
+          "maxSeconds": {
+            "type": "integer"
+          },
+          "maxSources": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maxSeconds",
+          "maxSources",
+          "maxReads",
+          "maxHttpRequests",
+          "maxPageBytes"
+        ],
+        "type": "object"
+      },
       "DiscoveryRequest": {
         "additionalProperties": false,
         "properties": {
@@ -68,6 +95,15 @@
           "collectedAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "completedReads": {
+            "type": "integer"
+          },
+          "finished": {
+            "type": "boolean"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/DiscoveryLimits"
           },
           "provider": {
             "enum": [
@@ -90,11 +126,22 @@
             },
             "type": "array"
           },
+          "startedReads": {
+            "type": "integer"
+          },
           "status": {
             "enum": [
               "complete",
               "partial",
               "failed"
+            ],
+            "type": "string"
+          },
+          "stopReason": {
+            "enum": [
+              "",
+              "time_limit",
+              "source_limit"
             ],
             "type": "string"
           },
@@ -112,7 +159,12 @@
           "status",
           "collectedAt",
           "sources",
-          "warnings"
+          "warnings",
+          "finished",
+          "stopReason",
+          "startedReads",
+          "completedReads",
+          "limits"
         ],
         "type": "object"
       },
@@ -193,7 +245,7 @@
       "MetaResponse": {
         "properties": {
           "appName": {
-            "const": "Campus Agora",
+            "const": "Campus Lumen",
             "type": "string"
           },
           "capabilities": {
@@ -247,7 +299,7 @@
     }
   },
   "info": {
-    "title": "Campus Agora API",
+    "title": "Campus Lumen API",
     "version": "0.1.0"
   },
   "openapi": "3.1.0",
@@ -270,6 +322,12 @@
           "200": {
             "content": {
               "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoveryResponse"
+                }
+              },
+              "application/x-ndjson": {
+                "description": "One cumulative DiscoveryResponse per line, initially finished=false and finally finished=true. Dropping the response cancels server work; completed sources in prior lines remain available to the client.",
                 "schema": {
                   "$ref": "#/components/schemas/DiscoveryResponse"
                 }

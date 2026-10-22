@@ -1,18 +1,25 @@
-# Campus Agora
+# Campus Lumen
 
-Last updated: 2026-09-23
+Last updated: 2026-10-22
 
-Campus Agora is being replanned as an opportunity discovery and actionable
-guidance tool for individual student use, covering research groups, research opportunities,
-internships and competitions across institutions and disciplines.
+帮大学生跨机构发现科研、实习、竞赛、交流等机会，看懂实际任务与条件，自主决定下一步。
 
-The initial product is a personal tool. Community features are only a possible
-future extension, not part of the current scope or a scheduled phase.
+Campus Lumen（原 Campus Agora）是个人使用的机会探索与决策支持工具，初期服务科大学生。
+社区仅是可能的未来扩展，不属于当前范围或预定阶段。
 
-Current stage: P1 needs and information-supply validation. See the
-[product baseline](docs/product/overview.md) and [roadmap](docs/product/milestones.md).
-The former community roadmap has been retired. Existing code remains an
-engineering baseline to evaluate for reuse; the new product is not implemented.
+当前处于 P2 任务设计与有限实现试验，首个完整交付场景为选导师指南 demo。
+具体范围、已实现能力和未完成项见[产品概览](docs/product/overview.md)及[里程碑](docs/product/milestones.md)。
+
+Repository: [114August514/campus-lumen](https://github.com/114August514/campus-lumen).
+
+## Repository Layout
+
+For the file tree and placement rules, see the
+[repository layout](docs/engineering/repository-layout.md).
+Use `work/` for local drafts, investigation notes and experiment outputs;
+only its [placement guide](work/README.md) is intended for version control.
+Keep short handoff summaries in `docs/ai-log/` and accepted decisions in the
+relevant formal documentation.
 
 ## Requirements
 

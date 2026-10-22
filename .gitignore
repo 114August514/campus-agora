@@ -29,6 +29,10 @@ tools/docs/.venv/
 tmp/
 temp/
 
+# Intermediate work stays local; only its placement guide is shared.
+/work/*
+!/work/README.md
+
 # Local database artifacts
 *.dump
 *.sql.gz

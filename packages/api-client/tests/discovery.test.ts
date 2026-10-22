@@ -71,3 +71,110 @@ test("discovery exposes service validation errors rather than a successful empty
     requestId: "error-1",
   });
 });
+
+// Synthetic transport only: these tests do not establish external discovery.
+const progressSnapshot = (query: string, finished: boolean) => ({
+  query,
+  finished,
+  sources: [],
+  warnings: [],
+  status: "partial",
+  provider: "duckduckgo_html",
+  scope: "合成测试",
+  collectedAt: "2026-10-22T00:00:00Z",
+  stopReason: "",
+  startedReads: 1,
+  completedReads: 0,
+  limits: {
+    maxSeconds: 30,
+    maxSources: 5,
+    maxReads: 6,
+    maxHttpRequests: 48,
+    maxPageBytes: 1000000,
+  },
+});
+
+test("streaming decodes split UTF-8 snapshots, sends only query, and retains the AbortSignal", async () => {
+  const { discoverSourcesProgress } = await import("../src");
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(
+    `${JSON.stringify(progressSnapshot("机器学习", false))}\n${JSON.stringify(progressSnapshot("机器学习", true))}`,
+  );
+  const controller = new AbortController();
+  const received: boolean[] = [];
+  const result = await discoverSourcesProgress(
+    "机器学习",
+    (s) => received.push(s.finished),
+    {
+      signal: controller.signal,
+      fetchImpl: async (_url, init) => {
+        expect(init?.signal).toBe(controller.signal);
+        expect(JSON.parse(String(init?.body))).toEqual({ query: "机器学习" });
+        expect(new Headers(init?.headers).get("accept")).toBe("application/x-ndjson");
+        return new Response(
+          new ReadableStream({
+            start(stream) {
+              for (let i = 0; i < bytes.length; i += 7)
+                stream.enqueue(bytes.slice(i, i + 7));
+              stream.close();
+            },
+          }),
+          { headers: { "Content-Type": "application/x-ndjson" } },
+        );
+      },
+    },
+  );
+  expect(received).toEqual([false, true]);
+  expect(result.finished).toBe(true);
+});
+
+test("an interrupted stream reports failure after delivering its partial snapshot", async () => {
+  const { discoverSourcesProgress } = await import("../src");
+  const received: unknown[] = [];
+  await expect(
+    discoverSourcesProgress("query", (s) => received.push(s), {
+      fetchImpl: async () =>
+        new Response(JSON.stringify(progressSnapshot("query", false)) + "\n", {
+          headers: { "content-type": "application/x-ndjson" },
+        }),
+    }),
+  ).rejects.toThrow("未完整结束");
+  expect(received).toHaveLength(1);
+});
+
+test("aborting during a callback cancels the body and suppresses later buffered snapshots", async () => {
+  const { discoverSourcesProgress } = await import("../src");
+  const controller = new AbortController();
+  let received = 0;
+  let cancelled = false;
+  await expect(
+    discoverSourcesProgress(
+      "query",
+      () => {
+        received++;
+        controller.abort();
+      },
+      {
+        signal: controller.signal,
+        fetchImpl: async () =>
+          new Response(
+            new ReadableStream({
+              start(stream) {
+                stream.enqueue(
+                  new TextEncoder().encode(
+                    `${JSON.stringify(progressSnapshot("query", false))}\n${JSON.stringify(progressSnapshot("query", true))}\n`,
+                  ),
+                );
+              },
+              cancel() {
+                cancelled = true;
+              },
+            }),
+            { headers: { "content-type": "application/x-ndjson" } },
+          ),
+      },
+    ),
+  ).rejects.toThrow();
+  expect(received).toBe(1);
+  expect(cancelled).toBe(true);
+});

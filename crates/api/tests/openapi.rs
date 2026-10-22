@@ -6,7 +6,7 @@ fn openapi_document_contains_m0_1_endpoints_and_schemas() {
     let json: Value = serde_json::to_value(document).unwrap();
 
     assert_eq!(json["openapi"], "3.1.0");
-    assert_eq!(json["info"]["title"], "Campus Agora API");
+    assert_eq!(json["info"]["title"], "Campus Lumen API");
     assert_eq!(json["paths"]["/healthz"]["get"]["operationId"], "getHealth");
     assert_eq!(
         json["paths"]["/readyz"]["get"]["operationId"],

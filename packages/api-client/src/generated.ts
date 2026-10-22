@@ -14,17 +14,30 @@ export interface CapabilityFlags {
   desktopEnabled: boolean;
 }
 
+export interface DiscoveryLimits {
+  maxHttpRequests: number;
+  maxPageBytes: number;
+  maxReads: number;
+  maxSeconds: number;
+  maxSources: number;
+}
+
 export interface DiscoveryRequest {
   query: string;
 }
 
 export interface DiscoveryResponse {
   collectedAt: string;
+  completedReads: number;
+  finished: boolean;
+  limits: DiscoveryLimits;
   provider: "duckduckgo_html" | "official_directory" | "direct_url";
   query: string;
   scope: string;
   sources: Array<DiscoverySource>;
+  startedReads: number;
   status: "complete" | "partial" | "failed";
+  stopReason: "" | "time_limit" | "source_limit";
   warnings: Array<DiscoveryWarning>;
 }
 
@@ -47,7 +60,7 @@ export interface DiscoveryWarning {
 }
 
 export interface MetaResponse {
-  appName: "Campus Agora";
+  appName: "Campus Lumen";
   capabilities: CapabilityFlags;
   version: string;
 }

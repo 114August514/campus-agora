@@ -1,5 +1,5 @@
-site_name: Campus Agora
-site_description: Campus Agora 工程与协作文档
+site_name: Campus Lumen
+site_description: Campus Lumen 工程与协作文档
 docs_dir: ../../docs
 site_dir: ../../site
 strict: true
@@ -26,6 +26,7 @@ nav:
       - 桌面端: architecture/desktop.md
   - 工程:
       - 开发: engineering/development.md
+      - 文件树与过程文件归属: engineering/repository-layout.md
       - 质量门禁: engineering/quality.md
       - Git LFS: engineering/lfs.md
   - 约束:

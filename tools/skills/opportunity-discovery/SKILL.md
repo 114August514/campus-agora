@@ -1,11 +1,11 @@
 ---
 name: opportunity-discovery
-description: Search and read external advisor or research-opportunity sources using available tools and browsers, with user-assisted sign-in when needed, corroborate important claims, and produce a reusable collected batch for Campus Agora. Use for discovery, filling candidate information gaps, or preparing source-backed demo data; not for contacting people or social-media publishing.
+description: Search and read external advisor or research-opportunity sources using available tools and browsers, with user-assisted sign-in when needed, corroborate important claims, and produce a reusable collected batch for Campus Lumen. Use for discovery, filling candidate information gaps, or preparing source-backed demo data; not for contacting people or social-media publishing.
 ---
 
 # Opportunity discovery
 
-Last updated: 2026-10-05
+Last updated: 2026-10-22
 
 Turn the current question into usable candidate information, with sources and unresolved questions. Use existing information first when it answers the question; collect externally when the user asks for new discovery or a specific gap remains. Public information can be reused across personal topics; private preferences and notes stay in the topic.
 

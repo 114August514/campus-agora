@@ -69,7 +69,7 @@ async fn meta_endpoint_returns_app_identity() {
         .unwrap();
     let json: Value = serde_json::from_slice(&body).unwrap();
 
-    assert_eq!(json["appName"], "Campus Agora");
+    assert_eq!(json["appName"], "Campus Lumen");
     assert_eq!(json["version"], env!("CARGO_PKG_VERSION"));
     assert_eq!(json["capabilities"]["authMockEnabled"], true);
     assert_eq!(json["capabilities"]["desktopEnabled"], true);

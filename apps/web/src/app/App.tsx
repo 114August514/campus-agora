@@ -25,6 +25,7 @@ import { DiscoveryPanel } from "../components/DiscoveryPanel";
 import { ExploreHome } from "../components/ExploreHome";
 import { OpportunityBrowser } from "../components/OpportunityBrowser";
 import { SourceView } from "../components/SourceView";
+import { TopicEditor } from "../components/TopicEditor";
 import {
   type AnyComparisonFocus,
   type AnyComparisonPerspective,
@@ -235,7 +236,7 @@ export function App() {
       <PageLayout.Header>
         <Stack gap="condensed">
           <Heading as="h1" variant="medium">
-            Campus Agora
+            Campus Lumen
           </Heading>
           <UnderlineNav aria-label="主导航" variant="flush">
             <UnderlineNav.Item
@@ -319,6 +320,22 @@ export function App() {
                 ))}
               </Select>
             </FormControl>
+            {activeTopic && initial.store && (
+              <TopicEditor
+                key={activeTopic.id}
+                topic={activeTopic}
+                onSave={(patch) => {
+                  if (!initial.store)
+                    throw new Error("浏览器保存不可用，编辑内容已保留。");
+                  initial.store.updateTopic(activeTopic.id, patch);
+                  setTopics(initial.store.listTopics());
+                  setError("");
+                  setMessage(
+                    "主题条件已保存。已有候选、依据和私人记录保持原样；查找内容需另行修改并提交。",
+                  );
+                }}
+              />
+            )}
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -410,6 +427,7 @@ export function App() {
                 </SegmentedControl>
               </Stack>
               <DiscoveryPanel
+                key={`discover:${topicId}:${candidateScenario}`}
                 query={query}
                 onQueryChange={setQuery}
                 canSave={Boolean(activeTopic && initial.store)}
@@ -522,7 +540,7 @@ export function App() {
                 按当前比较视角预填了公开检索词，可以修改问题后查找，也可以选择已收录的官网页面读取正文。
               </Text>
               <DiscoveryPanel
-                key={followupCandidate.candidateId}
+                key={`followup:${topicId}:${followupCandidate.candidateId}`}
                 query={query}
                 onQueryChange={setQuery}
                 canSave={Boolean(activeTopic && initial.store)}
@@ -594,7 +612,8 @@ export function App() {
               )}
               {activeTopic && (
                 <>
-                  <Text as="p">创建时的问题：{activeTopic.question || "未填写"}</Text>
+                  <Text as="p">当前问题：{activeTopic.question || "未填写"}</Text>
+                  <Text as="p">偏好与条件：{activeTopic.preferences || "未填写"}</Text>
                   {activeTopic.candidates.length === 0 &&
                     (activeTopic.opportunities ?? []).length === 0 && (
                       <Text as="p">

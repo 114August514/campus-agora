@@ -160,6 +160,7 @@ dependencies = [
  "campus_agora_application",
  "campus_agora_db",
  "campus_agora_domain",
+ "futures-core",
  "serde",
  "serde_json",
  "sqlx",

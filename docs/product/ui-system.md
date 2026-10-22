@@ -1,6 +1,6 @@
 # UI 组件与视觉规范
 
-Last updated: 2026-10-07
+Last updated: 2026-10-22
 
 本规范用于所有后续页面、可点击原型和正式前端。来源为用户 2026-09-24 的明确要求，以及官方组件文档和指定的 107 Workspace 配色调研。它覆盖旧前端参考中的自由 CSS、Tailwind、卡片和装饰文案建议。
 
@@ -86,7 +86,7 @@ Last updated: 2026-10-07
 
 ## 现状、迁移与验收
 
-2026-10-04的`apps/web`已迁移为Primer导师探索页面，旧AppShell、自建Button及`src/styles`已移除。根部使用单一light主题和BaseStyles，布局／输入／按钮使用公开库组件。`tools/prototypes/opportunities.html`仍是历史内容原型，含卡片、eyebrow和副标题，**不能再作UI模板**；本轮未修改它。
+2026-10-04的`apps/web`已迁移为Primer导师探索页面，旧AppShell、自建Button及`src/styles`已移除。根部使用单一light主题和BaseStyles，布局／输入／按钮使用公开库组件。历史内容原型于2026-10-22原样移至本地过程区`work/legacy/prototype/opportunities.html`，不随仓库分发；它含卡片、eyebrow和副标题，**不能再作UI模板**。
 
 `apps/web/scripts/check-ui.ts`已接入`lint:styles`，检查手写样式、style／sx／className、非Primer样式导入及部分不兼容依赖；不能识别所有装饰语义或代替浏览器检查。首轮已在桌面和390px检查主题保存、来源、重开恢复、标签、文字换行与可见键盘焦点；未做完整无障碍测评。10月5日另实现两候选按问题比较，使用公开实验入口的Primer DataTable／Details，已检查390px阅读、来源展开与键盘操作；按需资源及完整无障碍测评仍待验收。继续迭代时：
 

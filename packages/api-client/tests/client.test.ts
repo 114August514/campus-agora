@@ -170,7 +170,7 @@ describe("createCampusAgoraMockFetch", () => {
       },
     });
     await expect(client.getMeta()).resolves.toMatchObject({
-      appName: "Campus Agora",
+      appName: "Campus Lumen",
       capabilities: {
         authMockEnabled: true,
         desktopEnabled: true,

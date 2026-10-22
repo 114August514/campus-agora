@@ -1,6 +1,6 @@
 # AI Log Todo
 
-Last updated: 2026-10-12
+Last updated: 2026-10-22
 
 This file records meaningful pending work for AI agents and collaborators.
 Keep entries short, dated, and actionable.
@@ -20,12 +20,18 @@ Keep entries short, dated, and actionable.
 
 ## Pending
 
+### 2026-10-22 - Continue after topic editing and bounded discovery
+
+- Source: User asked to advance the existing plan; implementation/verification facts are in done.md and advisor-task-design.md §8.6, on `feat/topic-edit-and-bounded-discovery` after preparatory commit `51e81dd`.
+- Status: Topic edits, streamed partial evidence, cancellation/late-run isolation and fixed run bounds are implemented and locally checked. Integration/remote CI remains distinct from the implementation result; no merge or complete P2/P3 acceptance is claimed.
+- Next: Proceed with optional preparation/knowledgeable-participant/resource entries and mistaken-association repair under the existing task design, then the complete G5 walkthrough. Do not reopen broad research or infer external-AI integration.
+
 ### 2026-10-12 - Continue after verified comparison follow-up
 
 - Source: User-authorized comparison follow-up; execution facts moved to done.md and advisor-task-design.md §8.5.
 - Milestone: P2.
 - Status: Relevant official-page read/save/return/reopen flow verified and published in [PR #14](https://github.com/114August514/campus-agora/pull/14). PR #13 merged the prior follow-up at main 258cc69; the new direct-read changes are isolated on feat/direct-source-read from that base. Review/integration remains separate from the implementation result.
-- Next: Editable topic conditions and cancellable/bounded discovery, then optional preparation/contact/resource entries and complete demo/association-repair checks. Take one outcome group at a time; no new broad research or maintenance gate.
+- Next: The October 22 slice now supplies editable topic conditions and cancellable/bounded discovery; continue optional preparation/contact/resource entries and complete demo/association-repair checks. Take one outcome group at a time; no new broad research or maintenance gate.
 - Dependencies: Existing browser topic store and public HTML API. External model integration remains optional and must preserve explicitly selected personal inputs and truthful send states.
 
 ### 2026-10-06 - Define subsequent implementation work after PR #12

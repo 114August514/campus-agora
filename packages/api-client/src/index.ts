@@ -14,7 +14,9 @@ export type {
   ReadinessChecks,
   DiscoveryRequest,
   DiscoveryResponse,
+  DiscoveryLimits,
   DiscoverySource,
   DiscoveryWarning,
 } from "./generated";
-export { discoverSources } from "./discovery";
+export { discoverSources, discoverSourcesProgress } from "./discovery";
+export type { DiscoveryStreamOptions } from "./discovery";

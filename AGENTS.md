@@ -1,11 +1,17 @@
 # Agent Notes
 
-Last updated: 2026-10-06
+Last updated: 2026-10-22
 
 This file is the project-level instruction sheet for AI agents and human
 collaborators. Follow it before making changes.
 
 ## Project Context
+
+The project is named **Campus Lumen** (renamed from Campus Agora on 2026-10-22),
+with repository `114August514/campus-lumen`. Its description is:
+帮大学生跨机构发现科研、实习、竞赛、交流等机会，看懂实际任务与条件，自主决定下一步。
+Historical records and compatibility identifiers may retain the previous name;
+this rename does not change product scope or authorize a data migration.
 
 Read `docs/product/requirements-handoff.md` for the consolidated requirements
 analysis v1.0. `docs/product/overview.md` summarizes decisions and
@@ -126,6 +132,15 @@ subsequent work. See advisor-task-design.md v0.4 §8.4.
 
 ## Requirements Analysis Work Order
 
+On 2026-10-22 the topic-condition and bounded-discovery slice was implemented:
+explicit topic name/question/preference editing preserves saved/private records;
+the discovery endpoint can stream cumulative body snapshots, supports abort and
+declares server/run/read limits. Browser and controlled checks are recorded in
+`docs/product/advisor-task-design.md` §8.6. Query text remains the only discovery
+input; editing conditions does not send them. Cancellation does not retract
+already sent public requests. This does not complete mistaken-merge repair,
+external-AI delivery, optional preparation/resource entries or full demo acceptance.
+
 Before prioritizing prototype or implementation work, follow the eight-part
 analysis contract in `docs/product/requirements.md`: problem background, target
 users/tasks, existing solutions, unmet needs/causes, value/positioning,
@@ -230,6 +245,16 @@ iteration guidance in `docs/engineering/development.md` proportionally:
 
 Use `docs/ai-log/` for low-friction task memory. It complements issues,
 milestones, commit history, and PRs; it does not replace them.
+
+Put intermediate drafts, investigation notes, temporary scripts, screenshots and
+raw non-sensitive experiment output in `work/YYYY-MM-DD-task/`, not in source or
+formal documentation folders. See `docs/engineering/repository-layout.md` and
+`work/README.md`. Only `work/README.md` is intended for version control; other
+contents are ignored by default and are not a durable handoff. Do not force-add
+them or make production code depend on them. Keep AI Log entries to short pending
+items and completed facts; promote accepted decisions, reusable tools and reviewed
+data into their proper maintained locations. Local-only storage is not permission
+to retain secrets, credentials, authentication screens or private student data.
 
 For non-trivial agent work:
 

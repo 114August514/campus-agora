@@ -202,7 +202,7 @@ pub fn openapi_document() -> Value {
     let mut document = json!({
         "openapi": "3.1.0",
         "info": {
-            "title": "Campus Agora API",
+            "title": "Campus Lumen API",
             "version": env!("CARGO_PKG_VERSION")
         },
         "paths": {
@@ -328,7 +328,7 @@ pub fn openapi_document() -> Value {
                     "properties": {
                         "appName": {
                             "type": "string",
-                            "const": "Campus Agora"
+                            "const": "Campus Lumen"
                         },
                         "version": {
                             "type": "string"
@@ -387,7 +387,7 @@ async fn readyz(State(state): State<ApiState>) -> impl IntoResponse {
 
 async fn meta(State(state): State<ApiState>) -> Json<MetaResponse> {
     Json(MetaResponse {
-        app_name: "Campus Agora",
+        app_name: "Campus Lumen",
         version: env!("CARGO_PKG_VERSION"),
         capabilities: state.capabilities,
     })
